@@ -1,0 +1,549 @@
+@import "tailwindcss";
+
+/* =====================================================
+   GOLFCHARITY Premium Design System
+   "Modern Dark Luxury" - Emerald/Zinc Aesthetic
+   ===================================================== */
+
+/* Custom CSS Variables - Emerald/Zinc Palette */
+:root {
+  /* Primary - Emerald (Modern, Fresh, Premium) */
+  --color-primary-50: #ecfdf5;
+  --color-primary-100: #d1fae5;
+  --color-primary-200: #a7f3d0;
+  --color-primary-300: #6ee7b7;
+  --color-primary-400: #34d399;
+  --color-primary-500: #10b981;
+  --color-primary-600: #059669;
+  --color-primary-700: #047857;
+  --color-primary-800: #065f46;
+  --color-primary-900: #064e3b;
+  --color-primary-950: #022c22;
+
+  /* Accent - Amber (Luxury highlights) */
+  --color-accent-300: #fcd34d;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+  --color-accent-700: #b45309;
+
+  /* Zinc - Dark backgrounds */
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f5;
+  --color-zinc-200: #e4e4e7;
+  --color-zinc-300: #d4d4d8;
+  --color-zinc-400: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --color-zinc-600: #52525b;
+  --color-zinc-700: #3f3f46;
+  --color-zinc-800: #27272a;
+  --color-zinc-900: #18181b;
+  --color-zinc-950: #09090b;
+
+  /* Rose - Alerts/Danger */
+  --color-rose-500: #f43f5e;
+
+  /* Rich Dark Tones */
+  --color-dark-800: #18181b;
+  --color-dark-900: #09090b;
+  --color-dark-950: #020202;
+
+  /* Typography */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  /* Premium Shadows */
+  --shadow-soft: 0 4px 30px -4px rgba(0, 0, 0, 0.25);
+  --shadow-glass: 0 8px 32px 0 rgba(16, 185, 129, 0.08);
+  --shadow-card: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  --shadow-emerald: 0 0 40px rgba(16, 185, 129, 0.15);
+  --shadow-glow: 0 20px 50px -10px rgba(16, 185, 129, 0.4);
+
+  /* Glassmorphism Variables */
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 20px;
+
+  /* Animation Easings */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-luxury: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* =====================================================
+   Base Styles
+   ===================================================== */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Lenis Smooth Scroll */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  background: var(--color-zinc-950);
+  color: white;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Premium Serif Headings */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+h4,
+h5,
+h6 {
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+/* Selection */
+::selection {
+  background: var(--color-primary-500);
+  color: white;
+}
+
+
+/* Hide Scrollbar - Keep scroll functionality */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* Firefox */
+html {
+  scrollbar-width: none;
+}
+
+/* IE/Edge */
+body {
+  -ms-overflow-style: none;
+}
+
+/* Focus Styles - Clean, non-artifact producing */
+*:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* Prevent transform artifacts */
+*:where([class*="hover:"]):not(:hover) {
+  transform: none;
+}
+
+/* Fix subpixel rendering issues during transforms */
+.transform-gpu,
+[class*="scale-"],
+[class*="translate-"],
+[class*="rotate-"] {
+  -webkit-font-smoothing: subpixel-antialiased;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+/* Prevent layout shift during hover animations */
+[class*="hover:scale-"],
+.hoverable {
+  will-change: transform;
+  transform-origin: center center;
+}
+
+/* =====================================================
+   Reduced Motion Accessibility
+   Respects user preferences for reduced motion
+   ===================================================== */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-float-gentle,
+  .animate-pulse-emerald,
+  .animate-shimmer {
+    animation: none !important;
+  }
+}
+
+/* Fix card border artifacts on hover */
+.glass-card,
+[class*="glass"] {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  isolation: isolate;
+}
+
+/* Prevent double border artifacts */
+a:focus-visible,
+button:focus-visible {
+  outline-offset: 2px;
+}
+
+/* Fix input focus ring clipping */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+}
+
+/* =====================================================
+   Utility Classes - Premium Design
+   ===================================================== */
+
+/* Text Gradients */
+.text-gradient {
+  background: linear-gradient(135deg, white 0%, var(--color-primary-400) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-emerald {
+  background: linear-gradient(135deg, var(--color-primary-400) 0%, var(--color-primary-600) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glassmorphism Classes */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.glass-subtle {
+  background: rgba(16, 185, 129, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+/* Glow Effects */
+.glow-emerald {
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.25);
+}
+
+.glow-emerald-strong {
+  box-shadow: 0 20px 50px -10px rgba(16, 185, 129, 0.4);
+}
+
+.divider-emerald {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--color-primary-500) 50%, transparent 100%);
+  opacity: 0.4;
+}
+
+/* Range Slider Styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 8px;
+  border-radius: 4px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: 3px solid white;
+  border-radius: 50%;
+  margin-top: -8px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.6);
+}
+
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  height: 8px;
+  border-radius: 4px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.6);
+}
+
+input[type="range"]:focus-visible {
+  outline: none;
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3), 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+/* =====================================================
+   Animation Classes
+   ===================================================== */
+@keyframes float-gentle {
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  50% {
+    transform: translateY(-15px) rotate(1deg);
+  }
+}
+
+@keyframes pulse-emerald {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 40px rgba(16, 185, 129, 0.4);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.animate-float-gentle {
+  animation: float-gentle 8s ease-in-out infinite;
+}
+
+.animate-pulse-emerald {
+  animation: pulse-emerald 4s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(16, 185, 129, 0.1) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* =====================================================
+   Custom Cursor Styles
+   ===================================================== */
+.cursor-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-accent-500);
+  border-radius: 50%;
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: difference;
+  transition: transform 0.15s var(--ease-luxury);
+}
+
+.cursor-ring {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-accent-500);
+  border-radius: 50%;
+  position: fixed;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.5;
+  transition: all 0.2s var(--ease-luxury);
+}
+
+.cursor-expanded .cursor-ring {
+  width: 80px;
+  height: 80px;
+  opacity: 0.3;
+  border-color: white;
+}
+
+.cursor-magnetic .cursor-dot {
+  transform: scale(2);
+}
+
+/* Hide on touch devices */
+@media (hover: none) and (pointer: coarse) {
+
+  .cursor-dot,
+  .cursor-ring {
+    display: none;
+  }
+
+  /* Improve touch targets on mobile */
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Disable hover effects that could cause issues */
+  [class*="hover:scale-"] {
+    transform: none !important;
+  }
+}
+
+/* =====================================================
+   Layout Utilities
+   ===================================================== */
+.container-app {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .container-app {
+    padding: 0 2rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-app {
+    padding: 0 3rem;
+  }
+}
+
+/* Asymmetrical Grid Helper */
+.grid-asymmetric {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+@media (min-width: 1024px) {
+  .grid-asymmetric {
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 4rem;
+  }
+}
+
+/* =====================================================
+   Premium Button Styles
+   ===================================================== */
+.btn-premium {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-700) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  transition: all 0.4s var(--ease-luxury);
+}
+
+.btn-premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.15), transparent);
+  transition: left 0.6s var(--ease-luxury);
+}
+
+.btn-premium:hover::before {
+  left: 100%;
+}
+
+.btn-premium:hover {
+  border-color: var(--color-primary-400);
+  box-shadow: 0 10px 40px -10px rgba(16, 185, 129, 0.4);
+  transform: translateY(-2px);
+}
+
+/* =====================================================
+   3D Tilt Effect Base
+   ===================================================== */
+.tilt-card {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+.tilt-card-inner {
+  transition: transform 0.4s var(--ease-luxury);
+}
+
+/* =====================================================
+   Scrollytelling Helpers
+   ===================================================== */
+.scroll-section {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.parallax-layer {
+  will-change: transform;
+}

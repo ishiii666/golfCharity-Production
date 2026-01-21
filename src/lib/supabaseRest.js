@@ -1,0 +1,2201 @@
+/**
+ * Direct Supabase REST API client
+ * Bypasses the Supabase JS client to avoid timeout issues
+ * Uses simple fetch calls for reliable data retrieval
+ */
+
+import { supabase } from './supabase';
+
+// Get config from environment
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+/**
+ * Get the current auth token - either from session or fallback to anon key
+ */
+async function getAuthToken() {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+            console.log('🔑 Using authenticated session token');
+            return session.access_token;
+        }
+    } catch (error) {
+        console.log('🔑 Session fetch failed, using anon key');
+    }
+    return SUPABASE_KEY;
+}
+
+/**
+ * Make a direct REST API call to Supabase
+ */
+async function supabaseRest(table, options = {}) {
+    const { select = '*', filter = '', count = false, method = 'GET', body = null } = options;
+
+    const url = `${SUPABASE_URL}/rest/v1/${table}?select=${select}${filter ? '&' + filter : ''}`;
+
+    const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+    };
+
+    if (count) {
+        headers['Prefer'] = 'count=exact';
+    }
+
+    const response = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+    });
+
+    if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (count) {
+        const range = response.headers.get('Content-Range');
+        const total = range ? parseInt(range.split('/')[1]) : data.length;
+        return { data, count: total };
+    }
+
+    return { data };
+}
+
+/**
+ * Get count of rows in a table
+ */
+export async function getTableCount(table) {
+    try {
+        const { count } = await supabaseRest(table, {
+            select: 'id',
+            count: true
+        });
+        return count;
+    } catch (error) {
+        console.error(`Error counting ${table}:`, error);
+        return 0;
+    }
+}
+
+/**
+ * Get all rows from a table
+ */
+export async function getTableData(table, select = '*') {
+    try {
+        const { data } = await supabaseRest(table, { select });
+        return data || [];
+    } catch (error) {
+        console.error(`Error fetching ${table}:`, error);
+        return [];
+    }
+}
+
+/**
+ * Update a row in a table
+ */
+export async function updateRow(table, id, updates) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(updates)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Update failed');
+        }
+
+        const data = await response.json();
+        console.log(`✅ Updated ${table} row:`, id);
+        return data[0];
+    } catch (error) {
+        console.error(`Error updating ${table}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Delete a row from a table
+ */
+export async function deleteRow(table, id) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
+
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Delete failed');
+        }
+
+        console.log(`🗑️ Deleted ${table} row:`, id);
+        return { success: true };
+    } catch (error) {
+        console.error(`Error deleting ${table}:`, error);
+        throw error;
+    }
+}
+
+// =====================================================
+// CONTENT MANAGEMENT API FUNCTIONS
+// =====================================================
+
+/**
+ * Get all site content from database
+ */
+export async function getSiteContent() {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/site_content?select=*`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            console.warn('Site content table may not exist yet');
+            return [];
+        }
+
+        const data = await response.json();
+        console.log('📝 Site content fetched:', data.length, 'items');
+        return Array.isArray(data) ? data : [];
+    } catch (error) {
+        console.error('Error fetching site content:', error);
+        return [];
+    }
+}
+
+/**
+ * Save site content (upsert)
+ */
+export async function saveSiteContent(sectionId, fieldName, fieldValue, fieldType = 'text') {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/site_content`;
+
+        // First try to update existing
+        const updateUrl = `${url}?section_id=eq.${sectionId}&field_name=eq.${fieldName}`;
+        const updateResponse = await fetch(updateUrl, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                field_value: fieldValue,
+                updated_at: new Date().toISOString()
+            })
+        });
+
+        if (updateResponse.ok) {
+            const data = await updateResponse.json();
+            if (data.length > 0) {
+                return data[0];
+            }
+        }
+
+        // If no existing row, insert new
+        const insertResponse = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                section_id: sectionId,
+                field_name: fieldName,
+                field_value: fieldValue,
+                field_type: fieldType
+            })
+        });
+
+        if (!insertResponse.ok) {
+            throw new Error('Failed to save content');
+        }
+
+        const data = await insertResponse.json();
+        console.log('✅ Content saved:', sectionId, fieldName);
+        return data[0];
+    } catch (error) {
+        console.error('Error saving content:', error);
+        throw error;
+    }
+}
+
+/**
+ * Save multiple content items at once
+ */
+export async function saveSiteContentBulk(items) {
+    try {
+        const authToken = await getAuthToken();
+        const results = [];
+
+        for (const item of items) {
+            const result = await saveSiteContent(
+                item.section_id,
+                item.field_name,
+                item.field_value,
+                item.field_type
+            );
+            results.push(result);
+        }
+
+        await logActivity('content_updated', `Updated ${items.length} content fields`);
+        console.log('✅ Bulk content saved:', items.length, 'items');
+        return results;
+    } catch (error) {
+        console.error('Error saving bulk content:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get count of active subscribers
+ */
+export async function getActiveSubscribersCount() {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=id`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Prefer': 'count=exact'
+            }
+        });
+
+        if (!response.ok) {
+            console.warn('Could not fetch active subscribers:', response.status);
+            return 0;
+        }
+
+        const range = response.headers.get('Content-Range');
+        return range ? parseInt(range.split('/')[1]) || 0 : 0;
+    } catch (error) {
+        console.error('Error counting active subscribers:', error);
+        return 0;
+    }
+}
+
+/**
+ * Get total donations amount
+ */
+export async function getTotalDonations() {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/donations?select=amount`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            console.warn('Could not fetch donations:', response.status);
+            return 0;
+        }
+
+        const donations = await response.json();
+        const total = donations.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+        return Math.round(total * 100) / 100; // Round to 2 decimal places
+    } catch (error) {
+        console.error('Error summing donations:', error);
+        return 0;
+    }
+}
+
+/**
+ * Get recent activity log entries
+ */
+export async function getRecentActivity(limit = 10) {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/activity_log?select=*&order=created_at.desc&limit=${limit}`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            // Table might not exist yet - return empty array
+            console.warn('Could not fetch activity log:', response.status);
+            return [];
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching activity log:', error);
+        return [];
+    }
+}
+
+/**
+ * Log an admin activity
+ */
+export async function logActivity(actionType, description, metadata = {}) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/activity_log`;
+
+        await fetch(url, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action_type: actionType,
+                description: description,
+                metadata: metadata
+            })
+        });
+    } catch (error) {
+        console.warn('Failed to log activity:', error);
+    }
+}
+
+/**
+ * Get admin dashboard stats - NOW WITH REAL DATA
+ */
+export async function getAdminStats() {
+    console.log('📊 Fetching admin stats (real data)...');
+
+    const [charityCount, userCount, activeSubscribers, totalDonated, recentActivity] = await Promise.all([
+        getTableCount('charities'),
+        getTableCount('profiles'),
+        getActiveSubscribersCount(),
+        getTotalDonations(),
+        getRecentActivity(5)
+    ]);
+
+    console.log('📊 Stats fetched:', { charityCount, userCount, activeSubscribers, totalDonated });
+
+    return {
+        totalUsers: userCount,
+        activeSubscribers: activeSubscribers,
+        totalCharities: charityCount,
+        totalDonated: totalDonated,
+        recentActivity: recentActivity
+    };
+}
+
+/**
+ * Get all charities for admin management
+ */
+export async function getCharities() {
+    return getTableData('charities', '*');
+}
+
+/**
+ * Get only active charities for user-facing pages
+ * Note: Fetches all charities since not all may have 'active' status set
+ */
+export async function getActiveCharities() {
+    try {
+        // Fetch all charities, ordered by featured first then by name
+        // We don't filter by status since some charities may not have it set
+        const url = `${SUPABASE_URL}/rest/v1/charities?select=*&order=featured.desc,name.asc`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch charities');
+        }
+
+        const charities = await response.json();
+
+        // Filter out only explicitly inactive charities, keep all others
+        const activeCharities = charities.filter(c => c.status !== 'inactive');
+
+        console.log('🏥 Active charities fetched:', activeCharities.length);
+        return activeCharities;
+    } catch (error) {
+        console.error('Error fetching active charities:', error);
+        return [];
+    }
+}
+
+/**
+ * Get a single charity by ID for editing
+ * @param {string} id - The charity ID
+ * @returns {Object|null} Charity data or null if not found
+ */
+export async function getCharityById(id) {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/charities?id=eq.${id}&select=*`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch charity');
+        }
+
+        const charities = await response.json();
+        return charities.length > 0 ? charities[0] : null;
+    } catch (error) {
+        console.error('Error fetching charity by ID:', error);
+        return null;
+    }
+}
+
+/**
+ * Get recent supporters for a charity
+ * @param {string} charityId - The charity ID to get supporters for
+ * @param {number} limit - Maximum number of supporters to return
+ * @returns {Array} List of supporter display names
+ */
+export async function getCharitySupporters(charityId, limit = 12) {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/profiles?selected_charity_id=eq.${charityId}&select=full_name,username&limit=${limit}&order=updated_at.desc`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch supporters');
+        }
+
+        const profiles = await response.json();
+
+        // Format names for display (privacy: first name + last initial)
+        const supporterNames = profiles.map(p => {
+            if (p.full_name) {
+                const parts = p.full_name.trim().split(' ');
+                if (parts.length >= 2) {
+                    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                }
+                return parts[0];
+            }
+            if (p.username) {
+                return p.username.substring(0, 10) + (p.username.length > 10 ? '...' : '');
+            }
+            return 'Anonymous';
+        });
+
+        console.log(`👥 Fetched ${supporterNames.length} supporters for charity ${charityId}`);
+        return supporterNames;
+    } catch (error) {
+        console.error('Error fetching charity supporters:', error);
+        return [];
+    }
+}
+
+/**
+ * Upload charity image to Supabase Storage
+ * @param {File} file - The image file to upload
+ * @param {string} charityId - The charity ID for naming
+ * @param {string} type - 'image' or 'logo'
+ * @returns {string} Public URL of uploaded image
+ */
+export async function uploadCharityImage(file, charityId, type = 'image') {
+    try {
+        const authToken = await getAuthToken();
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${charityId}_${type}_${Date.now()}.${fileExt}`;
+
+        console.log(`📤 Uploading ${type} for charity ${charityId}...`);
+
+        // Upload to Supabase Storage
+        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/charity-images/${fileName}`;
+        const response = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': file.type,
+                'x-upsert': 'true'
+            },
+            body: file
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            console.error('Upload failed:', error);
+            throw new Error('Failed to upload image');
+        }
+
+        // Return public URL
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/charity-images/${fileName}`;
+        console.log(`✅ Image uploaded: ${publicUrl}`);
+        return publicUrl;
+    } catch (error) {
+        console.error('Error uploading charity image:', error);
+        throw error;
+    }
+}
+
+/**
+ * Delete charity image from Supabase Storage
+ * @param {string} imageUrl - The full URL of the image to delete
+ */
+export async function deleteCharityImage(imageUrl) {
+    try {
+        if (!imageUrl || !imageUrl.includes('charity-images')) {
+            return; // Not a storage URL, nothing to delete
+        }
+
+        const authToken = await getAuthToken();
+        const fileName = imageUrl.split('/charity-images/').pop();
+
+        const deleteUrl = `${SUPABASE_URL}/storage/v1/object/charity-images/${fileName}`;
+        await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        console.log(`🗑️ Image deleted: ${fileName}`);
+    } catch (error) {
+        console.warn('Error deleting charity image:', error);
+    }
+}
+
+/**
+ * Get all users/profiles for admin management with subscription data
+ */
+export async function getUsers() {
+    try {
+        // Fetch profiles
+        const profiles = await getTableData('profiles', '*');
+        console.log('👥 Profiles fetched:', profiles.length);
+
+        // Fetch ALL subscriptions (not just active) for debugging
+        const url = `${SUPABASE_URL}/rest/v1/subscriptions?select=*`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        let subscriptions = [];
+        if (response.ok) {
+            subscriptions = await response.json();
+            console.log('📋 Subscriptions from DB:', subscriptions);
+        } else {
+            console.warn('⚠️ Failed to fetch subscriptions:', response.status);
+        }
+
+        // Create a map of user_id to subscription info
+        const subscriptionMap = {};
+        subscriptions.forEach(sub => {
+            // Use active subscriptions, or any subscription if no active ones exist
+            if (sub.status === 'active' || !subscriptionMap[sub.user_id]) {
+                subscriptionMap[sub.user_id] = sub.plan || sub.status || 'subscribed';
+            }
+        });
+
+        console.log('📋 Subscription map:', subscriptionMap);
+
+        // Merge subscription data into profiles
+        const profilesWithSubs = profiles.map(profile => ({
+            ...profile,
+            subscription_type: subscriptionMap[profile.id] || 'none'
+        }));
+
+        console.log('👥 Users with subscriptions:', profilesWithSubs.map(p => ({
+            name: p.full_name,
+            sub: p.subscription_type
+        })));
+
+        return profilesWithSubs;
+    } catch (error) {
+        console.error('Error fetching users with subscriptions:', error);
+        return getTableData('profiles', '*');
+    }
+}
+
+/**
+ * Insert a row into a table
+ */
+export async function insertRow(table, data) {
+    const url = `${SUPABASE_URL}/rest/v1/${table}`;
+    const authToken = await getAuthToken();
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Insert error:', errorText);
+        throw new Error(errorText || 'Insert failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Assign subscription to a user (admin function)
+ * Creates or updates subscription record
+ */
+export async function assignSubscription(userId, plan) {
+    const authToken = await getAuthToken();
+
+    console.log(`📋 Assigning ${plan} subscription to user ${userId}`);
+
+    // If plan is 'none' or 'free', delete the subscription
+    if (plan === 'none' || plan === 'free') {
+        try {
+            const deleteUrl = `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`;
+            await fetch(deleteUrl, {
+                method: 'DELETE',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            console.log('📋 Subscription removed (set to free)');
+            return { success: true, message: 'Subscription removed' };
+        } catch (error) {
+            console.warn('No subscription to delete:', error);
+            return { success: true, message: 'User is now free tier' };
+        }
+    }
+
+    // Check if subscription already exists
+    const checkUrl = `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&select=id`;
+    const checkResponse = await fetch(checkUrl, {
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${authToken}`
+        }
+    });
+
+    const existingSubs = await checkResponse.json();
+
+    const subscriptionData = {
+        user_id: userId,
+        plan: plan,
+        status: 'active',
+        current_period_start: new Date().toISOString(),
+        current_period_end: new Date(Date.now() + (plan === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString(),
+        stripe_subscription_id: `test_sub_${Date.now()}`,
+        stripe_customer_id: `test_cus_${userId.substring(0, 8)}`
+    };
+
+    if (existingSubs && existingSubs.length > 0) {
+        // Update existing subscription
+        const updateUrl = `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`;
+        const response = await fetch(updateUrl, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                plan: plan,
+                status: 'active',
+                current_period_start: subscriptionData.current_period_start,
+                current_period_end: subscriptionData.current_period_end
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error);
+        }
+
+        console.log('📋 Subscription updated');
+        return { success: true, message: 'Subscription updated' };
+    } else {
+        // Create new subscription
+        const insertUrl = `${SUPABASE_URL}/rest/v1/subscriptions`;
+        const response = await fetch(insertUrl, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(subscriptionData)
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error);
+        }
+
+        console.log('📋 Subscription created');
+        return { success: true, message: 'Subscription created' };
+    }
+}
+
+// =====================================================
+// DRAW ENGINE API FUNCTIONS
+// =====================================================
+
+/**
+ * Get all draws, ordered by date (newest first)
+ */
+export async function getDraws() {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/draws?select=*&order=created_at.desc`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch draws');
+        }
+
+        const draws = await response.json();
+        console.log('🎯 Draws fetched:', draws.length);
+        return draws;
+    } catch (error) {
+        console.error('Error fetching draws:', error);
+        return [];
+    }
+}
+
+/**
+ * Get the current active draw (status = 'open')
+ */
+export async function getCurrentDraw() {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/draws?status=eq.open&select=*&limit=1`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch current draw');
+        }
+
+        const draws = await response.json();
+        return draws[0] || null;
+    } catch (error) {
+        console.error('Error fetching current draw:', error);
+        return null;
+    }
+}
+
+/**
+ * Get current jackpot amount
+ */
+export async function getJackpot() {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/jackpot_tracker?select=amount&limit=1`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch jackpot');
+        }
+
+        const data = await response.json();
+        return data[0]?.amount || 0;
+    } catch (error) {
+        console.error('Error fetching jackpot:', error);
+        return 0;
+    }
+}
+
+/**
+ * Get score frequencies within a range for this month
+ * Returns array of { score, count } sorted by frequency
+ */
+export async function getScoreFrequencies(minScore = 1, maxScore = 45) {
+    try {
+        const authToken = await getAuthToken();
+
+        // Get all scores for this month
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        const url = `${SUPABASE_URL}/rest/v1/user_scores?score=gte.${minScore}&score=lte.${maxScore}&created_at=gte.${monthStart.toISOString()}&select=score`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch scores');
+        }
+
+        const scores = await response.json();
+
+        // Count frequencies
+        const freqMap = {};
+        for (const s of scores) {
+            freqMap[s.score] = (freqMap[s.score] || 0) + 1;
+        }
+
+        // Convert to array and sort
+        const freqArray = Object.entries(freqMap)
+            .map(([score, count]) => ({ score: parseInt(score), count }))
+            .sort((a, b) => a.count - b.count || a.score - b.score);
+
+        console.log('📊 Score frequencies calculated:', freqArray.length, 'unique scores');
+        return freqArray;
+    } catch (error) {
+        console.error('Error fetching score frequencies:', error);
+        return [];
+    }
+}
+
+/**
+ * Generate winning numbers: 3 least popular + 2 most popular
+ */
+export function generateWinningNumbers(frequencies) {
+    if (frequencies.length < 5) {
+        console.warn('Not enough score data to generate winning numbers');
+        return [];
+    }
+
+    // 3 least popular (first 3)
+    const leastPopular = frequencies.slice(0, 3).map(f => f.score);
+
+    // 2 most popular (last 2)
+    const mostPopular = frequencies.slice(-2).map(f => f.score);
+
+    const winningNumbers = [...leastPopular, ...mostPopular];
+    console.log('🎲 Winning numbers generated:', winningNumbers);
+    return winningNumbers;
+}
+
+/**
+ * Get user's last 5 scores
+ */
+export async function getUserScores(userId, limit = 5) {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/user_scores?user_id=eq.${userId}&select=score&order=created_at.desc&limit=${limit}`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch user scores');
+        }
+
+        const data = await response.json();
+        return data.map(s => s.score);
+    } catch (error) {
+        console.error('Error fetching user scores:', error);
+        return [];
+    }
+}
+
+/**
+ * Get all eligible users for the draw
+ * Eligible = active subscription + at least 5 scores
+ */
+export async function getEligibleUsers() {
+    try {
+        const authToken = await getAuthToken();
+
+        // Get users with active subscriptions
+        const subUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id`;
+        const subResponse = await fetch(subUrl, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        if (!subResponse.ok) {
+            throw new Error('Failed to fetch subscriptions');
+        }
+
+        const subscriptions = await subResponse.json();
+        const activeUserIds = subscriptions.map(s => s.user_id);
+
+        if (activeUserIds.length === 0) {
+            console.log('⚠️ No active subscribers found');
+            return [];
+        }
+
+        // Get profiles with donation info for active subscribers
+        const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=in.(${activeUserIds.join(',')})&select=id,full_name,email,donation_percentage,selected_charity_id`;
+        const profileResponse = await fetch(profileUrl, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        if (!profileResponse.ok) {
+            throw new Error('Failed to fetch profiles');
+        }
+
+        const profiles = await profileResponse.json();
+
+        // Filter to only users with 5+ scores
+        const eligibleUsers = [];
+        for (const profile of profiles) {
+            const scores = await getUserScores(profile.id, 5);
+            if (scores.length >= 5) {
+                eligibleUsers.push({
+                    ...profile,
+                    scores
+                });
+            }
+        }
+
+        console.log(`✅ Found ${eligibleUsers.length} eligible users out of ${profiles.length} active subscribers`);
+        return eligibleUsers;
+    } catch (error) {
+        console.error('Error fetching eligible users:', error);
+        return [];
+    }
+}
+
+/**
+ * Count matches between user scores and winning numbers
+ */
+export function countMatches(userScores, winningNumbers) {
+    const winSet = new Set(winningNumbers);
+    let matches = 0;
+    for (const score of userScores) {
+        if (winSet.has(score)) matches++;
+    }
+    return matches;
+}
+
+/**
+ * Simulate a draw with given score range (admin preview)
+ * Returns winner counts and estimated payouts without saving
+ */
+export async function simulateDraw(minScore = 1, maxScore = 45) {
+    try {
+        // Get score frequencies for range
+        const frequencies = await getScoreFrequencies(minScore, maxScore);
+
+        if (frequencies.length < 5) {
+            return { error: 'Not enough score data in this range' };
+        }
+
+        // Generate winning numbers
+        const winningNumbers = generateWinningNumbers(frequencies);
+
+        // Get all eligible users
+        const eligibleUsers = await getEligibleUsers();
+
+        if (eligibleUsers.length === 0) {
+            return {
+                error: 'No eligible participants',
+                winningNumbers
+            };
+        }
+
+        // Calculate matches for each user
+        let tier1Count = 0, tier2Count = 0, tier3Count = 0;
+        const entries = [];
+
+        for (const user of eligibleUsers) {
+            const matches = countMatches(user.scores, winningNumbers);
+            let tier = null;
+
+            if (matches === 5) { tier = 1; tier1Count++; }
+            else if (matches === 4) { tier = 2; tier2Count++; }
+            else if (matches === 3) { tier = 3; tier3Count++; }
+
+            entries.push({
+                user_id: user.id,
+                name: user.full_name,
+                scores: user.scores,
+                matches,
+                tier
+            });
+        }
+
+        // Calculate prize pools per spec:
+        // - Subscribers × $5 = base prize pool
+        // - 40% to 5-match tier, 35% to 4-match, 25% to 3-match
+        // - Jackpot is ALWAYS added to 5-match pool
+        const prizePool = eligibleUsers.length * 5; // $5 per user
+        const jackpot = await getJackpot();
+
+        // 5-match pool = current 40% + any existing jackpot
+        const tier1Pool = (prizePool * 0.40) + jackpot;
+        const tier2Pool = prizePool * 0.35;
+        const tier3Pool = prizePool * 0.25;
+
+        // Payouts split among winners of each tier
+        const tier1Payout = tier1Count > 0 ? tier1Pool / tier1Count : 0;
+        const tier2Payout = tier2Count > 0 ? tier2Pool / tier2Count : 0;
+        const tier3Payout = tier3Count > 0 ? tier3Pool / tier3Count : 0;
+
+        // If NO 5-match winner: current 40% goes to jackpot (jackpot carries forward)
+        // If 5-match winner exists: jackpot is paid out and resets to 0
+        const jackpotRollover = tier1Count === 0 ? (prizePool * 0.40) : 0;
+
+        console.log('🔮 Simulation complete:', { tier1Count, tier2Count, tier3Count });
+
+        return {
+            winningNumbers,
+            scoreRange: { min: minScore, max: maxScore },
+            participants: eligibleUsers.length,
+            prizePool,
+            currentJackpot: jackpot,
+            tier1: { count: tier1Count, pool: tier1Pool, payout: tier1Payout },
+            tier2: { count: tier2Count, pool: tier2Pool, payout: tier2Payout },
+            tier3: { count: tier3Count, pool: tier3Pool, payout: tier3Payout },
+            jackpotRollover,
+            entries: entries.filter(e => e.tier !== null) // Only show winners
+        };
+    } catch (error) {
+        console.error('Error simulating draw:', error);
+        return { error: error.message };
+    }
+}
+
+/**
+ * Run the draw and save results to database
+ */
+export async function runDraw(drawId, minScore = 1, maxScore = 45) {
+    try {
+        const authToken = await getAuthToken();
+
+        // First, simulate to get all data
+        const simulation = await simulateDraw(minScore, maxScore);
+
+        if (simulation.error) {
+            return { success: false, error: simulation.error };
+        }
+
+        // Update draw with results
+        const updateUrl = `${SUPABASE_URL}/rest/v1/draws?id=eq.${drawId}`;
+        const drawUpdate = {
+            status: 'completed',
+            score_range_min: minScore,
+            score_range_max: maxScore,
+            winning_numbers: simulation.winningNumbers,
+            prize_pool: simulation.prizePool,
+            jackpot_added: simulation.currentJackpot,
+            tier1_pool: simulation.tier1.pool,
+            tier2_pool: simulation.tier2.pool,
+            tier3_pool: simulation.tier3.pool,
+            participants_count: simulation.participants,
+            tier1_winners: simulation.tier1.count,
+            tier2_winners: simulation.tier2.count,
+            tier3_winners: simulation.tier3.count,
+            draw_date: new Date().toISOString()
+        };
+
+        const updateResponse = await fetch(updateUrl, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(drawUpdate)
+        });
+
+        if (!updateResponse.ok) {
+            throw new Error('Failed to update draw');
+        }
+
+        // Create draw entries for all eligible users
+        const eligibleUsers = await getEligibleUsers();
+        for (const user of eligibleUsers) {
+            const matches = countMatches(user.scores, simulation.winningNumbers);
+            let tier = null;
+            let grossPrize = 0;
+
+            if (matches === 5) { tier = 1; grossPrize = simulation.tier1.payout; }
+            else if (matches === 4) { tier = 2; grossPrize = simulation.tier2.payout; }
+            else if (matches === 3) { tier = 3; grossPrize = simulation.tier3.payout; }
+
+            const donationPercent = (user.donation_percentage || 10) / 100;
+            const charityAmount = grossPrize * donationPercent;
+            const netPayout = grossPrize - charityAmount;
+
+            const entryUrl = `${SUPABASE_URL}/rest/v1/draw_entries`;
+            await fetch(entryUrl, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    draw_id: drawId,
+                    user_id: user.id,
+                    scores: user.scores,
+                    matches,
+                    tier,
+                    gross_prize: grossPrize,
+                    charity_amount: charityAmount,
+                    net_payout: netPayout,
+                    charity_id: user.selected_charity_id
+                })
+            });
+        }
+
+        // Update jackpot
+        if (simulation.tier1.count === 0) {
+            // No 5-match winner - add to jackpot
+            const newJackpot = simulation.currentJackpot + simulation.jackpotRollover;
+            await updateJackpot(newJackpot, drawId);
+        } else {
+            // Reset jackpot
+            await updateJackpot(0, drawId);
+        }
+
+        // Log activity
+        await logActivity('draw_completed', `Draw completed: ${simulation.tier1.count} tier1, ${simulation.tier2.count} tier2, ${simulation.tier3.count} tier3 winners`);
+
+        console.log('✅ Draw executed successfully');
+        return { success: true, simulation };
+    } catch (error) {
+        console.error('Error running draw:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Update jackpot amount
+ */
+export async function updateJackpot(amount, drawId = null) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/jackpot_tracker?id=not.is.null`;
+
+        await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                amount,
+                last_updated: new Date().toISOString(),
+                last_draw_id: drawId
+            })
+        });
+
+        console.log('💰 Jackpot updated to:', amount);
+    } catch (error) {
+        console.error('Error updating jackpot:', error);
+    }
+}
+
+/**
+ * Publish draw results (make visible to users)
+ */
+export async function publishDraw(drawId) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/draws?id=eq.${drawId}`;
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                status: 'published',
+                published_at: new Date().toISOString()
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to publish draw');
+        }
+
+        await logActivity('draw_published', `Draw ${drawId} published`);
+        console.log('📢 Draw published');
+        return { success: true };
+    } catch (error) {
+        console.error('Error publishing draw:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Create a new draw for the next month
+ */
+export async function createNewDraw(monthYear) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/draws`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                month_year: monthYear,
+                status: 'open'
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to create draw');
+        }
+
+        const data = await response.json();
+        await logActivity('draw_created', `New draw created: ${monthYear}`);
+        console.log('🆕 New draw created:', monthYear);
+        return data[0];
+    } catch (error) {
+        console.error('Error creating draw:', error);
+        return null;
+    }
+}
+
+// =====================================================
+// ADMIN REPORTS API FUNCTIONS
+// =====================================================
+
+/**
+ * Get draw analysis report for a specific draw
+ * Returns winner counts by tier and payout details
+ */
+export async function getDrawAnalysisReport(drawId = null) {
+    try {
+        const authToken = await getAuthToken();
+
+        // Get draw data
+        let drawUrl = `${SUPABASE_URL}/rest/v1/draws?select=*&order=created_at.desc`;
+        if (drawId) {
+            drawUrl += `&id=eq.${drawId}`;
+        }
+
+        const drawResponse = await fetch(drawUrl, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const draws = await drawResponse.json();
+
+        // For each draw, get winner breakdown
+        const reports = [];
+        for (const draw of draws) {
+            const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?draw_id=eq.${draw.id}&select=*`;
+            const entriesResponse = await fetch(entriesUrl, {
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            const entries = await entriesResponse.json();
+
+            reports.push({
+                ...draw,
+                entries_count: entries.length,
+                tier1_entries: entries.filter(e => e.tier === 1),
+                tier2_entries: entries.filter(e => e.tier === 2),
+                tier3_entries: entries.filter(e => e.tier === 3),
+                total_charity: entries.reduce((sum, e) => sum + (e.charity_amount || 0), 0),
+                total_payout: entries.reduce((sum, e) => sum + (e.net_payout || 0), 0)
+            });
+        }
+
+        console.log('📊 Draw analysis report generated');
+        return reports;
+    } catch (error) {
+        console.error('Error getting draw analysis:', error);
+        return [];
+    }
+}
+
+/**
+ * Get charity donations report
+ * Returns total raised per charity
+ */
+export async function getCharityDonationsReport() {
+    try {
+        const authToken = await getAuthToken();
+
+        // Get all charities
+        const charitiesUrl = `${SUPABASE_URL}/rest/v1/charities?select=id,name,category,logo_url&is_active=eq.true`;
+        const charitiesResponse = await fetch(charitiesUrl, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        const charitiesData = await charitiesResponse.json();
+        const charities = Array.isArray(charitiesData) ? charitiesData : [];
+
+        // Get donation amounts per charity from draw_entries
+        const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?select=charity_id,charity_amount`;
+        const entriesResponse = await fetch(entriesUrl, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        const entriesData = await entriesResponse.json();
+        const entries = Array.isArray(entriesData) ? entriesData : [];
+
+        // Aggregate by charity
+        const donationsByCharity = {};
+        for (const entry of entries) {
+            if (entry.charity_id && entry.charity_amount) {
+                donationsByCharity[entry.charity_id] = (donationsByCharity[entry.charity_id] || 0) + entry.charity_amount;
+            }
+        }
+
+        // Combine with charity details
+        const report = charities.map(c => ({
+            ...c,
+            total_raised: donationsByCharity[c.id] || 0
+        })).sort((a, b) => b.total_raised - a.total_raised);
+
+        // Calculate percentages
+        const totalDonations = report.reduce((sum, c) => sum + c.total_raised, 0);
+        report.forEach(c => {
+            c.percentage = totalDonations > 0 ? Math.round((c.total_raised / totalDonations) * 100) : 0;
+        });
+
+        console.log('📊 Charity donations report generated:', report.length, 'charities');
+        return { charities: report, total: totalDonations };
+    } catch (error) {
+        console.error('Error getting charity donations:', error);
+        return { charities: [], total: 0 };
+    }
+}
+
+/**
+ * Get jackpot history
+ * Returns historical jackpot amounts
+ */
+export async function getJackpotHistory() {
+    try {
+        const authToken = await getAuthToken();
+
+        // Get all completed/published draws with jackpot info
+        const url = `${SUPABASE_URL}/rest/v1/draws?select=id,month_year,jackpot_added,tier1_winners,tier1_pool,draw_date&status=in.(completed,published)&order=draw_date.asc`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const draws = await response.json();
+
+        // Get current jackpot
+        const currentJackpot = await getJackpot();
+
+        console.log('📊 Jackpot history fetched:', draws.length, 'draws');
+        return { history: draws, current: currentJackpot };
+    } catch (error) {
+        console.error('Error getting jackpot history:', error);
+        return { history: [], current: 0 };
+    }
+}
+
+/**
+ * Get winners for verification
+ * Returns entries that need admin verification
+ */
+export async function getWinnersForVerification(drawId = null) {
+    try {
+        const authToken = await getAuthToken();
+
+        // Simplified query - skip the joins that might fail
+        let url = `${SUPABASE_URL}/rest/v1/draw_entries?select=*&tier=not.is.null`;
+        if (drawId) {
+            url += `&draw_id=eq.${drawId}`;
+        }
+        url += '&order=created_at.desc';
+
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const data = await response.json();
+
+        // Ensure we always return an array
+        if (!Array.isArray(data)) {
+            console.warn('getWinnersForVerification received non-array:', data);
+            return [];
+        }
+
+        console.log('📊 Winners for verification:', data.length);
+        return data;
+    } catch (error) {
+        console.error('Error getting winners:', error);
+        return [];
+    }
+}
+
+
+/**
+ * Update winner verification status
+ */
+export async function updateWinnerVerification(entryId, status, adminId) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/draw_entries?id=eq.${entryId}`;
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                verification_status: status,
+                verified_at: new Date().toISOString(),
+                verified_by: adminId
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update verification');
+        }
+
+        await logActivity('winner_verified', `Entry ${entryId} verification: ${status}`);
+        console.log('✅ Winner verification updated');
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating verification:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get subscription report
+ * Returns active/inactive counts and eligibility stats
+ */
+export async function getSubscriptionReport() {
+    try {
+        const authToken = await getAuthToken();
+
+        // Get all subscriptions
+        const subsUrl = `${SUPABASE_URL}/rest/v1/subscriptions?select=id,user_id,status,created_at`;
+        const subsResponse = await fetch(subsUrl, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        const subscriptions = await subsResponse.json();
+
+        const active = subscriptions.filter(s => s.status === 'active').length;
+        const inactive = subscriptions.filter(s => s.status !== 'active').length;
+
+        // Get eligible users (active sub + 5 scores)
+        const eligibleUsers = await getEligibleUsers();
+
+        console.log('📊 Subscription report:', { active, inactive, eligible: eligibleUsers.length });
+        return {
+            active,
+            inactive,
+            total: subscriptions.length,
+            eligible: eligibleUsers.length,
+            subscriptions
+        };
+    } catch (error) {
+        console.error('Error getting subscription report:', error);
+        return { active: 0, inactive: 0, total: 0, eligible: 0, subscriptions: [] };
+    }
+}
+
+/**
+ * Get monthly revenue data
+ * Returns revenue aggregated by month
+ */
+export async function getMonthlyRevenue(months = 6) {
+    try {
+        const authToken = await getAuthToken();
+
+        // Calculate date range
+        const startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - months);
+
+        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&created_at=gte.${startDate.toISOString()}&select=created_at,amount`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const subscriptions = await response.json();
+
+        // Group by month
+        const monthlyData = {};
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        for (const sub of subscriptions) {
+            const date = new Date(sub.created_at);
+            const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+            const monthLabel = monthNames[date.getMonth()];
+
+            if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = { month: monthLabel, value: 0, date: date };
+            }
+            monthlyData[monthKey].value += (sub.amount || 5); // Default $5 per subscription
+        }
+
+        // Convert to array and sort by date
+        const result = Object.values(monthlyData)
+            .sort((a, b) => a.date - b.date)
+            .map(({ month, value }) => ({ month, value }));
+
+        console.log('📊 Monthly revenue calculated:', result.length, 'months');
+        return result;
+    } catch (error) {
+        console.error('Error getting monthly revenue:', error);
+        return [];
+    }
+}
+
+/**
+ * Get monthly user growth
+ * Returns new user counts by month
+ */
+export async function getMonthlyUserGrowth(months = 6) {
+    try {
+        const authToken = await getAuthToken();
+
+        // Calculate date range
+        const startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - months);
+
+        const url = `${SUPABASE_URL}/rest/v1/profiles?created_at=gte.${startDate.toISOString()}&select=created_at`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const profiles = await response.json();
+
+        // Group by month
+        const monthlyData = {};
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        for (const profile of profiles) {
+            const date = new Date(profile.created_at);
+            const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+            const monthLabel = monthNames[date.getMonth()];
+
+            if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = { month: monthLabel, value: 0, date: date };
+            }
+            monthlyData[monthKey].value += 1;
+        }
+
+        // Convert to array and sort
+        const result = Object.values(monthlyData)
+            .sort((a, b) => a.date - b.date)
+            .map(({ month, value }) => ({ month, value }));
+
+        console.log('📊 Monthly user growth calculated:', result.length, 'months');
+        return result;
+    } catch (error) {
+        console.error('Error getting user growth:', error);
+        return [];
+    }
+}
+
+/**
+ * Get overall report stats
+ * Returns summary metrics
+ */
+export async function getReportStats() {
+    try {
+        const authToken = await getAuthToken();
+
+        // Get total subscriptions revenue (active * $5)
+        const subsUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=id`;
+        const subsResponse = await fetch(subsUrl, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
+        });
+        const subscriptions = await subsResponse.json();
+        const totalRevenue = subscriptions.length * 5; // $5 per user
+
+        // Get total users
+        const usersUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id`;
+        const usersResponse = await fetch(usersUrl, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
+        });
+        const users = await usersResponse.json();
+
+        // Get total donated
+        const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?select=charity_amount`;
+        const entriesResponse = await fetch(entriesUrl, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
+        });
+        const entries = await entriesResponse.json();
+        const totalDonated = entries.reduce((sum, e) => sum + (e.charity_amount || 0), 0);
+
+        return {
+            totalRevenue,
+            activeUsers: subscriptions.length,
+            totalUsers: users.length,
+            totalDonated,
+            avgDonation: totalDonated > 0 ? totalDonated / entries.filter(e => e.charity_amount > 0).length : 0
+        };
+    } catch (error) {
+        console.error('Error getting report stats:', error);
+        return { totalRevenue: 0, activeUsers: 0, totalUsers: 0, totalDonated: 0, avgDonation: 0 };
+    }
+}
+
+/**
+ * Export data to CSV format
+ */
+export function exportToCSV(data, filename) {
+    if (!data || data.length === 0) {
+        console.warn('No data to export');
+        return;
+    }
+
+    const headers = Object.keys(data[0]).join(',');
+    const rows = data.map(row =>
+        Object.values(row).map(val =>
+            typeof val === 'string' && val.includes(',') ? `"${val}"` : val
+        ).join(',')
+    );
+    const csv = [headers, ...rows].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log('📥 CSV exported:', filename);
+}
+
+/**
+ * Get user impact statistics for the My Charity page
+ * Fetches real data from scores, donations, and profile tables
+ * @param {string} userId - The user's ID
+ * @returns {Object} Impact stats: totalDonated, roundsPlayed, monthsActive, impactRank
+ */
+export async function getUserImpactStats(userId) {
+    if (!userId) {
+        console.warn('⚠️ getUserImpactStats: No userId provided');
+        return { totalDonated: 0, roundsPlayed: 0, monthsActive: 0, impactRank: 'N/A' };
+    }
+
+    const token = await getAuthToken();
+    const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    };
+
+    try {
+        // 1. Get total donations from donations table
+        let totalDonated = 0;
+        try {
+            const donationsRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/donations?user_id=eq.${userId}&select=amount`,
+                { headers }
+            );
+            if (donationsRes.ok) {
+                const donations = await donationsRes.json();
+                totalDonated = donations.reduce((sum, d) => sum + (d.amount || 0), 0);
+            }
+        } catch (e) {
+            console.warn('Could not fetch donations:', e.message);
+        }
+
+        // 2. Get rounds played (count of scores)
+        let roundsPlayed = 0;
+        try {
+            const scoresRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/scores?user_id=eq.${userId}&select=id`,
+                { headers, method: 'HEAD' }
+            );
+            // Try to get count from header or fetch actual data
+            const scoresCountRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/scores?user_id=eq.${userId}&select=id`,
+                { headers }
+            );
+            if (scoresCountRes.ok) {
+                const scores = await scoresCountRes.json();
+                roundsPlayed = scores.length;
+            }
+        } catch (e) {
+            console.warn('Could not fetch scores count:', e.message);
+        }
+
+        // 3. Get months active (from profile created_at)
+        let monthsActive = 0;
+        try {
+            const profileRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=created_at`,
+                { headers }
+            );
+            if (profileRes.ok) {
+                const profiles = await profileRes.json();
+                if (profiles.length > 0 && profiles[0].created_at) {
+                    const createdAt = new Date(profiles[0].created_at);
+                    const now = new Date();
+                    monthsActive = Math.max(1, Math.floor((now - createdAt) / (1000 * 60 * 60 * 24 * 30)));
+                }
+            }
+        } catch (e) {
+            console.warn('Could not fetch profile:', e.message);
+        }
+
+        // 4. Calculate impact rank (compare to other users)
+        let impactRank = 'N/A';
+        try {
+            // Get all users' donation totals
+            const allDonationsRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
+                { headers }
+            );
+            if (allDonationsRes.ok) {
+                const allDonations = await allDonationsRes.json();
+
+                // Aggregate by user
+                const userTotals = {};
+                allDonations.forEach(d => {
+                    userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (d.amount || 0);
+                });
+
+                const sortedTotals = Object.entries(userTotals)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([id]) => id);
+
+                if (sortedTotals.length > 0) {
+                    const userPosition = sortedTotals.indexOf(userId) + 1;
+                    if (userPosition > 0) {
+                        const percentile = Math.round((userPosition / sortedTotals.length) * 100);
+                        impactRank = `Top ${Math.min(percentile, 100)}%`;
+                    } else {
+                        impactRank = 'New';
+                    }
+                } else {
+                    impactRank = 'Pioneer';
+                }
+            }
+        } catch (e) {
+            console.warn('Could not calculate impact rank:', e.message);
+        }
+
+        console.log('📊 User impact stats:', { totalDonated, roundsPlayed, monthsActive, impactRank });
+        return { totalDonated, roundsPlayed, monthsActive, impactRank };
+
+    } catch (error) {
+        console.error('Error fetching user impact stats:', error);
+        return { totalDonated: 0, roundsPlayed: 0, monthsActive: 0, impactRank: 'N/A' };
+    }
+}
+
+/**
+ * Get homepage impact statistics
+ * Returns: totalRaised, charityCount, golferCount, livesImpacted
+ */
+export async function getHomePageStats() {
+    try {
+        // Get total raised from charities table
+        const charitiesRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/charities?select=id,total_raised`,
+            { headers: { 'apikey': SUPABASE_KEY } }
+        );
+        const charities = charitiesRes.ok ? await charitiesRes.json() : [];
+        const totalRaised = charities.reduce((sum, c) => sum + (c.total_raised || 0), 0);
+        const charityCount = charities.length;
+
+        // Get golfer count from profiles table
+        const profilesRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/profiles?select=id`,
+            { headers: { 'apikey': SUPABASE_KEY } }
+        );
+        const profiles = profilesRes.ok ? await profilesRes.json() : [];
+        const golferCount = profiles.length;
+
+        // Calculate lives impacted (estimated multiplier based on donations)
+        // This is an estimate: each $10 donated helps ~3 lives
+        const livesImpacted = Math.floor(totalRaised * 0.3);
+
+        console.log('📊 Homepage stats fetched:', { totalRaised, charityCount, golferCount, livesImpacted });
+
+        return {
+            totalRaised: totalRaised || 0,
+            charityCount: charityCount || 0,
+            golferCount: golferCount || 0,
+            livesImpacted: livesImpacted || 0
+        };
+    } catch (error) {
+        console.error('Error fetching homepage stats:', error);
+        return { totalRaised: 0, charityCount: 0, golferCount: 0, livesImpacted: 0 };
+    }
+}
+
+/**
+ * Get featured charities for homepage carousel
+ * Returns charities with their names, descriptions, categories, and total raised
+ */
+export async function getFeaturedCharities(limit = 4) {
+    try {
+        const res = await fetch(
+            `${SUPABASE_URL}/rest/v1/charities?select=id,name,description,category,total_raised,image_url&order=total_raised.desc&limit=${limit}`,
+            { headers: { 'apikey': SUPABASE_KEY } }
+        );
+
+        if (!res.ok) {
+            console.error('Failed to fetch charities:', res.status);
+            return [];
+        }
+
+        const charities = await res.json();
+
+        // Map database fields to component expected format
+        const mapped = charities.map(c => ({
+            id: c.id,
+            name: c.name,
+            category: c.category || 'Charity',
+            description: c.description || '',
+            raised: c.total_raised || 0,
+            image: c.image_url || 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800&h=500&fit=crop'
+        }));
+
+        console.log('📊 Featured charities fetched:', mapped.length);
+        return mapped;
+    } catch (error) {
+        console.error('Error fetching featured charities:', error);
+        return [];
+    }
+}
+
+/**
+ * Get leaderboard data for the homepage
+ * Returns top 5 players by total amount raised
+ */
+export async function getLeaderboardData(limit = 5) {
+    try {
+        const token = await getAuthToken();
+        const headers = {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+
+        // 1. Get all donations and aggregate by user
+        let allDonations = [];
+        try {
+            const donationsRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
+                { headers }
+            );
+            if (donationsRes.ok) {
+                const data = await donationsRes.json();
+                if (Array.isArray(data)) allDonations = data;
+            }
+        } catch (e) {
+            console.warn('Leaderboard: Donations fetch failed', e.message);
+        }
+
+        const userTotals = {};
+        allDonations.forEach(d => {
+            if (d.user_id) {
+                userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
+            }
+        });
+
+        // 2. Sort and get top user IDs
+        const topUserIds = Object.entries(userTotals)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, limit)
+            .map(([id]) => id);
+
+        if (topUserIds.length === 0) {
+            // Fallback: Get some profiles if no donations yet
+            const profilesRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/profiles?select=id,full_name,selected_charity_id,donation_percentage&limit=${limit}`,
+                { headers }
+            );
+            const profiles = await profilesRes.json();
+            topUserIds.push(...profiles.map(p => p.id));
+        }
+
+        if (topUserIds.length === 0) return [];
+
+        // 3. Get profiles for top users
+        const profilesRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/profiles?id=in.(${topUserIds.join(',')})&select=id,full_name,selected_charity_id,donation_percentage`,
+            { headers }
+        );
+        const profiles = await profilesRes.json();
+
+        // 4. Get charity names
+        const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
+        let charityMap = {};
+        if (charityIds.length > 0) {
+            const charitiesRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
+                { headers }
+            );
+            const charities = await charitiesRes.json();
+            charities.forEach(c => {
+                charityMap[c.id] = c.name;
+            });
+        }
+
+        // 5. Get scores for top users
+        let userScoresMap = {};
+        try {
+            const scoresRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${topUserIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
+                { headers }
+            );
+            if (scoresRes.ok) {
+                const data = await scoresRes.json();
+                if (Array.isArray(data)) {
+                    data.forEach(s => {
+                        if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = [];
+                        if (userScoresMap[s.user_id].length < 5) {
+                            userScoresMap[s.user_id].push(s.score);
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('Leaderboard: Scores fetch failed', e.message);
+        }
+
+        // 6. Assemble leaderboard
+        const leaderboard = topUserIds.map((userId, index) => {
+            const profile = profiles.find(p => p.id === userId) || { full_name: 'Anonymous' };
+            const name = profile.full_name || 'Anonymous';
+            const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+            const raised = userTotals[userId] || 0;
+            const scores = userScoresMap[userId] || [0, 0, 0, 0, 0];
+            const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
+            // Generate some consistent accents based on rank
+            const accents = [
+                { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
+                { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
+                { accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
+                { accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
+                { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
+            ];
+
+            return {
+                rank: index + 1,
+                id: userId,
+                initials,
+                name,
+                scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
+                raised: `$${raised.toLocaleString()}`,
+                charity: charityMap[profile.selected_charity_id] || 'Various Charities',
+                percentage: `${profile.donation_percentage || 20}%`,
+                avg,
+                ...(accents[index] || accents[accents.length - 1])
+            };
+        });
+
+        // 7. Fallback to mock data if no database players
+        if (leaderboard.length === 0) {
+            return [
+                {
+                    rank: 1,
+                    initials: "JM",
+                    name: "James Mitchell",
+                    scores: [34, 31, 38, 29, 35],
+                    raised: "$2,450",
+                    charity: "Red Cross",
+                    percentage: "60%",
+                    avg: 32,
+                    accent: "from-emerald-400 to-teal-600",
+                    glow: "rgba(16, 185, 129, 0.3)"
+                },
+                {
+                    rank: 2,
+                    initials: "SC",
+                    name: "Sarah Chen",
+                    scores: [32, 36, 33, 30, 34],
+                    raised: "$1,890",
+                    charity: "Beyond Blue",
+                    percentage: "45%",
+                    avg: 33,
+                    accent: "from-teal-400 to-emerald-600",
+                    glow: "rgba(20, 184, 166, 0.3)"
+                },
+                {
+                    rank: 3,
+                    initials: "MO",
+                    name: "Michael O'Brien",
+                    scores: [35, 29, 37, 32, 31],
+                    raised: "$1,650",
+                    charity: "Smith Family",
+                    percentage: "50%",
+                    avg: 33,
+                    accent: "from-lime-400 to-emerald-600",
+                    glow: "rgba(163, 230, 53, 0.3)"
+                },
+                {
+                    rank: 4,
+                    initials: "EW",
+                    name: "Emma Williams",
+                    scores: [30, 33, 35, 28, 36],
+                    raised: "$1,420",
+                    charity: "OzHarvest",
+                    percentage: "40%",
+                    avg: 32,
+                    accent: "from-emerald-500 to-emerald-800",
+                    glow: "rgba(16, 185, 129, 0.2)"
+                },
+                {
+                    rank: 5,
+                    initials: "DK",
+                    name: "David Kim",
+                    scores: [33, 31, 34, 37, 29],
+                    raised: "$980",
+                    charity: "RSPCA Australia",
+                    percentage: "35%",
+                    avg: 33,
+                    accent: "from-zinc-500 to-zinc-800",
+                    glow: "rgba(113, 113, 122, 0.2)"
+                },
+            ];
+        }
+
+        return leaderboard;
+    } catch (error) {
+        console.error('Error getting leaderboard data:', error);
+        return [
+            {
+                rank: 1,
+                initials: "JM",
+                name: "James Mitchell",
+                scores: [34, 31, 38, 29, 35],
+                raised: "$2,450",
+                charity: "Red Cross",
+                percentage: "60%",
+                avg: 32,
+                accent: "from-emerald-400 to-teal-600",
+                glow: "rgba(16, 185, 129, 0.3)"
+            },
+            {
+                rank: 2,
+                initials: "SC",
+                name: "Sarah Chen",
+                scores: [32, 36, 33, 30, 34],
+                raised: "$1,890",
+                charity: "Beyond Blue",
+                percentage: "45%",
+                avg: 33,
+                accent: "from-teal-400 to-emerald-600",
+                glow: "rgba(20, 184, 166, 0.3)"
+            },
+            {
+                rank: 3,
+                initials: "MO",
+                name: "Michael O'Brien",
+                scores: [35, 29, 37, 32, 31],
+                raised: "$1,650",
+                charity: "Smith Family",
+                percentage: "50%",
+                avg: 33,
+                accent: "from-lime-400 to-emerald-600",
+                glow: "rgba(163, 230, 53, 0.3)"
+            },
+            {
+                rank: 4,
+                initials: "EW",
+                name: "Emma Williams",
+                scores: [30, 33, 35, 28, 36],
+                raised: "$1,420",
+                charity: "OzHarvest",
+                percentage: "40%",
+                avg: 32,
+                accent: "from-emerald-500 to-emerald-800",
+                glow: "rgba(16, 185, 129, 0.2)"
+            },
+            {
+                rank: 5,
+                initials: "DK",
+                name: "David Kim",
+                scores: [33, 31, 34, 37, 29],
+                raised: "$980",
+                charity: "RSPCA Australia",
+                percentage: "35%",
+                avg: 33,
+                accent: "from-zinc-500 to-zinc-800",
+                glow: "rgba(113, 113, 122, 0.2)"
+            }
+        ];
+    }
+}
