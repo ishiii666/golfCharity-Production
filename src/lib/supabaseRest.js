@@ -34,9 +34,11 @@ async function supabaseRest(table, options = {}) {
 
     const url = `${SUPABASE_URL}/rest/v1/${table}?select=${select}${filter ? '&' + filter : ''}`;
 
+    const authToken = await getAuthToken();
+
     const headers = {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
     };
 
@@ -609,11 +611,12 @@ export async function getUsers() {
         console.log('👥 Profiles fetched:', profiles.length);
 
         // Fetch ALL subscriptions (not just active) for debugging
+        const authToken = await getAuthToken();
         const url = `${SUPABASE_URL}/rest/v1/subscriptions?select=*`;
         const response = await fetch(url, {
             headers: {
                 'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`
+                'Authorization': `Bearer ${authToken}`
             }
         });
 
@@ -628,8 +631,11 @@ export async function getUsers() {
         // Create a map of user_id to subscription info
         const subscriptionMap = {};
         subscriptions.forEach(sub => {
-            // Use active subscriptions, or any subscription if no active ones exist
-            if (sub.status === 'active' || !subscriptionMap[sub.user_id]) {
+            const status = sub.status?.toLowerCase();
+            const isActive = status === 'active' || status === 'trialing';
+
+            // Priority: keep active/trialing subscription info, otherwise any record
+            if (isActive || !subscriptionMap[sub.user_id]) {
                 subscriptionMap[sub.user_id] = sub.plan || sub.status || 'subscribed';
             }
         });
@@ -777,6 +783,38 @@ export async function assignSubscription(userId, plan) {
 
         console.log('📋 Subscription created');
         return { success: true, message: 'Subscription created' };
+    }
+}
+
+/**
+ * Sync user subscription from Stripe (calls edge function)
+ */
+export async function syncSubscription(userId) {
+    try {
+        console.log(`🔄 Syncing subscription for user ${userId}...`);
+
+        const response = await fetch(
+            `${SUPABASE_URL}/functions/v1/verify-subscription`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_id: userId })
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Sync failed: ${error}`);
+        }
+
+        const data = await response.json();
+        console.log('✅ Sync response:', data);
+        return { success: true, subscription: data.subscription };
+    } catch (error) {
+        console.error('Error syncing subscription:', error);
+        throw error;
     }
 }
 
