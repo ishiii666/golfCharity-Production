@@ -171,7 +171,7 @@ export default function ScrollytellingHero() {
                     <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center min-h-screen py-24 lg:py-0">
 
                         {/* LEFT SIDE - Text Content */}
-                        <div className="space-y-8">
+                        <div className="flex flex-col gap-4 sm:gap-6 relative z-20">
                             {/* Live indicator */}
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
@@ -189,7 +189,7 @@ export default function ScrollytellingHero() {
                             </motion.div>
 
                             {/* Auto-rotating Headlines */}
-                            <div className="relative h-[280px] sm:h-[320px] lg:h-[360px]">
+                            <div className="relative h-[160px] sm:h-[180px] lg:h-[220px] pointer-events-none">
                                 <AnimatePresence mode="wait">
                                     <motion.div
                                         key={currentHeadline}
@@ -197,10 +197,10 @@ export default function ScrollytellingHero() {
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -40 }}
                                         transition={{ duration: 0.6, ease: 'easeOut' }}
-                                        className="absolute inset-0"
+                                        className="absolute inset-0 pointer-events-none"
                                     >
                                         <h1
-                                            className="text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-black leading-[0.9] tracking-tight"
+                                            className="text-4xl sm:text-6xl lg:text-7xl font-black leading-[0.9] tracking-tight"
                                             style={{ fontFamily: 'var(--font-display)' }}
                                         >
                                             <span className="block text-white">{headline.top}</span>
@@ -218,31 +218,31 @@ export default function ScrollytellingHero() {
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 transition={{ delay: 0.5 }}
-                                className="text-base sm:text-lg max-w-md leading-relaxed text-zinc-400 italic"
+                                className="text-sm sm:text-lg max-w-md leading-relaxed text-zinc-400 italic pointer-events-none"
                             >
                                 {subtext}
                             </motion.p>
 
-                            {/* CTA Buttons */}
+                            {/* CTA Buttons - Using z-50 to ensure they are on top and clickable */}
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.6 }}
-                                className="flex flex-wrap gap-4"
+                                className="flex flex-wrap gap-4 relative z-50 pointer-events-auto"
                             >
-                                <Link to="/pricing">
+                                <Link to="/signup" className="cursor-pointer">
                                     <button
-                                        className="px-8 py-3 rounded-full font-semibold text-black bg-white hover:bg-gray-100 transition-all duration-300 flex items-center gap-2"
+                                        className="px-6 py-4 sm:px-10 sm:py-5 rounded-full font-bold text-black bg-white hover:bg-emerald-400 hover:scale-105 transition-all duration-300 flex items-center gap-2 group shadow-2xl cursor-pointer"
                                     >
-                                        Start Playing
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                                        Start Now
+                                        <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                                         </svg>
                                     </button>
                                 </Link>
-                                <Link to="/how-it-works">
+                                <Link to="/how-it-works" className="cursor-pointer">
                                     <button
-                                        className="px-8 py-3 rounded-full font-semibold text-white border border-zinc-600 hover:border-zinc-400 transition-all duration-300"
+                                        className="px-6 py-4 sm:px-10 sm:py-5 rounded-full font-bold text-white border-2 border-zinc-600 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all duration-300 cursor-pointer"
                                     >
                                         How It Works
                                     </button>
@@ -252,9 +252,9 @@ export default function ScrollytellingHero() {
 
                         {/* RIGHT SIDE - Charity Showcase */}
                         <div className="relative flex items-center justify-center lg:justify-end">
-                            {/* Decorative ring */}
+                            {/* Decorative ring - pointer-events-none is CRITICAL here */}
                             <div
-                                className="absolute w-[320px] h-[320px] sm:w-[400px] sm:h-[400px] lg:w-[480px] lg:h-[480px] rounded-full opacity-20"
+                                className="absolute w-[320px] h-[320px] sm:w-[400px] sm:h-[400px] lg:w-[480px] lg:h-[480px] rounded-full opacity-20 pointer-events-none"
                                 style={{
                                     border: '1px solid rgba(16, 185, 129, 0.3)',
                                     background: 'radial-gradient(circle, transparent 60%, rgba(16, 185, 129, 0.05) 100%)'

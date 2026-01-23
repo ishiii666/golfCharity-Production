@@ -387,19 +387,28 @@ export async function logActivity(actionType, description, metadata = {}) {
 export async function getAdminStats() {
     console.log('📊 Fetching admin stats (real data)...');
 
-    const [charityCount, userCount, activeSubscribers, totalDonated, recentActivity] = await Promise.all([
-        getTableCount('charities'),
-        getTableCount('profiles'),
+    const authToken = await getAuthToken();
+    const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
+
+    // Fetch basic counts with role filtering
+    const [charityRes, profilesRes, activeSubs, totalDonated, recentActivity] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/charities?select=id`, { headers, method: 'HEAD', headers: { ...headers, 'Prefer': 'count=exact' } }),
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,role`, { headers }), // Fetch roles for better splitting
         getActiveSubscribersCount(),
         getTotalDonations(),
         getRecentActivity(5)
     ]);
 
-    console.log('📊 Stats fetched:', { charityCount, userCount, activeSubscribers, totalDonated });
+    const charityCount = charityRes.headers.get('Content-Range')?.split('/')[1] || 0;
+    const profiles = await profilesRes.json();
+
+    const userCount = profiles.filter(p => p.role !== 'admin').length;
+
+    console.log('📊 Stats fetched:', { charityCount, userCount, activeSubs, totalDonated });
 
     return {
         totalUsers: userCount,
-        activeSubscribers: activeSubscribers,
+        activeSubscribers: activeSubs,
         totalCharities: charityCount,
         totalDonated: totalDonated,
         recentActivity: recentActivity
@@ -1629,7 +1638,7 @@ export async function getMonthlyUserGrowth(months = 6) {
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() - months);
 
-        const url = `${SUPABASE_URL}/rest/v1/profiles?created_at=gte.${startDate.toISOString()}&select=created_at`;
+        const url = `${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&created_at=gte.${startDate.toISOString()}&select=created_at`;
         const response = await fetch(url, {
             headers: {
                 'apikey': SUPABASE_KEY,
@@ -1674,6 +1683,7 @@ export async function getMonthlyUserGrowth(months = 6) {
 export async function getReportStats() {
     try {
         const authToken = await getAuthToken();
+        const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
         // Get total subscriptions revenue (active * $5)
         const subsUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=id`;
@@ -1683,12 +1693,15 @@ export async function getReportStats() {
         const subscriptions = await subsResponse.json();
         const totalRevenue = subscriptions.length * 5; // $5 per user
 
-        // Get total users
-        const usersUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id`;
+        // Get total users, filtered by role
+        const usersUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,role`;
         const usersResponse = await fetch(usersUrl, {
             headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
         });
         const users = await usersResponse.json();
+
+        const players = users.filter(u => u.role !== 'admin');
+        const admins = users.filter(u => u.role === 'admin');
 
         // Get total donated
         const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?select=charity_amount`;
@@ -1701,13 +1714,14 @@ export async function getReportStats() {
         return {
             totalRevenue,
             activeUsers: subscriptions.length,
-            totalUsers: users.length,
+            totalUsers: players.length, // Only count players in reports
+            totalAdmins: admins.length,
             totalDonated,
             avgDonation: totalDonated > 0 ? totalDonated / entries.filter(e => e.charity_amount > 0).length : 0
         };
     } catch (error) {
         console.error('Error getting report stats:', error);
-        return { totalRevenue: 0, activeUsers: 0, totalUsers: 0, totalDonated: 0, avgDonation: 0 };
+        return { totalRevenue: 0, activeUsers: 0, totalUsers: 0, totalAdmins: 0, totalDonated: 0, avgDonation: 0 };
     }
 }
 
@@ -1876,9 +1890,9 @@ export async function getHomePageStats() {
         const totalRaised = charities.reduce((sum, c) => sum + (c.total_raised || 0), 0);
         const charityCount = charities.length;
 
-        // Get golfer count from profiles table
+        // Get golfer count from profiles table, excluding admins
         const profilesRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/profiles?select=id`,
+            `${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&select=id`,
             { headers: { 'apikey': SUPABASE_KEY } }
         );
         const profiles = profilesRes.ok ? await profilesRes.json() : [];
@@ -1988,83 +2002,86 @@ export async function getLeaderboardData(limit = 5) {
             const profiles = await profilesRes.json();
             topUserIds.push(...profiles.map(p => p.id));
         }
-
-        if (topUserIds.length === 0) return [];
-
-        // 3. Get profiles for top users
-        const profilesRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/profiles?id=in.(${topUserIds.join(',')})&select=id,full_name,selected_charity_id,donation_percentage`,
-            { headers }
-        );
-        const profiles = await profilesRes.json();
-
-        // 4. Get charity names
-        const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
-        let charityMap = {};
-        if (charityIds.length > 0) {
-            const charitiesRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
+        let leaderboard = [];
+        if (topUserIds.length === 0) {
+            // No users found at all, we'll let it fall through to the mock data fallback
+            console.log('ℹ️ No golfers found in database, falling back to mock data');
+        } else {
+            // 3. Get profiles for top users, ensuring they are not admins
+            const profilesRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/profiles?id=in.(${topUserIds.join(',')})&role=neq.admin&select=id,full_name,selected_charity_id,donation_percentage`,
                 { headers }
             );
-            const charities = await charitiesRes.json();
-            charities.forEach(c => {
-                charityMap[c.id] = c.name;
+            const profiles = await profilesRes.json();
+
+            // 4. Get charity names
+            const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
+            let charityMap = {};
+            if (charityIds.length > 0) {
+                const charitiesRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
+                    { headers }
+                );
+                const charities = await charitiesRes.json();
+                charities.forEach(c => {
+                    charityMap[c.id] = c.name;
+                });
+            }
+
+            // 5. Get scores for top users
+            let userScoresMap = {};
+            try {
+                const scoresRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${topUserIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
+                    { headers }
+                );
+                if (scoresRes.ok) {
+                    const data = await scoresRes.json();
+                    if (Array.isArray(data)) {
+                        data.forEach(s => {
+                            if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = [];
+                            if (userScoresMap[s.user_id].length < 5) {
+                                userScoresMap[s.user_id].push(s.score);
+                            }
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn('Leaderboard: Scores fetch failed', e.message);
+            }
+
+            // 6. Assemble leaderboard
+            leaderboard = topUserIds.map((userId, index) => {
+                const profile = profiles.find(p => p.id === userId) || { full_name: 'Anonymous' };
+                const name = profile.full_name || 'Anonymous';
+                const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                const raised = userTotals[userId] || 0;
+                const scores = userScoresMap[userId] || [0, 0, 0, 0, 0];
+                const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
+                // Generate some consistent accents based on rank
+                const accents = [
+                    { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
+                    { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
+                    { accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
+                    { accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
+                    { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
+                ];
+
+                return {
+                    rank: index + 1,
+                    id: userId,
+                    initials,
+                    name,
+                    scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
+                    raised: `$${raised.toLocaleString()}`,
+                    charity: charityMap[profile.selected_charity_id] || 'Various Charities',
+                    percentage: `${profile.donation_percentage || 20}%`,
+                    avg,
+                    ...(accents[index] || accents[accents.length - 1])
+                };
             });
         }
-
-        // 5. Get scores for top users
-        let userScoresMap = {};
-        try {
-            const scoresRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${topUserIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
-                { headers }
-            );
-            if (scoresRes.ok) {
-                const data = await scoresRes.json();
-                if (Array.isArray(data)) {
-                    data.forEach(s => {
-                        if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = [];
-                        if (userScoresMap[s.user_id].length < 5) {
-                            userScoresMap[s.user_id].push(s.score);
-                        }
-                    });
-                }
-            }
-        } catch (e) {
-            console.warn('Leaderboard: Scores fetch failed', e.message);
-        }
-
-        // 6. Assemble leaderboard
-        const leaderboard = topUserIds.map((userId, index) => {
-            const profile = profiles.find(p => p.id === userId) || { full_name: 'Anonymous' };
-            const name = profile.full_name || 'Anonymous';
-            const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-            const raised = userTotals[userId] || 0;
-            const scores = userScoresMap[userId] || [0, 0, 0, 0, 0];
-            const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-
-            // Generate some consistent accents based on rank
-            const accents = [
-                { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
-                { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
-                { accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
-                { accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
-                { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
-            ];
-
-            return {
-                rank: index + 1,
-                id: userId,
-                initials,
-                name,
-                scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
-                raised: `$${raised.toLocaleString()}`,
-                charity: charityMap[profile.selected_charity_id] || 'Various Charities',
-                percentage: `${profile.donation_percentage || 20}%`,
-                avg,
-                ...(accents[index] || accents[accents.length - 1])
-            };
-        });
 
         // 7. Fallback to mock data if no database players
         if (leaderboard.length === 0) {

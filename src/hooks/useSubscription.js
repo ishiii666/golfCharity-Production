@@ -89,15 +89,18 @@ export function useSubscription() {
             console.log('[SUBSCRIPTION] Step 1: Checking database for user:', user.id);
 
             // Step 1: Try to get from database
-            const { data, error: dbError } = await supabase
+            const { data: results, error: dbError } = await supabase
                 .from('subscriptions')
                 .select('*')
                 .eq('user_id', user.id)
-                .single();
+                .order('created_at', { ascending: false })
+                .limit(1);
 
-            if (dbError && dbError.code !== 'PGRST116') {
+            if (dbError) {
                 throw dbError;
             }
+
+            const data = results && results.length > 0 ? results[0] : null;
 
             if (data) {
                 // Found in database - use it

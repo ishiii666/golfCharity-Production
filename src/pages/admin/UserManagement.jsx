@@ -11,9 +11,8 @@ export default function UserManagement() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [roleFilter, setRoleFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [sortOrder, setSortOrder] = useState('name-asc'); // sorting state
+    const [sortOrder, setSortOrder] = useState('name-asc');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
     const [editData, setEditData] = useState({});
@@ -35,19 +34,21 @@ export default function UserManagement() {
             const data = await getUsers();
             console.log('👥 Users received:', data.length);
 
-            // Transform data to match component expectations
-            const transformedUsers = (data || []).map(profile => ({
-                id: profile.id,
-                email: profile.email || 'No email',
-                fullName: profile.full_name || 'Unnamed User',
-                role: profile.role || 'user',
-                status: profile.status || 'active',
-                subscription: profile.subscription_type || 'none',
-                joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : 'Unknown',
-                totalDonated: profile.total_donated || 0
-            }));
+            // Only fetch players (exclude admin)
+            const playerProfiles = (data || [])
+                .filter(u => u.role !== 'admin')
+                .map(profile => ({
+                    id: profile.id,
+                    email: profile.email || 'No email',
+                    fullName: profile.full_name || 'Unnamed User',
+                    role: profile.role || 'user',
+                    status: profile.status || 'active',
+                    subscription: profile.subscription_type || 'none',
+                    joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : 'Unknown',
+                    totalDonated: profile.total_donated || 0
+                }));
 
-            setUsers(transformedUsers);
+            setUsers(playerProfiles);
         } catch (error) {
             console.error('Error fetching users:', error);
             setUsers([]);
@@ -59,10 +60,11 @@ export default function UserManagement() {
     const filteredUsers = users.filter(user => {
         const matchesSearch = user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.email.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesRole = roleFilter === 'all' || user.role === roleFilter;
         const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-        return matchesSearch && matchesRole && matchesStatus;
+        return matchesSearch && matchesStatus;
     });
+
+
 
     // Sort users based on sortOrder
     const sortedUsers = [...filteredUsers].sort((a, b) => {
@@ -81,9 +83,8 @@ export default function UserManagement() {
     });
 
     const stats = {
-        total: users.length,
-        active: users.filter(u => u.status === 'active').length,
-        admins: users.filter(u => u.role === 'admin').length,
+        totalPlayers: users.length,
+        activePlayers: users.filter(u => u.status === 'active').length,
         suspended: users.filter(u => u.status === 'suspended').length
     };
 
@@ -195,19 +196,16 @@ export default function UserManagement() {
             <div className="py-8 lg:py-12">
                 <div className="container-app">
                     {/* Header */}
-                    <motion.div
-                        variants={fadeUp}
-                        initial="initial"
-                        animate="animate"
-                        className="mb-8"
-                    >
-                        <h1 className="text-3xl lg:text-4xl font-bold mb-2 text-white">
-                            User Management
-                        </h1>
-                        <p className="text-zinc-400">
-                            View and manage platform users
-                        </p>
-                    </motion.div>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-3xl lg:text-4xl font-bold mb-2 text-white">
+                                Player Management
+                            </h1>
+                            <p className="text-zinc-400">
+                                View and manage platform players
+                            </p>
+                        </div>
+                    </div>
 
                     {/* Action Message Notification */}
                     <AnimatePresence>
@@ -239,9 +237,8 @@ export default function UserManagement() {
                         className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
                     >
                         {[
-                            { label: 'Total Users', value: loading ? '...' : stats.total, color: 'text-teal-400' },
-                            { label: 'Active', value: loading ? '...' : stats.active, color: 'text-green-400' },
-                            { label: 'Admins', value: loading ? '...' : stats.admins, color: 'text-amber-400' },
+                            { label: 'Total Players', value: loading ? '...' : stats.totalPlayers, color: 'text-teal-400' },
+                            { label: 'Active Players', value: loading ? '...' : stats.activePlayers, color: 'text-green-400' },
                             { label: 'Suspended', value: loading ? '...' : stats.suspended, color: 'text-red-400' }
                         ].map((stat) => (
                             <motion.div key={stat.label} variants={staggerItem}>
@@ -264,21 +261,7 @@ export default function UserManagement() {
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                     />
                                 </div>
-                                <select
-                                    value={roleFilter}
-                                    onChange={(e) => setRoleFilter(e.target.value)}
-                                    className="px-3 py-2 rounded-lg text-sm"
-                                    style={{
-                                        background: 'rgba(26, 77, 46, 0.3)',
-                                        border: '1px solid rgba(201, 162, 39, 0.2)',
-                                        color: '#f9f5e3',
-                                        minWidth: '100px'
-                                    }}
-                                >
-                                    <option value="all" style={{ background: '#0f3621' }}>All Roles</option>
-                                    <option value="user" style={{ background: '#0f3621' }}>Users</option>
-                                    <option value="admin" style={{ background: '#0f3621' }}>Admins</option>
-                                </select>
+                                {/* Removed role filter as it's now handled by viewMode tabs */}
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}

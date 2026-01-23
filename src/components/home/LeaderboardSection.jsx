@@ -73,7 +73,7 @@ export default function LeaderboardSection() {
                 </svg>
             </div>
 
-            <div className="max-w-7xl mx-auto px-6 relative z-10">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10">
                 {/* Header with Emerald Focus */}
                 <div className="flex flex-col md:flex-row items-end justify-between mb-16 gap-8 text-left">
                     <div className="space-y-4">
@@ -123,7 +123,7 @@ export default function LeaderboardSection() {
                                 animate={{ opacity: 1, x: 0, rotateY: 0 }}
                                 exit={{ opacity: 0, x: -20, rotateY: 10 }}
                                 transition={{ type: "spring", stiffness: 100, damping: 20 }}
-                                className="relative p-10 rounded-[3rem] bg-zinc-900/60 border border-emerald-500/10 backdrop-blur-3xl overflow-hidden shadow-2xl"
+                                className="relative p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] bg-zinc-900/60 border border-emerald-500/10 backdrop-blur-3xl overflow-hidden shadow-2xl"
                             >
                                 <div className="absolute inset-0 opacity-10" style={{ backgroundColor: selectedPlayer.glow }} />
 
@@ -184,7 +184,7 @@ export default function LeaderboardSection() {
                     <motion.div
                         initial={{ y: 20, opacity: 0 }}
                         whileInView={{ y: 0, opacity: 1 }}
-                        className="relative w-full max-w-2xl aspect-auto rounded-[3rem] bg-zinc-900/40 border border-emerald-500/20 overflow-hidden flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl group backdrop-blur-xl"
+                        className="relative w-full max-w-2xl aspect-auto rounded-[2rem] sm:rounded-[3rem] bg-zinc-900/40 border border-emerald-500/20 overflow-hidden flex flex-col items-center justify-center p-6 sm:p-12 text-center shadow-2xl group backdrop-blur-xl"
                     >
                         {/* Kinetic Emerald Rings */}
                         <motion.div
@@ -351,7 +351,7 @@ function PlayerCard({ player, isSelected, onClick }) {
                 transformStyle: "preserve-3d"
             }}
             className={cn(
-                "group relative p-8 rounded-[2rem] border transition-all duration-500 cursor-pointer overflow-hidden",
+                "group relative p-5 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border transition-all duration-500 cursor-pointer overflow-hidden",
                 isSelected
                     ? "bg-zinc-900 border-emerald-500/40 shadow-[0_20px_80px_rgba(0,0,0,0.4)]"
                     : "bg-zinc-900/40 border-white/5 hover:border-emerald-500/20"

@@ -23,6 +23,7 @@ function formatTimeAgo(timestamp) {
 export default function AdminDashboard() {
     const [stats, setStats] = useState({
         totalUsers: 0,
+        totalAdmins: 0,
         activeSubscribers: 0,
         totalCharities: 0,
         totalDonated: 0,
@@ -49,8 +50,7 @@ export default function AdminDashboard() {
 
     // Dynamic quick stats based on real data
     const quickStats = [
-        { label: 'Total Users', value: stats.totalUsers, color: 'text-emerald-400', icon: '👥' },
-        { label: 'Active Subscribers', value: stats.activeSubscribers, color: 'text-violet-400', icon: '⭐' },
+        { label: 'Active Players', value: stats.totalUsers, color: 'text-emerald-400', icon: '👥' },
         { label: 'Partner Charities', value: stats.totalCharities, color: 'text-amber-400', icon: '💚' },
         { label: 'Total Donated', value: stats.totalDonated, prefix: '$', color: 'text-rose-400', icon: '💰' }
     ];
@@ -72,7 +72,7 @@ export default function AdminDashboard() {
         },
         {
             title: 'User Management',
-            description: 'View, edit, and manage user accounts',
+            description: 'View, edit, and manage player accounts',
             icon: (
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -80,7 +80,7 @@ export default function AdminDashboard() {
             ),
             to: '/admin/users',
             color: 'from-violet-500 to-purple-500',
-            stat: 'Total users',
+            stat: 'Total players',
             statValue: stats.loading ? '...' : stats.totalUsers
         },
         {

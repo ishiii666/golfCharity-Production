@@ -188,7 +188,7 @@ export default function AdminReports() {
                     >
                         {[
                             { label: 'Total Revenue', value: formatCurrency(stats?.totalRevenue), color: '#c9a227' },
-                            { label: 'Active Users', value: stats?.activeUsers?.toLocaleString() || '0', color: '#22c55e' },
+                            { label: 'Active Players', value: stats?.totalUsers?.toLocaleString() || '0', color: '#22c55e' },
                             { label: 'Total Donated', value: formatCurrency(stats?.totalDonated), color: '#a855f7' },
                             { label: 'Current Jackpot', value: formatCurrency(jackpotData.current), color: '#f59e0b' }
                         ].map((stat) => (

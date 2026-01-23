@@ -18,8 +18,8 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
  * Get them from: Stripe Dashboard → Products → Click product → Copy "Price ID"
  */
 export const PRICE_IDS = {
-    monthly: 'price_1SpWbKJMV86Mj7li8ZkTvAa1',
-    annual: 'price_1SpWcKJMV86Mj7liYT2Q1eKg',
+    monthly: 'price_1SsIYYDyu18Cp1ZO7nJxx70s',
+    annual: 'price_1SsIYyDyu18Cp1ZO3iogcicJ',
 };
 
 /**
