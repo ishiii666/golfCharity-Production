@@ -141,6 +141,34 @@ h6 {
   display: none;
 }
 
+/* Custom Scrollbar for specific sections */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+  display: block !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 10px !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.3) !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.5) !important;
+}
+
+/* Ensure scrolling is enabled even if global styles try to hide it */
+.custom-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(16, 185, 129, 0.3) rgba(255, 255, 255, 0.05) !important;
+}
+
 /* Firefox */
 html {
   scrollbar-width: none;

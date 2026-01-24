@@ -5,6 +5,7 @@ import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardContent } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import BackButton from '../../components/ui/BackButton';
 import { fadeUp } from '../../utils/animations';
 import { getCharityById, insertRow, updateRow, uploadCharityImage, logActivity } from '../../lib/supabaseRest';
 import { useAuth } from '../../context/AuthContext';
@@ -44,7 +45,9 @@ export default function CharityEditor() {
         website_url: '',
         location: 'National',
         goal_amount: 10000,
-        featured: false
+        featured: false,
+        charity_day_date: '',
+        charity_day_location: ''
     });
 
     // Redirect if not admin
@@ -74,7 +77,9 @@ export default function CharityEditor() {
                     website_url: charity.website_url || '',
                     location: charity.location || 'National',
                     goal_amount: charity.goal_amount || 10000,
-                    featured: charity.featured || false
+                    featured: charity.featured || false,
+                    charity_day_date: charity.charity_day_date || '',
+                    charity_day_location: charity.charity_day_location || ''
                 });
                 setImagePreview(charity.image_url);
             } else {
@@ -142,6 +147,8 @@ export default function CharityEditor() {
                 location: formData.location,
                 goal_amount: parseFloat(formData.goal_amount) || 10000,
                 featured: formData.featured,
+                charity_day_date: formData.charity_day_date || null,
+                charity_day_location: formData.charity_day_location || '',
                 status: 'active'
             };
 
@@ -191,20 +198,13 @@ export default function CharityEditor() {
             <div className="py-8 lg:py-12">
                 <div className="container-app max-w-4xl">
                     {/* Header */}
+                    <BackButton to="/admin/charities" label="Back to Charities" className="mb-6" />
                     <motion.div
                         variants={fadeUp}
                         initial="initial"
                         animate="animate"
                         className="flex items-center gap-4 mb-8"
                     >
-                        <button
-                            onClick={() => navigate('/admin/charities')}
-                            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
-                        >
-                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                            </svg>
-                        </button>
                         <div>
                             <h1 className="text-3xl lg:text-4xl font-bold text-white">
                                 {isEditing ? 'Edit Charity' : 'Add New Charity'}
@@ -221,8 +221,8 @@ export default function CharityEditor() {
                             initial={{ opacity: 0, y: -20 }}
                             animate={{ opacity: 1, y: 0 }}
                             className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${message.type === 'success'
-                                    ? 'bg-emerald-500/20 border border-emerald-500/30'
-                                    : 'bg-red-500/20 border border-red-500/30'
+                                ? 'bg-emerald-500/20 border border-emerald-500/30'
+                                : 'bg-red-500/20 border border-red-500/30'
                                 }`}
                         >
                             <span className={message.type === 'success' ? 'text-emerald-400' : 'text-red-400'}>
@@ -357,10 +357,46 @@ export default function CharityEditor() {
                                         </div>
                                     </div>
 
-                                    {/* Image Section */}
+                                    {/* Golf Charity Day Details Section */}
                                     <div className="pt-6 border-t border-zinc-700/50">
                                         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                                             <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">4</span>
+                                            Golf Charity Day Details
+                                        </h3>
+                                        <div className="space-y-4 pl-10">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                                                        Charity Day Date
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={formData.charity_day_date}
+                                                        onChange={(e) => setFormData({ ...formData, charity_day_date: e.target.value })}
+                                                        className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white focus:border-emerald-500 focus:outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                                                        Charity Day Location
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.charity_day_location}
+                                                        onChange={(e) => setFormData({ ...formData, charity_day_location: e.target.value })}
+                                                        placeholder="e.g., Royal Melbourne Golf Club"
+                                                        className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white focus:border-emerald-500 focus:outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-zinc-500">Optional: Provide details for upcoming golf charity events hosted by this charity.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Image Section */}
+                                    <div className="pt-6 border-t border-zinc-700/50">
+                                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                            <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">5</span>
                                             Charity Image
                                         </h3>
                                         <div className="pl-10">
@@ -400,7 +436,7 @@ export default function CharityEditor() {
                                     {/* Featured Toggle */}
                                     <div className="pt-6 border-t border-zinc-700/50">
                                         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                                            <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">5</span>
+                                            <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm">6</span>
                                             Settings
                                         </h3>
                                         <div className="pl-10">

@@ -589,6 +589,9 @@ export function AuthProvider({ children }) {
         state: profile?.state || 'VIC',
         golfHandicap: profile?.golf_handicap,
         homeClub: profile?.home_club,
+        bankName: profile?.bank_name,
+        bsbNumber: profile?.bsb_number,
+        accountNumber: profile?.account_number,
         notificationSettings: profile?.notification_settings || {
             email: true,
             drawResults: true,
@@ -604,6 +607,9 @@ export function AuthProvider({ children }) {
     // Check if user has completed initial setup
     const setupCompleted = profile?.setup_completed === true;
 
+    // Check if user is suspended
+    const isSuspended = profile?.status === 'suspended';
+
     // Function to refresh profile data (for use after setup completion)
     const refreshProfile = async () => {
         if (user && session?.access_token) {
@@ -618,6 +624,7 @@ export function AuthProvider({ children }) {
         subscription,
         isAuthenticated: !!user,
         isSubscribed,
+        isSuspended,
         setupCompleted,
         isLoading,
         isAdmin,

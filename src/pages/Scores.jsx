@@ -11,7 +11,7 @@ import { useScores } from '../hooks/useScores';
 import { fadeUp, staggerContainer, staggerItem } from '../utils/animations';
 
 export default function Scores() {
-    const { isAdmin } = useAuth();
+    const { user, isAdmin } = useAuth();
     const {
         scores,
         scoreValues,
@@ -143,8 +143,12 @@ export default function Scores() {
                                 />
                             </div>
                             {hasEnoughScores && (
-                                <p className="text-sm mt-3 text-center" style={{ color: '#22c55e' }}>
-                                    ✓ You're entered in the next draw!
+                                <p className="text-sm mt-3 text-center" style={{ color: user?.status === 'active' && user?.subscription?.status === 'active' ? '#22c55e' : '#f59e0b' }}>
+                                    {user?.status === 'suspended'
+                                        ? '⚠ Account suspended — scores saved but not entered'
+                                        : (user?.subscription?.status === 'active' || user?.subscription?.status === 'trialing')
+                                            ? '✓ You\'re entered in the next draw!'
+                                            : '⚠ Subscribe to enter the draw with these scores'}
                                 </p>
                             )}
                         </Card>

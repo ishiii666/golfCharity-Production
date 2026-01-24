@@ -37,6 +37,9 @@ export default function ProfileSettings() {
         golfHandicap: '',
         homeClub: '',
         state: 'VIC',
+        bankName: '',
+        bsbNumber: '',
+        accountNumber: '',
         notifications: {
             email: true,
             drawResults: true,
@@ -55,6 +58,9 @@ export default function ProfileSettings() {
                 golfHandicap: user.golfHandicap || '',
                 homeClub: user.homeClub || '',
                 state: user.state || 'VIC',
+                bankName: user.bankName || '',
+                bsbNumber: user.bsbNumber || '',
+                accountNumber: user.accountNumber || '',
                 notifications: user.notificationSettings || {
                     email: true,
                     drawResults: true,
@@ -91,6 +97,9 @@ export default function ProfileSettings() {
                 state: formData.state,
                 golf_handicap: formData.golfHandicap ? parseFloat(formData.golfHandicap) : null,
                 home_club: formData.homeClub || null,
+                bank_name: formData.bankName || null,
+                bsb_number: formData.bsbNumber || null,
+                account_number: formData.accountNumber || null,
                 notification_settings: formData.notifications
             });
 
@@ -373,6 +382,60 @@ export default function ProfileSettings() {
                                             />
                                         </div>
                                     </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+
+                        {/* Banking Information */}
+                        <motion.div variants={staggerItem}>
+                            <Card variant="glass">
+                                <CardHeader>
+                                    <h2 className="text-xl font-bold" style={{ color: 'var(--color-cream-100)' }}>
+                                        Banking Details
+                                    </h2>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-neutral-300)' }}>
+                                                Bank Name
+                                            </label>
+                                            <Input
+                                                name="bankName"
+                                                value={formData.bankName}
+                                                onChange={handleInputChange}
+                                                disabled={!isEditing}
+                                                placeholder="e.g. Westpac"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-neutral-300)' }}>
+                                                BSB Code
+                                            </label>
+                                            <Input
+                                                name="bsbNumber"
+                                                value={formData.bsbNumber}
+                                                onChange={handleInputChange}
+                                                disabled={!isEditing}
+                                                placeholder="000-000"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-neutral-300)' }}>
+                                                Account Number
+                                            </label>
+                                            <Input
+                                                name="accountNumber"
+                                                value={formData.accountNumber}
+                                                onChange={handleInputChange}
+                                                disabled={!isEditing}
+                                                placeholder="12345678"
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs mt-3 italic" style={{ color: 'var(--color-neutral-500)' }}>
+                                        These details are used for prize disbursements.
+                                    </p>
                                 </CardContent>
                             </Card>
                         </motion.div>

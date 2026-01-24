@@ -36,7 +36,9 @@ export default function AddCharity() {
         website_url: '',
         location: 'National',
         featured: false,
-        goal_amount: 10000
+        goal_amount: 10000,
+        charity_day_date: '',
+        charity_day_location: ''
     });
 
     const showMessage = (type, text) => {
@@ -93,6 +95,8 @@ export default function AddCharity() {
                 location: formData.location,
                 featured: formData.featured,
                 goal_amount: parseFloat(formData.goal_amount) || 10000,
+                charity_day_date: formData.charity_day_date || null,
+                charity_day_location: formData.charity_day_location || '',
                 status: 'active',
                 total_raised: 0,
                 supporter_count: 0
@@ -174,118 +178,162 @@ export default function AddCharity() {
                     )}
 
                     {/* Form Card */}
-                    <motion.div
-                        variants={fadeUp}
-                        initial="initial"
-                        animate="animate"
-                    >
-                        <Card>
-                            <CardContent className="p-6 space-y-6">
-                                {/* Charity Name */}
-                                <Input
-                                    label="Charity Name *"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    placeholder="e.g., Cancer Council Australia"
-                                />
+                    <Card>
+                        <CardContent className="p-6 lg:p-8 space-y-8">
+                            {/* 1. Basic Information */}
+                            <div>
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                                    <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm border border-emerald-500/30">1</span>
+                                    Basic Information
+                                </h3>
+                                <div className="space-y-4 pl-11">
+                                    <Input
+                                        label="Charity Name *"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        placeholder="e.g., Cancer Council Australia"
+                                    />
 
-                                {/* Category and Location Row */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2 text-zinc-300">
-                                            Category
-                                        </label>
-                                        <select
-                                            value={formData.category}
-                                            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white"
-                                        >
-                                            {categories.map(cat => (
-                                                <option key={cat} value={cat} className="bg-zinc-800">{cat}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2 text-zinc-300">
-                                            Location
-                                        </label>
-                                        <select
-                                            value={formData.location}
-                                            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white"
-                                        >
-                                            <option value="National" className="bg-zinc-800">National</option>
-                                            <option value="State" className="bg-zinc-800">State</option>
-                                            <option value="Regional" className="bg-zinc-800">Regional</option>
-                                            <option value="International" className="bg-zinc-800">International</option>
-                                        </select>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2 text-zinc-300">
+                                                Category
+                                            </label>
+                                            <select
+                                                value={formData.category}
+                                                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                                            >
+                                                {categories.map(cat => (
+                                                    <option key={cat} value={cat} className="bg-zinc-800">{cat}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2 text-zinc-300">
+                                                Location
+                                            </label>
+                                            <select
+                                                value={formData.location}
+                                                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                                            >
+                                                <option value="National" className="bg-zinc-800">National</option>
+                                                <option value="State" className="bg-zinc-800">State</option>
+                                                <option value="Regional" className="bg-zinc-800">Regional</option>
+                                                <option value="International" className="bg-zinc-800">International</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Short Description */}
-                                <Input
-                                    label="Short Description"
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    placeholder="Brief one-line description..."
-                                />
+                            {/* 2. Description */}
+                            <div className="pt-8 border-t border-zinc-800">
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                                    <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm border border-emerald-500/30">2</span>
+                                    Description
+                                </h3>
+                                <div className="space-y-4 pl-11">
+                                    <Input
+                                        label="Short Description"
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        placeholder="Brief one-line description..."
+                                    />
 
-                                {/* Full Description */}
-                                <div>
-                                    <label className="block text-sm font-medium mb-2 text-zinc-300">
-                                        Full Description
-                                    </label>
-                                    <textarea
-                                        value={formData.long_description}
-                                        onChange={(e) => setFormData({ ...formData, long_description: e.target.value })}
-                                        placeholder="Detailed description of the charity's mission and impact..."
-                                        rows={4}
-                                        className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white resize-none"
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2 text-zinc-300">
+                                            Full Description
+                                        </label>
+                                        <textarea
+                                            value={formData.long_description}
+                                            onChange={(e) => setFormData({ ...formData, long_description: e.target.value })}
+                                            placeholder="Detailed description of the charity's mission and impact..."
+                                            rows={5}
+                                            className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white resize-none focus:outline-none focus:border-emerald-500 transition-colors"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 3. Fundraising & Links */}
+                            <div className="pt-8 border-t border-zinc-800">
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                                    <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm border border-emerald-500/30">3</span>
+                                    Fundraising & Links
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-11">
+                                    <Input
+                                        label="Fundraising Goal ($)"
+                                        type="number"
+                                        value={formData.goal_amount}
+                                        onChange={(e) => setFormData({ ...formData, goal_amount: e.target.value })}
+                                        placeholder="10000"
+                                    />
+                                    <Input
+                                        label="Website URL"
+                                        value={formData.website_url}
+                                        onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
+                                        placeholder="https://charitywebsite.com"
                                     />
                                 </div>
+                            </div>
 
-                                {/* Website URL */}
-                                <Input
-                                    label="Website URL"
-                                    value={formData.website_url}
-                                    onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
-                                    placeholder="https://charitywebsite.com"
-                                />
+                            {/* 4. Golf Charity Day Details */}
+                            <div className="pt-8 border-t border-zinc-800">
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                                    <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm border border-emerald-500/30">4</span>
+                                    Golf Charity Day Details
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-11">
+                                    <Input
+                                        label="Charity Day Date"
+                                        type="date"
+                                        value={formData.charity_day_date}
+                                        onChange={(e) => setFormData({ ...formData, charity_day_date: e.target.value })}
+                                    />
+                                    <Input
+                                        label="Charity Day Location"
+                                        value={formData.charity_day_location}
+                                        onChange={(e) => setFormData({ ...formData, charity_day_location: e.target.value })}
+                                        placeholder="e.g., Royal Melbourne Golf Club"
+                                    />
+                                </div>
+                                <p className="text-xs text-zinc-500 mt-2 pl-11">Optional: Provide details for upcoming golf charity events hosted by this charity.</p>
+                            </div>
 
-                                {/* Goal Amount */}
-                                <Input
-                                    label="Fundraising Goal ($)"
-                                    type="number"
-                                    value={formData.goal_amount}
-                                    onChange={(e) => setFormData({ ...formData, goal_amount: e.target.value })}
-                                    placeholder="10000"
-                                />
-
-                                {/* Image Upload Section */}
-                                <div>
-                                    <label className="block text-sm font-medium mb-2 text-zinc-300">
-                                        Charity Image
-                                    </label>
+                            {/* 5. Charity Image */}
+                            <div className="pt-8 border-t border-zinc-800">
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                                    <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm border border-emerald-500/30">5</span>
+                                    Charity Image
+                                </h3>
+                                <div className="pl-11">
                                     <div
                                         onClick={() => imageInputRef.current?.click()}
-                                        className="border-2 border-dashed border-zinc-600 rounded-xl p-6 text-center cursor-pointer hover:border-emerald-500 transition-colors"
+                                        className="border-2 border-dashed border-zinc-700/50 rounded-2xl p-8 text-center cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all duration-300"
                                     >
                                         {imagePreview ? (
-                                            <div className="relative">
+                                            <div className="relative group">
                                                 <img
                                                     src={imagePreview}
                                                     alt="Preview"
-                                                    className="w-full h-48 object-cover rounded-lg"
+                                                    className="w-full max-w-md mx-auto h-48 object-cover rounded-xl shadow-lg"
                                                 />
-                                                <p className="text-sm text-zinc-400 mt-3">Click to change image</p>
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-xl transition-opacity">
+                                                    <p className="text-white text-sm font-medium">Click to change image</p>
+                                                </div>
                                             </div>
                                         ) : (
-                                            <div className="py-8">
-                                                <svg className="w-12 h-12 mx-auto text-zinc-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                                <p className="text-zinc-400">Click to upload image</p>
-                                                <p className="text-zinc-500 text-sm mt-1">PNG, JPG up to 5MB</p>
+                                            <div className="py-4">
+                                                <div className="w-16 h-16 mx-auto bg-zinc-800 rounded-2xl flex items-center justify-center mb-4">
+                                                    <svg className="w-8 h-8 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                </div>
+                                                <p className="text-zinc-300 font-medium">Click to upload charity image</p>
+                                                <p className="text-zinc-500 text-sm mt-1">PNG, JPG or WEBP up to 5MB</p>
                                             </div>
                                         )}
                                         <input
@@ -297,50 +345,65 @@ export default function AddCharity() {
                                         />
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Featured Toggle */}
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        type="button"
+                            {/* 6. Settings */}
+                            <div className="pt-8 border-t border-zinc-800">
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                                    <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm border border-emerald-500/30">6</span>
+                                    Settings
+                                </h3>
+                                <div className="pl-11">
+                                    <div
                                         onClick={() => setFormData({ ...formData, featured: !formData.featured })}
-                                        className={`w-12 h-6 rounded-full transition-colors relative ${formData.featured ? 'bg-emerald-500' : 'bg-zinc-600'}`}
+                                        className="flex items-center gap-4 p-4 rounded-2xl bg-zinc-800/30 border border-zinc-700/50 cursor-pointer hover:bg-zinc-800/50 transition-colors"
                                     >
-                                        <div
-                                            className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-[left] duration-200 ${formData.featured ? 'left-7' : 'left-1'}`}
-                                        />
-                                    </button>
-                                    <span className="text-zinc-300">Featured Charity</span>
+                                        <button
+                                            type="button"
+                                            className={`w-14 h-7 rounded-full transition-colors relative ${formData.featured ? 'bg-emerald-500' : 'bg-zinc-600'}`}
+                                        >
+                                            <div
+                                                className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-[left] duration-200 ${formData.featured ? 'left-8' : 'left-1'}`}
+                                            />
+                                        </button>
+                                        <div>
+                                            <p className="text-white font-semibold">Featured Charity</p>
+                                            <p className="text-sm text-zinc-500">Highlight this charity on the main discovery pages</p>
+                                        </div>
+                                    </div>
                                 </div>
+                            </div>
 
-                                {/* Action Buttons */}
-                                <div className="flex gap-4 pt-4 border-t border-zinc-700">
-                                    <Button
-                                        variant="ghost"
-                                        fullWidth
-                                        onClick={() => navigate('/admin/charities')}
-                                        disabled={saving}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        variant="primary"
-                                        fullWidth
-                                        onClick={handleSave}
-                                        disabled={saving}
-                                    >
-                                        {saving ? (
-                                            <span className="flex items-center justify-center gap-2">
-                                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                Saving...
-                                            </span>
-                                        ) : (
-                                            'Add Charity'
-                                        )}
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                            {/* Action Buttons */}
+                            <div className="flex gap-4 pt-8 mt-4 border-t border-zinc-800">
+                                <Button
+                                    variant="ghost"
+                                    fullWidth
+                                    onClick={() => navigate('/admin/charities')}
+                                    disabled={saving}
+                                    className="h-12"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    fullWidth
+                                    onClick={handleSave}
+                                    disabled={saving}
+                                    className="h-12"
+                                >
+                                    {saving ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            Saving...
+                                        </span>
+                                    ) : (
+                                        'Add Charity'
+                                    )}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </PageTransition>

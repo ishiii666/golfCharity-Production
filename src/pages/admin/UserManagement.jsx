@@ -4,8 +4,10 @@ import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardContent, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import BackButton from '../../components/ui/BackButton';
 import { fadeUp, staggerContainer, staggerItem } from '../../utils/animations';
-import { getUsers, updateRow, logActivity, assignSubscription, syncSubscription } from '../../lib/supabaseRest';
+import { getUsers, getCharities, updateRow, logActivity, syncSubscription } from '../../lib/supabaseRest';
+import UserEditModal from '../../components/admin/UserEditModal';
 
 export default function UserManagement() {
     const [users, setUsers] = useState([]);
@@ -15,17 +17,27 @@ export default function UserManagement() {
     const [sortOrder, setSortOrder] = useState('name-asc');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [editData, setEditData] = useState({});
-    const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
-    const [saving, setSaving] = useState(false);
-
+    const [charities, setCharities] = useState([]);
     // Confirmation modal state
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, user: null, action: null });
 
-    // Fetch users using direct REST API
+    // State for editing
+    const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
+
+    // Fetch users and charities
     useEffect(() => {
         fetchUsers();
+        fetchCharities();
     }, []);
+
+    const fetchCharities = async () => {
+        try {
+            const data = await getCharities();
+            setCharities(data || []);
+        } catch (error) {
+            console.error('Error fetching charities:', error);
+        }
+    };
 
     const fetchUsers = async () => {
         try {
@@ -34,7 +46,7 @@ export default function UserManagement() {
             const data = await getUsers();
             console.log('👥 Users received:', data.length);
 
-            // Only fetch players (exclude admin)
+            // Fetch players only (exclude admin)
             const playerProfiles = (data || [])
                 .filter(u => u.role !== 'admin')
                 .map(profile => ({
@@ -45,7 +57,13 @@ export default function UserManagement() {
                     status: profile.status || 'active',
                     subscription: profile.subscription_type || 'none',
                     joinDate: profile.created_at ? new Date(profile.created_at).toISOString().split('T')[0] : 'Unknown',
-                    totalDonated: profile.total_donated || 0
+                    totalDonated: profile.total_donated || 0,
+                    // New bank fields
+                    bankName: profile.bank_name || '',
+                    bsbNumber: profile.bsb_number || '',
+                    accountNumber: profile.account_number || '',
+                    accountBalance: profile.account_balance || 0,
+                    selectedCharityId: profile.selected_charity_id || ''
                 }));
 
             setUsers(playerProfiles);
@@ -84,68 +102,18 @@ export default function UserManagement() {
 
     const stats = {
         totalPlayers: users.length,
-        activePlayers: users.filter(u => u.status === 'active').length,
+        activeSubscribers: users.filter(u => u.status === 'active' && u.subscription !== 'none').length,
         suspended: users.filter(u => u.status === 'suspended').length
     };
 
-    const handleEdit = (user) => {
-        setSelectedUser(user);
-        setEditData({ ...user });
-        setIsEditModalOpen(true);
-    };
-
-    // Show action message with auto-dismiss
     const showMessage = (type, text) => {
         setActionMessage({ type, text });
         setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
     };
 
-    const handleSaveUser = async () => {
-        setSaving(true);
-        try {
-            // Update profile data
-            await updateRow('profiles', editData.id, {
-                full_name: editData.fullName,
-                email: editData.email,
-                role: editData.role,
-                status: editData.status
-            });
-
-            // If subscription changed and user is not admin, update subscription
-            const originalUser = users.find(u => u.id === editData.id);
-            const subscriptionChanged = editData.role !== 'admin' &&
-                editData.subscription !== originalUser?.subscription;
-
-            if (subscriptionChanged) {
-                console.log(`📋 Subscription change: ${originalUser?.subscription} → ${editData.subscription}`);
-                await assignSubscription(editData.id, editData.subscription || 'none');
-            }
-
-            // Log the activity
-            const changes = ['profile updated'];
-            if (subscriptionChanged) {
-                changes.push(`subscription: ${editData.subscription || 'free'}`);
-            }
-            await logActivity('admin_action', `Updated user: ${editData.fullName}`, {
-                userId: editData.id,
-                changes: changes
-            });
-
-            // Update local state
-            setUsers(prev => prev.map(u => u.id === editData.id ? editData : u));
-            setIsEditModalOpen(false);
-            setSelectedUser(null);
-
-            const message = subscriptionChanged
-                ? `User "${editData.fullName}" updated with ${editData.subscription || 'free'} plan!`
-                : `User "${editData.fullName}" updated successfully!`;
-            showMessage('success', message);
-        } catch (error) {
-            console.error('Error saving user:', error);
-            showMessage('error', 'Failed to save user. Please try again.');
-        } finally {
-            setSaving(false);
-        }
+    const handleEdit = (user) => {
+        setSelectedUser(user);
+        setIsEditModalOpen(true);
     };
 
 
@@ -217,6 +185,7 @@ export default function UserManagement() {
             <div className="py-8 lg:py-12">
                 <div className="container-app">
                     {/* Header */}
+                    <BackButton to="/admin" label="Admin Dashboard" className="mb-6" />
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                             <h1 className="text-3xl lg:text-4xl font-bold mb-2 text-white">
@@ -259,7 +228,7 @@ export default function UserManagement() {
                     >
                         {[
                             { label: 'Total Players', value: loading ? '...' : stats.totalPlayers, color: 'text-teal-400' },
-                            { label: 'Active Players', value: loading ? '...' : stats.activePlayers, color: 'text-green-400' },
+                            { label: 'Active Subscribers', value: loading ? '...' : stats.activeSubscribers, color: 'text-green-400' },
                             { label: 'Suspended', value: loading ? '...' : stats.suspended, color: 'text-red-400' }
                         ].map((stat) => (
                             <motion.div key={stat.label} variants={staggerItem}>
@@ -432,87 +401,16 @@ export default function UserManagement() {
                     )}
 
                     {/* Edit Modal */}
-                    <AnimatePresence>
-                        {isEditModalOpen && selectedUser && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="absolute inset-0 bg-black/60"
-                                    onClick={() => setIsEditModalOpen(false)}
-                                />
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    className="relative w-full max-w-md p-6 rounded-2xl"
-                                    style={{
-                                        background: 'rgba(15, 54, 33, 0.98)',
-                                        border: '1px solid rgba(201, 162, 39, 0.2)'
-                                    }}
-                                >
-                                    <h3 className="text-xl font-bold mb-6" style={{ color: 'var(--color-cream-100)' }}>
-                                        Edit User
-                                    </h3>
-                                    <div className="space-y-4">
-                                        <Input
-                                            label="Full Name"
-                                            value={editData.fullName}
-                                            onChange={(e) => setEditData({ ...editData, fullName: e.target.value })}
-                                        />
-                                        <Input
-                                            label="Email"
-                                            type="email"
-                                            value={editData.email}
-                                            onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                                        />
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2 text-zinc-300">
-                                                Status
-                                            </label>
-                                            <select
-                                                value={editData.status}
-                                                onChange={(e) => setEditData({ ...editData, status: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white"
-                                            >
-                                                <option value="active" className="bg-zinc-800">Active</option>
-                                                <option value="suspended" className="bg-zinc-800">Suspended</option>
-                                            </select>
-                                        </div>
-                                        {/* Subscription Plan - Only show for non-admin users */}
-                                        {editData.role !== 'admin' && (
-                                            <div>
-                                                <label className="block text-sm font-medium mb-2 text-zinc-300">
-                                                    Subscription Plan
-                                                </label>
-                                                <select
-                                                    value={editData.subscription || 'none'}
-                                                    onChange={(e) => setEditData({ ...editData, subscription: e.target.value })}
-                                                    className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white"
-                                                >
-                                                    <option value="none" className="bg-zinc-800">Not Subscribed</option>
-                                                    <option value="monthly" className="bg-zinc-800">Monthly ($11/mo)</option>
-                                                    <option value="annual" className="bg-zinc-800">Annual ($108/yr)</option>
-                                                </select>
-                                                <p className="text-xs text-zinc-500 mt-1">
-                                                    Assign a subscription plan to this user
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-3 mt-6">
-                                        <Button variant="ghost" fullWidth onClick={() => setIsEditModalOpen(false)}>
-                                            Cancel
-                                        </Button>
-                                        <Button variant="primary" fullWidth onClick={handleSaveUser}>
-                                            Save Changes
-                                        </Button>
-                                    </div>
-                                </motion.div>
-                            </div>
-                        )}
-                    </AnimatePresence>
+                    <UserEditModal
+                        isOpen={isEditModalOpen}
+                        onClose={() => {
+                            setIsEditModalOpen(false);
+                            setSelectedUser(null);
+                        }}
+                        userId={selectedUser?.id}
+                        charities={charities}
+                        onUpdate={fetchUsers}
+                    />
 
                     {/* Confirmation Modal for Suspend/Activate */}
                     <AnimatePresence>

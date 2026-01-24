@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardContent, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
+import BackButton from '../../components/ui/BackButton';
 import { fadeUp, staggerContainer, staggerItem } from '../../utils/animations';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -145,6 +146,7 @@ export default function AdminReports() {
             <div className="py-8 lg:py-12">
                 <div className="container-app">
                     {/* Header */}
+                    <BackButton to="/admin" label="Admin Dashboard" className="mb-6" />
                     <motion.div
                         variants={fadeUp}
                         initial="initial"

@@ -63,8 +63,52 @@ export default function Dashboard() {
                         </p>
                     </motion.div>
 
-                    {/* Subscription Banner - Show if not subscribed */}
-                    {!isActive && (
+                    {/* Suspension Banner */}
+                    {user?.status === 'suspended' && (
+                        <motion.div
+                            variants={fadeUp}
+                            initial="initial"
+                            animate="animate"
+                            className="mb-8"
+                        >
+                            <div
+                                className="p-6 rounded-2xl relative overflow-hidden"
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05))',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)'
+                                }}
+                            >
+                                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div
+                                            className="w-12 h-12 rounded-full flex items-center justify-center"
+                                            style={{ background: 'rgba(239, 68, 68, 0.2)' }}
+                                        >
+                                            <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-red-500">
+                                                Account Suspended
+                                            </h3>
+                                            <p className="text-sm text-zinc-400">
+                                                Your account is currently suspended. You will not be entered into draws until your account is active. Please contact support for more information.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Link to="/contact">
+                                        <Button variant="outline" size="md">
+                                            Contact Support
+                                        </Button>
+                                    </Link>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* Subscription Banner - Show if not subscribed and NOT suspended (to avoid double banners) */}
+                    {!isActive && user?.status !== 'suspended' && (
                         <motion.div
                             variants={fadeUp}
                             initial="initial"
@@ -157,10 +201,22 @@ export default function Dashboard() {
                                         </p>
                                     )}
                                 </div>
-                                {!hasEnoughScores && scores.length > 0 && (
-                                    <p className="text-xs text-center mt-3 text-emerald-400">
-                                        Add {5 - scores.length} more score{5 - scores.length > 1 ? 's' : ''} to enter the draw
-                                    </p>
+                                {hasEnoughScores ? (
+                                    isActive && user?.status !== 'suspended' ? (
+                                        <p className="text-xs text-center mt-3 text-emerald-400">
+                                            ✓ You're entered in the next draw!
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-center mt-3 text-amber-500">
+                                            {user?.status === 'suspended' ? 'Account suspended — not entered' : 'Subscribe to enter the draw'}
+                                        </p>
+                                    )
+                                ) : (
+                                    scores.length > 0 && (
+                                        <p className="text-xs text-center mt-3 text-zinc-500">
+                                            Add {5 - scores.length} more score{5 - scores.length > 1 ? 's' : ''} to enter the draw
+                                        </p>
+                                    )
                                 )}
                                 <Link to="/scores" className="block mt-4">
                                     <Button variant="outline" size="sm" fullWidth>

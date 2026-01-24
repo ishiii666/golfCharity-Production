@@ -1,11 +1,12 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './components/ui/Toast';
 import SmoothScroll from './components/layout/SmoothScroll';
 import ScrollToTop from './components/layout/ScrollToTop';
 import Layout from './components/layout/Layout';
 import EntryAnimation from './components/EntryAnimation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 // Pages
 import Home from './pages/Home';
@@ -215,109 +216,107 @@ function SubscribedRoute({ children }) {
 
 function AppRoutes() {
   return (
-    <AnimatePresence mode="wait">
-      <Routes>
-        {/* Main Layout */}
-        <Route path="/" element={<Layout />}>
-          {/* Public Routes */}
-          <Route index element={<Home />} />
-          <Route path="login" element={<Auth />} />
-          <Route path="signup" element={<Auth />} />
-          <Route path="how-it-works" element={<HowItWorks />} />
-          <Route path="charities" element={<Charities />} />
-          <Route path="results" element={<Results />} />
-          <Route path="terms" element={<Terms />} />
-          <Route path="privacy" element={<Privacy />} />
-          <Route path="pricing" element={<Pricing />} />
-          <Route path="faq" element={<FAQ />} />
-          <Route path="contact" element={<Contact />} />
-          <Route path="impact" element={<Impact />} />
-          <Route path="events" element={<Events />} />
-          <Route path="donate" element={<Donate />} />
-          <Route path="complete-setup" element={
-            <ProtectedRoute>
-              <CompleteSetup />
-            </ProtectedRoute>
-          } />
+    <Routes>
+      {/* Main Layout */}
+      <Route path="/" element={<Layout />}>
+        {/* Public Routes */}
+        <Route index element={<Home />} />
+        <Route path="login" element={<Auth />} />
+        <Route path="signup" element={<Auth />} />
+        <Route path="how-it-works" element={<HowItWorks />} />
+        <Route path="charities" element={<Charities />} />
+        <Route path="results" element={<Results />} />
+        <Route path="terms" element={<Terms />} />
+        <Route path="privacy" element={<Privacy />} />
+        <Route path="pricing" element={<Pricing />} />
+        <Route path="faq" element={<FAQ />} />
+        <Route path="contact" element={<Contact />} />
+        <Route path="impact" element={<Impact />} />
+        <Route path="events" element={<Events />} />
+        <Route path="donate" element={<Donate />} />
+        <Route path="complete-setup" element={
+          <ProtectedRoute>
+            <CompleteSetup />
+          </ProtectedRoute>
+        } />
 
-          {/* Protected User Routes - Require subscription */}
-          <Route path="dashboard" element={
-            <SubscribedRoute>
-              <Dashboard />
-            </SubscribedRoute>
-          } />
-          <Route path="scores" element={
-            <SubscribedRoute>
-              <Scores />
-            </SubscribedRoute>
-          } />
+        {/* Protected User Routes - Require subscription */}
+        <Route path="dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="scores" element={
+          <ProtectedRoute>
+            <Scores />
+          </ProtectedRoute>
+        } />
 
-          {/* Profile Routes */}
-          <Route path="profile/settings" element={
-            <ProtectedRoute>
-              <ProfileSettings />
-            </ProtectedRoute>
-          } />
-          <Route path="profile/charity" element={
-            <ProtectedRoute>
-              <MyCharity />
-            </ProtectedRoute>
-          } />
-          {/* Redirect old subscription route to pricing */}
-          <Route path="profile/subscription" element={<Navigate to="/pricing" replace />} />
+        {/* Profile Routes */}
+        <Route path="profile/settings" element={
+          <ProtectedRoute>
+            <ProfileSettings />
+          </ProtectedRoute>
+        } />
+        <Route path="profile/charity" element={
+          <ProtectedRoute>
+            <MyCharity />
+          </ProtectedRoute>
+        } />
+        {/* Redirect old subscription route to pricing */}
+        <Route path="profile/subscription" element={<Navigate to="/pricing" replace />} />
 
-          {/* Admin Routes - PROTECTED: Admin only */}
-          <Route path="admin" element={
-            <AdminProtectedRoute>
-              <AdminDashboard />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/draw" element={
-            <AdminProtectedRoute>
-              <DrawControl />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/users" element={
-            <AdminProtectedRoute>
-              <UserManagement />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/charities" element={
-            <AdminProtectedRoute>
-              <CharityManagement />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/charities/add" element={
-            <AdminProtectedRoute>
-              <CharityEditor />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/charities/edit/:id" element={
-            <AdminProtectedRoute>
-              <CharityEditor />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/draws" element={
-            <AdminProtectedRoute>
-              <DrawManagement />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/content" element={
-            <AdminProtectedRoute>
-              <ContentManagement />
-            </AdminProtectedRoute>
-          } />
-          <Route path="admin/reports" element={
-            <AdminProtectedRoute>
-              <AdminReports />
-            </AdminProtectedRoute>
-          } />
+        {/* Admin Routes - PROTECTED: Admin only */}
+        <Route path="admin" element={
+          <AdminProtectedRoute>
+            <AdminDashboard />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/draw" element={
+          <AdminProtectedRoute>
+            <DrawControl />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/users" element={
+          <AdminProtectedRoute>
+            <UserManagement />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/charities" element={
+          <AdminProtectedRoute>
+            <CharityManagement />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/charities/add" element={
+          <AdminProtectedRoute>
+            <CharityEditor />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/charities/edit/:id" element={
+          <AdminProtectedRoute>
+            <CharityEditor />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/draws" element={
+          <AdminProtectedRoute>
+            <DrawManagement />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/content" element={
+          <AdminProtectedRoute>
+            <ContentManagement />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/reports" element={
+          <AdminProtectedRoute>
+            <AdminReports />
+          </AdminProtectedRoute>
+        } />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </AnimatePresence>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
   );
 }
 
@@ -327,23 +326,25 @@ function App() {
     return !sessionStorage.getItem('entryAnimationPlayed');
   });
 
-  const handleAnimationComplete = () => {
+  const handleAnimationComplete = useCallback(() => {
     sessionStorage.setItem('entryAnimationPlayed', 'true');
     setShowEntryAnimation(false);
-  };
+  }, []);
 
   return (
-    <AuthProvider>
-      <SmoothScroll>
-        {/* Scroll to top on route change */}
-        <ScrollToTop />
-        {/* Cinematic Entry Animation - plays once per session */}
-        {showEntryAnimation && (
-          <EntryAnimation onComplete={handleAnimationComplete} />
-        )}
-        <AppRoutes />
-      </SmoothScroll>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <SmoothScroll>
+          {/* Scroll to top on route change */}
+          <ScrollToTop />
+          {/* Cinematic Entry Animation - plays once per session */}
+          {showEntryAnimation && (
+            <EntryAnimation onComplete={handleAnimationComplete} />
+          )}
+          <AppRoutes />
+        </SmoothScroll>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

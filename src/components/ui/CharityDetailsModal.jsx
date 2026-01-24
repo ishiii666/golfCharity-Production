@@ -176,6 +176,48 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
                                         </p>
                                     </div>
 
+                                    {/* Golf Charity Day - New Section */}
+                                    {(charity.charity_day_date || charity.charity_day_location) && (
+                                        <div className="p-4 rounded-xl bg-gradient-to-br from-[#c9a227]/10 to-transparent border border-[#c9a227]/20">
+                                            <h3 className="text-sm font-bold text-[#c9a227] uppercase tracking-wider mb-3 flex items-center gap-2">
+                                                <StarIcon size={14} fill="currentColor" /> Upcoming Golf Charity Day
+                                            </h3>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {charity.charity_day_date && (
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
+                                                            <svg className="w-4 h-4 text-[#c9a227]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-[10px] text-neutral-500 uppercase font-bold tracking-tight">Event Date</div>
+                                                            <div className="text-sm font-semibold text-[#f9f5e3]">
+                                                                {new Date(charity.charity_day_date).toLocaleDateString('en-AU', {
+                                                                    weekday: 'long',
+                                                                    year: 'numeric',
+                                                                    month: 'long',
+                                                                    day: 'numeric'
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {charity.charity_day_location && (
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
+                                                            <LocationIcon size={16} className="text-[#38bdf8]" strokeWidth={2} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-[10px] text-neutral-500 uppercase font-bold tracking-tight">Event Location</div>
+                                                            <div className="text-sm font-semibold text-[#f9f5e3]">{charity.charity_day_location}</div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Visit Website */}
                                     <div className="p-4 rounded-xl bg-white/5 ring-1 ring-inset ring-white/10">
                                         <p className="text-sm text-neutral-400 mb-3">Want to learn more about this charity?</p>
