@@ -1,15 +1,17 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import { GolferIcon, HeartIcon, GolfFlagIcon, TargetIcon, TrophyIcon, SparkleIcon } from '../components/ui/Icons';
+import { getSiteContent } from '../lib/supabaseRest';
 
 /**
  * How It Works - Explains the golf charity and lucky draw concept
  */
 export default function HowItWorks() {
-    const steps = [
+    const [dynamicSteps, setDynamicSteps] = useState([
         {
             number: '01',
             title: 'Sign Up & Subscribe',
@@ -36,12 +38,12 @@ export default function HowItWorks() {
         },
         {
             number: '03',
-            title: 'Enter the Draw (9th at 8PM EST)',
-            description: 'On the 9th of every month at 8:00 PM EST, we analyze all player scores to create a unique 5-number winning combination.',
+            title: 'Enter the Draw (9th at 8PM)',
+            description: 'On the 9th of every month at 8:00 PM, we analyze all player scores to create a unique 5-number winning combination.',
             Icon: TargetIcon,
             color: '#c9a227',
             details: [
-                'Draw held on the 9th of every month at 8:00 PM EST',
+                'Draw held on the 9th of every month',
                 'We find the 3 LEAST common scores',
                 'We find the 2 MOST common scores',
                 'These 5 numbers form the winning combination'
@@ -62,7 +64,7 @@ export default function HowItWorks() {
         {
             number: '05',
             title: 'Give Back to Charity',
-            description: 'Your chosen charity percentage is automatically donated. Win or not, your subscription always supports your charity.',
+            description: 'Your chosen charity percentage is automatically donated. Win or not, your membership always supports your charity.',
             Icon: HeartIcon,
             color: '#ef4444',
             details: [
@@ -71,7 +73,37 @@ export default function HowItWorks() {
                 '100% of charity pledges go directly to partners'
             ]
         }
-    ];
+    ]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchContent();
+    }, []);
+
+    const fetchContent = async () => {
+        try {
+            const content = await getSiteContent();
+            if (content.length > 0) {
+                const getField = (name) => content.find(c => c.section_id === 'howItWorks' && c.field_name === name)?.field_value;
+
+                const newSteps = dynamicSteps.map((step, index) => {
+                    const i = index + 1;
+                    const title = getField(`step${i}Title`);
+                    const desc = getField(`step${i}Desc`);
+                    return {
+                        ...step,
+                        title: title || step.title,
+                        description: desc || step.description
+                    };
+                });
+                setDynamicSteps(newSteps);
+            }
+        } catch (error) {
+            console.error('Error fetching CMS content:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const faqs = [
         {
@@ -95,6 +127,16 @@ export default function HowItWorks() {
             answer: 'Scores must be from official club rounds registered with your golf club. We may request verification from your club for large wins.'
         }
     ];
+
+    if (loading) {
+        return (
+            <PageTransition>
+                <div className="min-h-screen flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+                </div>
+            </PageTransition>
+        );
+    }
 
     return (
         <PageTransition>
@@ -278,7 +320,7 @@ export default function HowItWorks() {
                     </motion.div>
 
                     <div className="space-y-8 max-w-4xl mx-auto">
-                        {steps.map((step, index) => (
+                        {dynamicSteps.map((step, index) => (
                             <motion.div
                                 key={step.number}
                                 initial={{ opacity: 0, x: index % 2 === 0 ? -30 : 30 }}
@@ -302,7 +344,8 @@ export default function HowItWorks() {
                                                     fontFamily: 'var(--font-display)',
                                                     background: 'linear-gradient(135deg, rgba(201, 162, 39, 0.4) 0%, rgba(201, 162, 39, 0.1) 100%)',
                                                     WebkitBackgroundClip: 'text',
-                                                    WebkitTextFillColor: 'transparent'
+                                                    WebkitTextFillColor: 'transparent',
+                                                    backgroundClip: 'text'
                                                 }}
                                             >
                                                 {step.number}

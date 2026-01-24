@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { createHmac } from "node:crypto"
@@ -32,7 +33,7 @@ function verifyStripeSignature(payload: string, signature: string, secret: strin
     }
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -114,6 +115,39 @@ serve(async (req) => {
                         console.error('Charity total update error:', charityError)
                     } else {
                         console.log('✅ Charity total updated for:', metadata.charity_name)
+                    }
+                }
+
+                // Handle PAYOUT FULFILLMENT (admin paying winner)
+                if (session.mode === 'payment' && metadata.type === 'payout_fulfillment' && metadata.entry_id) {
+                    console.log('✅ Processing payout fulfillment for entry:', metadata.entry_id)
+
+                    const { error: updateError } = await supabase
+                        .from('draw_entries')
+                        .update({
+                            is_paid: true,
+                            paid_at: new Date().toISOString(),
+                            payment_reference: session.payment_intent || session.id,
+                            verification_status: 'Paid',
+                            verified_by: metadata.admin_id
+                        })
+                        .eq('id', metadata.entry_id)
+
+                    if (updateError) {
+                        console.error('Payout fulfillment update error:', updateError)
+                    } else {
+                        console.log('✅ Entry marked as paid via Stripe fulfillment')
+
+                        // Log activity
+                        await supabase.from('admin_activity').insert({
+                            action_type: 'winner_paid_stripe',
+                            description: `Winner ${metadata.winner_name} paid via Stripe fulfillment ($${session.amount_total / 100})`,
+                            metadata: {
+                                entry_id: metadata.entry_id,
+                                session_id: session.id,
+                                amount: session.amount_total / 100
+                            }
+                        })
                     }
                 }
 
@@ -322,7 +356,7 @@ serve(async (req) => {
             default:
                 console.log('Unhandled event type:', event.type)
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('Event processing error:', error.message)
         return new Response(`Processing Error: ${error.message}`, { status: 500 })
     }

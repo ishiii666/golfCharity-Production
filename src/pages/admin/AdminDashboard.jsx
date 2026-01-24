@@ -50,6 +50,11 @@ export default function AdminDashboard() {
         };
 
         fetchStats();
+
+        // 🔄 POLLING: Refresh dashboard stats every 30 seconds
+        const pollInterval = setInterval(fetchStats, 30000);
+
+        return () => clearInterval(pollInterval);
     }, []);
 
     // Dynamic quick stats based on real data

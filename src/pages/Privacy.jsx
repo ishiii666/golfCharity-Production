@@ -105,25 +105,6 @@ export default function Privacy() {
                         />
                     </motion.div>
 
-                    {/* Footer Links */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.3 }}
-                        className="mt-12 pt-8 border-t border-zinc-800"
-                    >
-                        <div className="flex flex-wrap gap-6 text-sm">
-                            <Link to="/terms" className="text-emerald-400 hover:text-emerald-300 transition-colors">
-                                Terms & Conditions
-                            </Link>
-                            <Link to="/charities" className="text-zinc-400 hover:text-white transition-colors">
-                                Our Charities
-                            </Link>
-                            <Link to="/" className="text-zinc-400 hover:text-white transition-colors">
-                                Home
-                            </Link>
-                        </div>
-                    </motion.div>
                 </div>
             </div>
         </PageTransition>

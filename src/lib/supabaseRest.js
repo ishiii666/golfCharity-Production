@@ -160,6 +160,29 @@ export async function deleteRow(table, id) {
     }
 }
 
+/**
+ * Get detailed profile information (including banking) for a specific user
+ */
+export async function getWinnerProfileWithBanking(userId) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=bank_name,bsb_number,account_number,full_name,email`;
+
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const data = await response.json();
+        return data[0] || null;
+    } catch (error) {
+        console.error('Error fetching banking details:', error);
+        return null;
+    }
+}
+
 // =====================================================
 // CONTENT MANAGEMENT API FUNCTIONS
 // =====================================================
@@ -463,7 +486,7 @@ export async function getUserStats(userId) {
         return {
             totalWinnings,
             totalPaidOut,
-            currentBalance: profile[0]?.account_balance || 0,
+            currentBalance: Math.max(0, totalWinnings - totalPaidOut),
             membershipMonths: Math.max(1, membershipMonths), // Ensure at least 1 if they exist
             joinDate: joinDate,
             payouts: payouts
@@ -572,20 +595,17 @@ export async function getAdminStats() {
     // 1. Get profiles
     const playersRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&status=eq.active&select=id`, { headers });
     const players = await playersRes.json();
-    const playerIds = new Set(players.map(p => p.id));
 
-    // 2. Clear Active Sub Count: Total anyone with 'active' status in subscriptions table
-    const subsRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id`, { headers });
-    const allActiveSubs = await subsRes.json();
-    const activeSubCount = allActiveSubs.filter(s => playerIds.has(s.user_id)).length;
-
-    // 3. Fetch other data
+    // 2. Fetch other stats
     const [charities, totalDonated, recentActivity, currentDraw] = await Promise.all([
         getTableData('charities', 'id'),
         getTotalDonations(),
         getRecentActivity(5),
         getCurrentDraw()
     ]);
+
+    // 3. Get accurate subscriber count for the current cycle
+    const activeSubCount = await getActiveSubscribersCount(currentDraw?.id);
 
     // Determine what draw is "Next"
     const nextDrawLabel = currentDraw?.status === 'open'
@@ -793,16 +813,24 @@ export async function deleteCharityImage(imageUrl) {
  */
 export async function getUserById(userId) {
     try {
-        const url = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*`;
-        const response = await fetch(url, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${await getAuthToken()}`
-            }
-        });
-        if (!response.ok) throw new Error('Failed to fetch user');
-        const data = await response.json();
-        return data[0] || null;
+        const authToken = await getAuthToken();
+        const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
+
+        // Fetch profile and subscriptions in parallel for reliability
+        const [profileRes, subsRes] = await Promise.all([
+            fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*`, { headers }),
+            fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}&status=eq.active`, { headers })
+        ]);
+
+        const profileData = await profileRes.json();
+        const subsData = await subsRes.json();
+
+        if (!profileData || profileData.length === 0) return null;
+
+        const profile = profileData[0];
+        profile.subscriptions = subsData || [];
+
+        return profile;
     } catch (error) {
         console.error('Error fetching user by ID:', error);
         return null;
@@ -1169,22 +1197,34 @@ export async function getDraws() {
  */
 export async function getCurrentDraw() {
     try {
-        // Fetch the most recent draw regardless of status
-        // The UI will decide based on the status if it's the "current" one
-        const url = `${SUPABASE_URL}/rest/v1/draws?select=*&order=created_at.desc&limit=1`;
-        const response = await fetch(url, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${await getAuthToken()}`
-            }
-        });
+        const authToken = await getAuthToken();
+        const headers = {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${authToken}`
+        };
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch current draw');
+        // 1. Try to find the OLDEST 'open' draw first
+        // This ensures if a past month is reset, it becomes the active target again
+        const openUrl = `${SUPABASE_URL}/rest/v1/draws?status=eq.open&select=*&order=created_at.asc&limit=1`;
+        const openRes = await fetch(openUrl, { headers });
+        const openDraws = await openRes.json();
+
+        if (Array.isArray(openDraws) && openDraws.length > 0) {
+            console.log('🎯 Current Draw: Found active OPEN cycle:', openDraws[0].month_year);
+            return openDraws[0];
         }
 
-        const draws = await response.json();
-        return draws[0] || null;
+        // 2. If no open draws, get the newest published/completed draw for historical context
+        const historyUrl = `${SUPABASE_URL}/rest/v1/draws?select=*&order=created_at.desc&limit=1`;
+        const historyRes = await fetch(historyUrl, { headers });
+        const historyDraws = await historyRes.json();
+
+        if (Array.isArray(historyDraws) && historyDraws.length > 0) {
+            console.log('🎯 Current Draw: Found most recent published cycle:', historyDraws[0].month_year);
+            return historyDraws[0];
+        }
+
+        return null;
     } catch (error) {
         console.error('Error fetching current draw:', error);
         return null;
@@ -1569,30 +1609,23 @@ export async function runDraw(drawId, minScore = 1, maxScore = 45) {
             throw new Error('Failed to update draw');
         }
 
-        // Create draw entries for all eligible users
-        const eligibleUsers = await getEligibleUsers();
-        for (const user of eligibleUsers) {
-            const matches = countMatches(user.scores, simulation.winningNumbers);
-            let tier = null;
-            let grossPrize = 0;
+        // Create draw entries for all eligible users in bulk for better performance and reliability
+        const eligibleUsers = await getEligibleUsers(drawId);
+        if (eligibleUsers.length > 0) {
+            const entriesToInsert = eligibleUsers.map(user => {
+                const matches = countMatches(user.scores, simulation.winningNumbers);
+                let tier = null;
+                let grossPrize = 0;
 
-            if (matches === 5) { tier = 1; grossPrize = simulation.tier1.payout; }
-            else if (matches === 4) { tier = 2; grossPrize = simulation.tier2.payout; }
-            else if (matches === 3) { tier = 3; grossPrize = simulation.tier3.payout; }
+                if (matches === 5) { tier = 1; grossPrize = simulation.tier1.payout; }
+                else if (matches === 4) { tier = 2; grossPrize = simulation.tier2.payout; }
+                else if (matches === 3) { tier = 3; grossPrize = simulation.tier3.payout; }
 
-            const donationPercent = (user.donation_percentage || 10) / 100;
-            const charityAmount = grossPrize * donationPercent;
-            const netPayout = grossPrize - charityAmount;
+                const donationPercent = (user.donation_percentage || 10) / 100;
+                const charityAmount = grossPrize * donationPercent;
+                const netPayout = grossPrize - charityAmount;
 
-            const entryUrl = `${SUPABASE_URL}/rest/v1/draw_entries`;
-            await fetch(entryUrl, {
-                method: 'POST',
-                headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${authToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
+                return {
                     draw_id: drawId,
                     user_id: user.id,
                     scores: user.scores,
@@ -1601,9 +1634,57 @@ export async function runDraw(drawId, minScore = 1, maxScore = 45) {
                     gross_prize: grossPrize,
                     charity_amount: charityAmount,
                     net_payout: netPayout,
-                    charity_id: user.selected_charity_id
-                })
+                    charity_id: user.selected_charity_id,
+                    verification_status: tier ? 'Pending' : null
+                };
             });
+
+            // Use bulk insert
+            const entryUrl = `${SUPABASE_URL}/rest/v1/draw_entries`;
+            const entryResponse = await fetch(entryUrl, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify(entriesToInsert)
+            });
+
+            if (!entryResponse.ok) {
+                console.error('Failed to insert draw entries in bulk');
+            } else {
+                console.log(`✅ Inserted ${entriesToInsert.length} draw entries`);
+
+                // Update account balances for winners
+                const winningEntries = entriesToInsert.filter(e => e.tier !== null && e.net_payout > 0);
+                if (winningEntries.length > 0) {
+                    console.log(`💰 Syncing balances for ${winningEntries.length} winners...`);
+                    for (const entry of winningEntries) {
+                        try {
+                            // Fetch current balance
+                            const pUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${entry.user_id}&select=account_balance`;
+                            const pRes = await fetch(pUrl, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` } });
+                            const pData = await pRes.json();
+                            const currentBal = pData[0]?.account_balance || 0;
+
+                            // Update with new winnings
+                            await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${entry.user_id}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'apikey': SUPABASE_KEY,
+                                    'Authorization': `Bearer ${authToken}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ account_balance: currentBal + entry.net_payout })
+                            });
+                        } catch (balErr) {
+                            console.error(`Failed to update balance for user ${entry.user_id}:`, balErr);
+                        }
+                    }
+                }
+            }
         }
 
         // Update jackpot
@@ -1637,23 +1718,36 @@ export async function updateJackpot(amount, drawId = null) {
         const authToken = await getAuthToken();
         const url = `${SUPABASE_URL}/rest/v1/jackpot_tracker?id=not.is.null`;
 
-        await fetch(url, {
+        const body = {
+            amount,
+            last_updated: new Date().toISOString()
+        };
+
+        // Only add last_draw_id if drawId is provided
+        if (drawId) {
+            body.last_draw_id = drawId;
+        }
+
+        const response = await fetch(url, {
             method: 'PATCH',
             headers: {
                 'apikey': SUPABASE_KEY,
                 'Authorization': `Bearer ${authToken}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                amount,
-                last_updated: new Date().toISOString(),
-                last_draw_id: drawId
-            })
+            body: JSON.stringify(body)
         });
 
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Failed to update jackpot: ${errText}`);
+        }
+
         console.log('💰 Jackpot updated to:', amount);
+        return { success: true };
     } catch (error) {
         console.error('Error updating jackpot:', error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -1727,6 +1821,96 @@ export async function publishDraw(drawId) {
         return { success: true };
     } catch (error) {
         console.error('Error publishing draw:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Reset a draw (Admin only)
+ * Reverts a completed or published draw to 'open' status
+ * Deletes draw entries, restores jackpot, and reactivates subscriptions
+ */
+export async function resetDraw(drawId) {
+    try {
+        const authToken = await getAuthToken();
+        const headers = {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+        };
+
+        // 1. Get draw details to find jackpot carryover and month name
+        const drawRes = await fetch(`${SUPABASE_URL}/rest/v1/draws?id=eq.${drawId}&select=*`, { headers });
+        const drawData = await drawRes.json();
+        if (!drawData || drawData.length === 0) throw new Error('Draw not found');
+        const draw = drawData[0];
+
+        // 2. Restore Jackpot Tracker
+        // When a draw is run, the tracker is updated. We should set it back to the carryover amount this draw started with.
+        // If jackpot_added is null, it means there was no previous carryover, so reset to 0.
+        const restoreAmount = draw.jackpot_added !== null ? Number(draw.jackpot_added) : 0;
+        await updateJackpot(restoreAmount, drawId);
+
+        // 3. Delete all draw_entries for this draw
+        // This clears winners and their associated payout records
+        const deleteEntriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?draw_id=eq.${drawId}`;
+        const deleteRes = await fetch(deleteEntriesUrl, {
+            method: 'DELETE',
+            headers
+        });
+        if (!deleteRes.ok) console.warn('Possible failure deleting entries:', await deleteRes.text());
+
+        // 4. Reactivate Monthly Subscriptions
+        // Reverses the 'cancelled' status set during publishDraw
+        const monthName = draw.month_year;
+        const subFilters = monthName
+            ? `assigned_draw_id.eq.${drawId},assigned_draw_month.eq.${monthName}`
+            : `assigned_draw_id.eq.${drawId}`;
+
+        const subUrl = `${SUPABASE_URL}/rest/v1/subscriptions?plan=eq.monthly&or=(${subFilters})`;
+        await fetch(subUrl, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({
+                status: 'active',
+                draws_remaining: 1,
+                updated_at: new Date().toISOString()
+            })
+        });
+
+        // 5. Reset Draw Record
+        const resetUrl = `${SUPABASE_URL}/rest/v1/draws?id=eq.${drawId}`;
+        const resetResponse = await fetch(resetUrl, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({
+                status: 'open',
+                winning_numbers: null,
+                prize_pool: 0,
+                jackpot_added: null,
+                tier1_pool: 0,
+                tier2_pool: 0,
+                tier3_pool: 0,
+                participants_count: 0,
+                tier1_winners: 0,
+                tier2_winners: 0,
+                tier3_winners: 0,
+                tier1_rollover_amount: 0,
+                tier2_rollover_amount: 0,
+                jackpot_cap_reached: false,
+                draw_date: null,
+                published_at: null,
+                updated_at: new Date().toISOString()
+            })
+        });
+
+        if (!resetResponse.ok) throw new Error('Failed to reset draw record');
+
+        await logActivity('draw_reset', `Draw ${drawId} (${monthName}) has been reset to OPEN status.`);
+        console.log('🔄 Draw reset successfully');
+        return { success: true };
+    } catch (error) {
+        console.error('Error resetting draw:', error);
         return { success: false, error: error.message };
     }
 }
@@ -2078,6 +2262,73 @@ export async function markWinnerAsPaid(entryId, reference = '', adminId) {
         return { success: true };
     } catch (error) {
         console.error('Error marking as paid:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Create a Stripe Checkout session to fulfill a payout (Admin)
+ */
+export async function createPayoutSession(entryId, amount, winnerName, drawMonth) {
+    try {
+        const authToken = await getAuthToken();
+        const functionUrl = `${SUPABASE_URL}/functions/v1/admin-payout-fulfill`;
+        console.log('📡 Fetching Payout Session:', functionUrl);
+
+        const response = await fetch(
+            functionUrl,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ entryId, amount, winnerName, drawMonth })
+            }
+        );
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to create payout session');
+        }
+
+        const data = await response.json();
+        return { success: true, url: data.url };
+    } catch (error) {
+        console.error('Error creating payout session:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Process automated payout via Stripe Connect
+ */
+export async function processStripePayout(entryId) {
+    try {
+        console.log('💸 Processing automated Stripe payout for entry:', entryId);
+
+        const response = await fetch(
+            `${SUPABASE_URL}/functions/v1/process-payout`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await getAuthToken()}`
+                },
+                body: JSON.stringify({ entryId })
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Payout failed');
+        }
+
+        const data = await response.json();
+        console.log('✅ Automated payout successful:', data);
+        return { success: true, data };
+    } catch (error) {
+        console.error('Error processing Stripe payout:', error);
         return { success: false, error: error.message };
     }
 }
@@ -2760,3 +3011,5 @@ export async function getLeaderboardData(limit = 5) {
         ];
     }
 }
+
+

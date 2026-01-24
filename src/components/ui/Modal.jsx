@@ -52,12 +52,13 @@ export default function Modal({
               relative w-full ${sizes[size]}
               bg-slate-900 border border-slate-700
               rounded-2xl shadow-2xl
-              max-h-[90vh] overflow-hidden
+              flex flex-col
+              max-h-[85vh] md:max-h-[90vh]
             `}
                     >
                         {/* Header */}
                         {(title || showClose) && (
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+                            <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-slate-800">
                                 {title && (
                                     <h2 className="text-xl font-bold text-white">{title}</h2>
                                 )}
@@ -75,7 +76,10 @@ export default function Modal({
                         )}
 
                         {/* Body */}
-                        <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
+                        <div
+                            className="flex-1 px-6 py-4 overflow-y-auto min-h-0 overscroll-contain custom-scrollbar-premium"
+                            data-lenis-prevent="true"
+                        >
                             {children}
                         </div>
                     </motion.div>

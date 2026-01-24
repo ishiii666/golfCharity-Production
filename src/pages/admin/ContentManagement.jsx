@@ -56,7 +56,11 @@ const contentCategories = [
                     { name: 'step2Title', label: 'Step 2 Title', type: 'text', value: '' },
                     { name: 'step2Desc', label: 'Step 2 Description', type: 'textarea', value: '' },
                     { name: 'step3Title', label: 'Step 3 Title', type: 'text', value: '' },
-                    { name: 'step3Desc', label: 'Step 3 Description', type: 'textarea', value: '' }
+                    { name: 'step3Desc', label: 'Step 3 Description', type: 'textarea', value: '' },
+                    { name: 'step4Title', label: 'Step 4 Title', type: 'text', value: '' },
+                    { name: 'step4Desc', label: 'Step 4 Description', type: 'textarea', value: '' },
+                    { name: 'step5Title', label: 'Step 5 Title', type: 'text', value: '' },
+                    { name: 'step5Desc', label: 'Step 5 Description', type: 'textarea', value: '' }
                 ]
             },
             {
@@ -358,7 +362,7 @@ export default function ContentManagement() {
                             animate="animate"
                             className="space-y-2"
                         >
-                            {currentCategory?.sections.map((section, index) => (
+                            {currentCategory?.sections.map((section) => (
                                 <motion.button
                                     key={section.id}
                                     variants={staggerItem}

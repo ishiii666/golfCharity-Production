@@ -2,14 +2,13 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Card from '../ui/Card';
 import { HeartIcon, GolfFlagIcon, TargetIcon, HandshakeIcon } from '../ui/Icons';
-import { getHomePageStats } from '../../lib/supabaseRest';
+import { getHomePageStats, getSiteContent } from '../../lib/supabaseRest';
 
 /**
- * HowItWorks - Premium 4-step explanation with charity focus
- * Reframed as "How You Make a Difference"
+ * HowItWorks - Premium dynamic explanation with charity focus
  */
 
-const steps = [
+const defaultSteps = [
     {
         step: '01',
         title: 'Join the Community',
@@ -37,6 +36,13 @@ const steps = [
         description: 'Match numbers to win. Your chosen charity receives your pledge — turning your passion into impact.',
         icon: HeartIcon,
         color: '#f43f5e'
+    },
+    {
+        step: '05',
+        title: 'Impact Lives',
+        description: 'Your contribution directly supports verified charities across Australia.',
+        icon: HeartIcon,
+        color: '#ef4444'
     }
 ];
 
@@ -59,18 +65,51 @@ export default function HowItWorks() {
         { label: 'Golfers This Year', value: '...', color: '#ffffff' },
         { label: 'Total to Charities', value: '...', color: '#34d399' }
     ]);
+    const [dynamicSteps, setDynamicSteps] = useState(defaultSteps);
 
     // Fetch real data from database
     useEffect(() => {
-        async function fetchStats() {
+        async function fetchData() {
             try {
+                // Fetch impact stats
                 const stats = await getHomePageStats();
                 setImpactStats(buildImpactStats(stats));
+
+                // Fetch CMS content
+                const content = await getSiteContent();
+                if (content.length > 0) {
+                    const getField = (name) => {
+                        const field = content.find(c => c.section_id === 'howItWorks' && c.field_name === name);
+                        return field ? field.field_value : null;
+                    };
+
+                    const newSteps = [];
+                    // Try to get up to 5 steps from CMS
+                    for (let i = 1; i <= 5; i++) {
+                        const title = getField(`step${i}Title`);
+                        const desc = getField(`step${i}Desc`);
+                        if (title && desc) {
+                            // Map to default icons based on index
+                            const originalStep = defaultSteps[i - 1] || defaultSteps[0];
+                            newSteps.push({
+                                step: `0${i}`,
+                                title,
+                                description: desc,
+                                icon: originalStep.icon,
+                                color: originalStep.color
+                            });
+                        }
+                    }
+
+                    if (newSteps.length > 0) {
+                        setDynamicSteps(newSteps);
+                    }
+                }
             } catch (error) {
-                console.error('Error loading impact stats:', error);
+                console.error('Error loading data:', error);
             }
         }
-        fetchStats();
+        fetchData();
     }, []);
 
     return (
@@ -110,13 +149,13 @@ export default function HowItWorks() {
                         How You <span className="text-gradient-emerald">Make a Difference</span>
                     </h2>
                     <p className="text-lg max-w-2xl mx-auto text-zinc-400">
-                        Four simple steps to transform your golf game into meaningful impact
+                        Follow our unique process to transform your golf game into meaningful impact
                     </p>
                 </motion.div>
 
                 {/* Steps Grid */}
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 mb-20">
-                    {steps.map((step, index) => (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 lg:gap-8 mb-20">
+                    {dynamicSteps.map((step, index) => (
                         <motion.div
                             key={step.step}
                             initial={{ opacity: 0, y: 30 }}

@@ -9,8 +9,7 @@ import {
     updateRow,
     adminUpdatePassword,
     assignSubscription,
-    logActivity,
-    recordPayout
+    logActivity
 } from '../../lib/supabaseRest';
 
 export default function UserEditModal({
@@ -25,16 +24,10 @@ export default function UserEditModal({
     const [userStats, setUserStats] = useState(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [payoutSaving, setPayoutSaving] = useState(false);
     const { addToast } = useToast();
     const [activeTab, setActiveTab] = useState('overview');
     const [originalValues, setOriginalValues] = useState({});
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-    const [payoutData, setPayoutData] = useState({
-        amount: '',
-        date: new Date().toISOString().split('T')[0],
-        reference: ''
-    });
 
     // Track changes by comparing current state with original values
     useEffect(() => {
@@ -65,45 +58,48 @@ export default function UserEditModal({
 
     // Fetch latest data on open
     useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            setActiveTab('overview');
+            try {
+                const [latestProfile, latestStats] = await Promise.all([
+                    getUserById(userId),
+                    getUserStats(userId)
+                ]);
+
+                if (latestProfile) {
+                    const userData = {
+                        id: latestProfile.id,
+                        email: latestProfile.email,
+                        fullName: latestProfile.full_name,
+                        role: latestProfile.role,
+                        status: latestProfile.status,
+                        bankName: latestProfile.bank_name || '',
+                        bsbNumber: latestProfile.bsb_number || '',
+                        accountNumber: latestProfile.account_number || '',
+                        accountBalance: latestProfile.account_balance || 0,
+                        selectedCharityId: latestProfile.selected_charity_id || '',
+                        subscription: latestProfile.subscriptions?.[0]?.plan || 'none',
+                        stripeCustomerId: latestProfile.stripe_customer_id || '',
+                        currentPeriodEnd: latestProfile.subscriptions?.[0]?.current_period_end || null,
+                        assignedDrawMonth: latestProfile.subscriptions?.[0]?.assigned_draw_month || null,
+                        password: ''
+                    };
+                    setEditData(userData);
+                    setOriginalValues(userData);
+                }
+                setUserStats(latestStats);
+            } catch (error) {
+                console.error('Error fetching real-time data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
         if (isOpen && userId) {
-            fetchLatestData();
+            fetchData();
         }
     }, [isOpen, userId]);
-
-    const fetchLatestData = async () => {
-        setLoading(true);
-        setActiveTab('overview');
-        try {
-            const [latestProfile, latestStats] = await Promise.all([
-                getUserById(userId),
-                getUserStats(userId)
-            ]);
-
-            if (latestProfile) {
-                const userData = {
-                    id: latestProfile.id,
-                    email: latestProfile.email,
-                    fullName: latestProfile.full_name,
-                    role: latestProfile.role,
-                    status: latestProfile.status,
-                    bankName: latestProfile.bank_name || '',
-                    bsbNumber: latestProfile.bsb_number || '',
-                    accountNumber: latestProfile.account_number || '',
-                    accountBalance: latestProfile.account_balance || 0,
-                    selectedCharityId: latestProfile.selected_charity_id || '',
-                    subscription: latestProfile.subscriptions?.[0]?.plan || 'none',
-                    password: ''
-                };
-                setEditData(userData);
-                setOriginalValues(userData);
-            }
-            setUserStats(latestStats);
-        } catch (error) {
-            console.error('Error fetching real-time data:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleSaveUser = async () => {
         setSaving(true);
@@ -143,30 +139,6 @@ export default function UserEditModal({
             addToast('error', 'Failed to save changes');
         } finally {
             setSaving(false);
-        }
-    };
-
-    const handleRecordPayout = async () => {
-        setPayoutSaving(true);
-        try {
-            await recordPayout(editData.id, payoutData.amount, payoutData.date, payoutData.reference);
-
-            // Local update
-            const newBalance = (editData.accountBalance || 0) - Number(payoutData.amount);
-            setEditData({ ...editData, accountBalance: newBalance });
-
-            // Refresh stats
-            const newStats = await getUserStats(editData.id);
-            setUserStats(newStats);
-
-            setPayoutData({ amount: '', date: new Date().toISOString().split('T')[0], reference: '' });
-            addToast('success', 'Payout recorded successfully');
-            onUpdate();
-        } catch (error) {
-            console.error('Payout failed:', error);
-            addToast('error', 'Failed to record payout');
-        } finally {
-            setPayoutSaving(false);
         }
     };
 
@@ -269,7 +241,7 @@ export default function UserEditModal({
                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
                                     {[
                                         { label: 'Total Prize Winnings', value: `$${userStats?.totalWinnings?.toLocaleString() || '0.00'}`, icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', gradient: 'from-emerald-500/10 to-transparent' },
-                                        { label: 'Withdrawable Balance', value: `$${Math.max(0, editData.accountBalance || 0).toLocaleString()}`, icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', gradient: 'from-blue-500/10 to-transparent' },
+                                        { label: 'Withdrawable Balance', value: `$${Math.max(0, userStats?.currentBalance || 0).toLocaleString()}`, icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', gradient: 'from-blue-500/10 to-transparent' },
                                         { label: 'Platform Tenure', value: userStats?.membershipMonths ? `${userStats.membershipMonths} Months` : 'New Member', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', gradient: 'from-violet-500/10 to-transparent' },
                                         { label: 'Total Paid Out', value: `$${userStats?.totalPaidOut?.toLocaleString() || '0.00'}`, icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', gradient: 'from-amber-500/10 to-transparent' }
                                     ].map((stat, i) => (
@@ -333,47 +305,14 @@ export default function UserEditModal({
                         )}
 
                         {activeTab === 'financials' && (
-                            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="grid lg:grid-cols-2 gap-12">
-                                <div className="space-y-10">
-                                    <div className="p-8 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/[0.03] to-transparent border border-white/5 space-y-6 relative overflow-hidden group/payout shadow-2xl">
-                                        <div className="absolute top-0 right-0 p-8 opacity-5">
-                                            <svg className="w-24 h-24 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </div>
-                                        <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-4">Payout Processing</h4>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <Input label="Release Amount ($)" type="number" value={payoutData.amount} onChange={(e) => setPayoutData({ ...payoutData, amount: e.target.value })} className="bg-slate-900/60" />
-                                            <Input label="Settlement Date" type="date" value={payoutData.date} onChange={(e) => setPayoutData({ ...payoutData, date: e.target.value })} className="bg-slate-900/60" />
-                                        </div>
-                                        <Input label="External Reference" value={payoutData.reference} onChange={(e) => setPayoutData({ ...payoutData, reference: e.target.value })} placeholder="TXN-XXXX" className="bg-slate-900/60" />
-                                        <Button
-                                            variant="primary"
-                                            fullWidth
-                                            onClick={handleRecordPayout}
-                                            isLoading={payoutSaving}
-                                            disabled={!payoutData.amount}
-                                            className="h-14 rounded-2xl shadow-[0_10px_30px_rgba(16,185,129,0.2)]"
-                                        >
-                                            Authorize Settlement
-                                        </Button>
+                            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-12">
+                                <div className="max-w-4xl mx-auto space-y-8">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-[11px] font-black text-blue-400 uppercase tracking-[0.3em]">Settlement Archive</h4>
+                                        <span className="px-3 py-1 rounded bg-blue-500/10 text-[9px] font-black text-blue-400 uppercase tracking-widest border border-blue-500/20">Verified Payments</span>
                                     </div>
 
-                                    <div className="p-8 rounded-[2.5rem] bg-white/[0.01] border border-white/5 relative overflow-hidden">
-                                        <h5 className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-6 px-1 flex items-center gap-3">Banking Credentials</h5>
-                                        <div className="space-y-6 relative z-10">
-                                            <Input label="Bank Name" value={editData.bankName || ''} onChange={(e) => setEditData({ ...editData, bankName: e.target.value })} className="bg-slate-900/60" />
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <Input label="BSB" value={editData.bsbNumber || ''} onChange={(e) => setEditData({ ...editData, bsbNumber: e.target.value })} className="bg-slate-900/60 font-mono" />
-                                                <Input label="Account" value={editData.accountNumber || ''} onChange={(e) => setEditData({ ...editData, accountNumber: e.target.value })} className="bg-slate-900/60 font-mono" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-8">
-                                    <h4 className="text-[11px] font-black text-blue-400 uppercase tracking-[0.3em]">Settlement History</h4>
-                                    <div className="space-y-4 pr-1">
+                                    <div className="grid md:grid-cols-2 gap-4">
                                         {userStats?.payouts?.length > 0 ? (
                                             userStats.payouts.map(payout => (
                                                 <div key={payout.id} className="p-6 rounded-[1.5rem] bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all duration-300">
@@ -381,15 +320,23 @@ export default function UserEditModal({
                                                         <p className="text-white text-xl font-black tracking-tighter">-${Number(payout.amount).toLocaleString()}</p>
                                                         <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mt-0.5">{new Date(payout.transfer_date).toLocaleDateString()}</p>
                                                     </div>
-                                                    <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.1em] bg-white/5 border border-white/5 py-1.5 px-4 rounded-full">REF: {payout.reference || 'SYSTEM'}</span>
+                                                    <div className="text-right">
+                                                        <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.1em] bg-white/5 border border-white/5 py-1.5 px-4 rounded-full block mb-1">REF: {payout.reference?.slice(0, 12) || 'SYSTEM'}</span>
+                                                        <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest mr-2 flex items-center justify-end gap-1">
+                                                            <div className="w-1 h-1 rounded-full bg-emerald-500" /> Confirmed
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="p-12 rounded-[2rem] border border-dashed border-white/5 flex flex-col items-center justify-center">
-                                                <svg className="w-12 h-12 text-slate-800 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <p className="text-zinc-600 font-bold uppercase tracking-widest text-[10px]">No transaction history</p>
+                                            <div className="md:col-span-2 p-20 rounded-[3rem] border border-dashed border-white/5 flex flex-col items-center justify-center text-center">
+                                                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-6">
+                                                    <svg className="w-8 h-8 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </div>
+                                                <h5 className="text-white font-bold mb-1">No Transaction History</h5>
+                                                <p className="text-slate-500 text-xs max-w-xs">This user has not received any settlements or withdrawals yet.</p>
                                             </div>
                                         )}
                                     </div>
@@ -398,41 +345,90 @@ export default function UserEditModal({
                         )}
 
                         {activeTab === 'security' && (
-                            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-10 py-6">
-                                <div className="p-10 rounded-[3rem] bg-white/[0.02] border border-white/5 shadow-2xl relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-10 opacity-[0.02]">
-                                        <svg className="w-32 h-32 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                        </svg>
-                                    </div>
-                                    <div className="grid md:grid-cols-2 gap-10 relative z-10">
-                                        <div className="space-y-3">
-                                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest px-1">Access Status</label>
-                                            <select value={editData.status || ''} onChange={(e) => setEditData({ ...editData, status: e.target.value })} className="w-full bg-slate-900/60 border border-white/10 text-white p-4 rounded-xl outline-none focus:border-emerald-500/50 transition-all font-medium">
-                                                <option value="active">Active Access</option>
-                                                <option value="suspended">Restricted Access</option>
-                                            </select>
+                            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-10 py-6">
+                                <div className="grid md:grid-cols-2 gap-8">
+                                    <div className="p-10 rounded-[3rem] bg-white/[0.02] border border-white/5 shadow-2xl relative overflow-hidden flex flex-col">
+                                        <div className="absolute top-0 right-0 p-10 opacity-[0.02] pointer-events-none">
+                                            <svg className="w-32 h-32 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                            </svg>
                                         </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest px-1">Pricing Plan</label>
-                                            <select value={editData.subscription || 'none'} onChange={(e) => setEditData({ ...editData, subscription: e.target.value })} className="w-full bg-slate-900/60 border border-white/10 text-white p-4 rounded-xl outline-none focus:border-emerald-500/50 transition-all font-medium">
-                                                <option value="none">No Plan</option>
-                                                <option value="monthly">Monthly ($11)</option>
-                                                <option value="annual">Annual ($108)</option>
-                                            </select>
+                                        <h4 className="text-[11px] font-black text-blue-400 uppercase tracking-[0.3em] mb-8">Access Control</h4>
+                                        <div className="space-y-6 relative z-10 flex-1">
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest px-1">Platform Status</label>
+                                                <select value={editData.status || ''} onChange={(e) => setEditData({ ...editData, status: e.target.value })} className="w-full bg-slate-900/60 border border-white/10 text-white p-4 rounded-xl outline-none focus:border-emerald-500/50 transition-all font-medium appearance-none cursor-pointer">
+                                                    <option value="active">Active Access</option>
+                                                    <option value="suspended">Restricted Access</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest px-1">Subscription Override</label>
+                                                <select value={editData.subscription || 'none'} onChange={(e) => setEditData({ ...editData, subscription: e.target.value })} className="w-full bg-slate-900/60 border border-white/10 text-white p-4 rounded-xl outline-none focus:border-emerald-500/50 transition-all font-medium appearance-none cursor-pointer">
+                                                    <option value="none">No Active Plan</option>
+                                                    <option value="monthly">Monthly Recurring ($11)</option>
+                                                    <option value="annual">Annual Commitment ($108)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-10 rounded-[3rem] bg-gradient-to-br from-amber-500/[0.04] to-transparent border border-amber-500/10 space-y-6 relative overflow-hidden shadow-2xl">
+                                        <div className="flex items-center gap-3 text-amber-200">
+                                            <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                            </svg>
+                                            <p className="text-sm font-bold tracking-tight uppercase">Credential Override</p>
+                                        </div>
+                                        <p className="text-slate-500 text-[10px] font-medium leading-relaxed">System-level reset of user credentials. The user will be required to re-authenticate using the new password on their next session.</p>
+                                        <div className="pt-2">
+                                            <Input label="New System Password" type="password" value={editData.password || ''} onChange={(e) => setEditData({ ...editData, password: e.target.value })} placeholder="••••••••" className="bg-slate-900/60 border-white/5 focus:border-amber-500/30 font-mono" />
+                                        </div>
+                                        <div className="mt-4 p-4 rounded-2xl bg-black/40 border border-white/5">
+                                            <div className="flex justify-between items-center text-[10px] text-zinc-500 font-black uppercase tracking-widest">
+                                                <span>Security Level</span>
+                                                <span className="text-emerald-500">Encrypted</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="p-10 rounded-[3rem] bg-gradient-to-br from-amber-500/[0.04] to-transparent border border-amber-500/10 space-y-6 relative overflow-hidden shadow-2xl">
-                                    <div className="flex items-center gap-3 text-amber-200">
-                                        <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                        </svg>
-                                        <p className="text-sm font-bold tracking-tight">Credential Override</p>
+                                <div className="grid md:grid-cols-3 gap-8">
+                                    <div className="md:col-span-2 p-10 rounded-[3rem] bg-white/[0.01] border border-white/5 relative overflow-hidden">
+                                        <div className="flex items-center justify-between mb-8">
+                                            <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em]">Billing & Engine Context</h4>
+                                            <span className="px-3 py-1 rounded bg-white/5 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Metadata</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-8">
+                                            <div>
+                                                <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1.5">Stripe Customer</p>
+                                                <p className="text-xs font-mono text-zinc-400 truncate">{originalValues.stripeCustomerId || 'Not Linked'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1.5">Subscription status</p>
+                                                <p className={`text-xs font-bold uppercase ${originalValues.subscription !== 'none' ? 'text-emerald-500' : 'text-zinc-500'}`}>{originalValues.subscription !== 'none' ? 'Active' : 'Inactive'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1.5">Period End</p>
+                                                <p className="text-xs font-bold text-zinc-400">{originalValues.currentPeriodEnd ? new Date(originalValues.currentPeriodEnd).toLocaleDateString() : 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1.5">Engine Context</p>
+                                                <p className="text-xs font-bold text-zinc-400 uppercase">{originalValues.assignedDrawMonth || 'Unassigned'}</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <p className="text-slate-500 text-[11px] font-medium leading-relaxed max-w-md">Override the existing secure password. The user will need to use this new credential to authenticate on their next session.</p>
-                                    <Input label="New System Password" type="password" value={editData.password || ''} onChange={(e) => setEditData({ ...editData, password: e.target.value })} placeholder="••••••••" className="bg-slate-900/60 border-white/5 focus:border-amber-500/30" />
+
+                                    <div className="p-10 rounded-[3rem] bg-white/[0.01] border border-white/5">
+                                        <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8">Remittance</h4>
+                                        <div className="space-y-6">
+                                            <Input label="Bank Institution" value={editData.bankName || ''} onChange={(e) => setEditData({ ...editData, bankName: e.target.value })} className="bg-slate-900/60" />
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <Input label="BSB" value={editData.bsbNumber || ''} onChange={(e) => setEditData({ ...editData, bsbNumber: e.target.value })} className="bg-slate-900/60 font-mono text-xs" />
+                                                <Input label="Account" value={editData.accountNumber || ''} onChange={(e) => setEditData({ ...editData, accountNumber: e.target.value })} className="bg-slate-900/60 font-mono text-xs" />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}

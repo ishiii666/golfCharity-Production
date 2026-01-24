@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { supabase } from '../../lib/supabase';
 import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -23,7 +24,8 @@ import {
     getActiveSubscribersCount,
     getDrawWinnersExport,
     exportToCSV,
-    getDraws
+    getDraws,
+    resetDraw
 } from '../../lib/supabaseRest';
 
 // Helper to get next month string
@@ -101,7 +103,30 @@ export default function DrawControl() {
         const timer = setTimeout(() => {
             fetchData();
         }, 800);
-        return () => clearTimeout(timer);
+
+        // 🟢 REAL-TIME: Subscribe to jackpot_tracker changes
+        const jackpotChannel = supabase
+            .channel('draw-control:jackpot')
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'jackpot_tracker'
+            }, (payload) => {
+                console.log('⚡ Draw Control: Real-time Jackpot Update:', payload.new.amount);
+                setJackpotCarryover(parseFloat(payload.new.amount) || 0);
+            })
+            .subscribe();
+
+        // 🔄 POLLING: Refresh draw data every 30 seconds
+        const pollInterval = setInterval(() => {
+            fetchData(true); // Silent refresh
+        }, 30000);
+
+        return () => {
+            clearTimeout(timer);
+            supabase.removeChannel(jackpotChannel);
+            clearInterval(pollInterval);
+        };
     }, []);
 
     const fetchData = async (silent = false) => {
@@ -261,6 +286,29 @@ export default function DrawControl() {
             addToast('error', error.message);
         } finally {
             setIsPublishing(false);
+        }
+    };
+
+    const handleResetDraw = async (drawId, monthYear) => {
+        if (!window.confirm(`Are you absolutely sure you want to RESET the draw for ${monthYear}? This will delete all winners for this month and reactivate expired subscriptions. This action cannot be undone.`)) {
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const result = await resetDraw(drawId);
+            if (result.success) {
+                addToast('success', `Draw for ${monthYear} has been reset successfully.`);
+                setIsPublished(false);
+                setAnalysisResults(null);
+                setTimeout(() => fetchData(false), 500);
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            console.error('Reset failed:', error);
+            addToast('error', `Failed to reset draw: ${error.message}`);
+            setLoading(false);
         }
     };
 
@@ -708,19 +756,77 @@ export default function DrawControl() {
                     <div className="mt-12">
                         <h2 className="text-xl font-bold text-white mb-6">Draw History</h2>
                         <div className="space-y-4">
-                            {draws.filter(d => d.status === 'published').map(draw => (
-                                <div key={draw.id} className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 flex items-center justify-between">
-                                    <div>
-                                        <p className="font-bold text-white">{draw.month_year}</p>
-                                        <p className="text-xs text-slate-500">Winners: {draw.tier1_winners + draw.tier2_winners + draw.tier3_winners}</p>
+                            {draws.filter(d => d.status === 'published' || d.status === 'completed').map(draw => (
+                                <motion.div
+                                    key={draw.id}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="group relative p-5 rounded-2xl bg-slate-900/40 border border-slate-800/50 hover:border-amber-500/30 transition-all duration-300"
+                                >
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                        <div className="flex items-center gap-6">
+                                            <div className="relative">
+                                                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                                                    <svg className="w-7 h-7 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                </div>
+                                                {draw.status === 'published' && (
+                                                    <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center">
+                                                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-3 mb-1">
+                                                    <p className="font-black text-xl text-white tracking-tight">{draw.month_year}</p>
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${draw.status === 'published' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                                                        {draw.status}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                                    {draw.tier1_winners + draw.tier2_winners + draw.tier3_winners} Total Winners • {formatCurrency(draw.prize_pool)} Pool
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            {draw.winning_numbers?.map((num, i) => (
+                                                <span
+                                                    key={i}
+                                                    className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm border transition-colors ${i < 3 ? 'bg-violet-500/10 border-violet-500/20 text-violet-400' : 'bg-teal-500/10 border-teal-500/20 text-teal-400'}`}
+                                                >
+                                                    {num}
+                                                </span>
+                                            ))}
+                                        </div>
+
+                                        <div className="flex items-center gap-3">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-10 px-4 bg-slate-800/50 hover:bg-slate-800 text-slate-300 border border-slate-700/50"
+                                                onClick={() => handleExportWinners(draw.id, draw.month_year)}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                                    <span className="text-[10px] font-black uppercase tracking-widest">CSV</span>
+                                                </div>
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-10 px-4 bg-rose-500/5 hover:bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                                onClick={() => handleResetDraw(draw.id, draw.month_year)}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                    <span className="text-[10px] font-black uppercase tracking-widest">Reset</span>
+                                                </div>
+                                            </Button>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        {draw.winning_numbers?.map((num, i) => (
-                                            <span key={i} className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">{num}</span>
-                                        ))}
-                                    </div>
-                                    <Button variant="ghost" size="sm" onClick={() => handleExportWinners(draw.id, draw.month_year)}>CSV</Button>
-                                </div>
+                                </motion.div>
                             ))}
                         </div>
                     </div>
