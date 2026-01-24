@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
@@ -13,10 +14,6 @@ import {
     getDraws,
     getCurrentDraw,
     getJackpot,
-    simulateDraw,
-    runDraw,
-    publishDraw,
-    createNewDraw,
     logActivity,
     getActiveSubscribersCount,
     getDrawWinnersExport,
@@ -29,13 +26,11 @@ import {
 import UserEditModal from '../../components/admin/UserEditModal';
 import { getTimeUntilDraw, getDrawMonthYear } from '../../utils/drawSchedule';
 
-// Preset score ranges for simulation
+// Preset score ranges (Reference only)
 const PRESET_RANGES = [
     { label: 'Full Range (1-45)', min: 1, max: 45 },
     { label: '5-45', min: 5, max: 45 },
     { label: '10-45', min: 10, max: 45 },
-    { label: '15-45', min: 15, max: 45 },
-    { label: '18-45', min: 18, max: 45 },
 ];
 
 export default function DrawManagement() {
@@ -44,17 +39,11 @@ export default function DrawManagement() {
     const [currentDraw, setCurrentDrawState] = useState(null);
     const [jackpot, setJackpot] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [isRunningDraw, setIsRunningDraw] = useState(false);
-    const [isSimulating, setIsSimulating] = useState(false);
-    const [isPublishing, setIsPublishing] = useState(false);
-    const [simulationResults, setSimulationResults] = useState(null);
-    const [drawResults, setDrawResults] = useState(null);
     const [liveSubCount, setLiveSubCount] = useState(0);
     const [exportingId, setExportingId] = useState(null);
     const [charities, setCharities] = useState([]);
     const [isUserEditModalOpen, setIsUserEditModalOpen] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState(null);
-    const [isInitializing, setIsInitializing] = useState(false);
     const [settings, setSettings] = useState({
         base_amount_per_sub: 10,
         tier1_percent: 40,
@@ -68,11 +57,10 @@ export default function DrawManagement() {
     const [drawWinnersList, setDrawWinnersList] = useState({}); // cache for winner lists
     const [isLoadingWinners, setIsLoadingWinners] = useState(false);
 
-    const [scoreRange, setScoreRange] = useState({ min: 1, max: 45 });
-    const [customRange, setCustomRange] = useState(false);
     const [selectedWinner, setSelectedWinner] = useState(null);
     const [isWinnerModalOpen, setIsWinnerModalOpen] = useState(false);
     const [isUpdatingWinner, setIsUpdatingWinner] = useState(false);
+
     const { addToast } = useToast();
     const { user } = useAuth();
 
@@ -98,21 +86,21 @@ export default function DrawManagement() {
                 getCharities()
             ]);
 
-            setDraws(allDraws);
+            setDraws(allDraws || []);
             setCurrentDrawState(activeDraw);
-            setJackpot(currentJackpot);
-            setCharities(charityList);
+            setJackpot(currentJackpot || 0);
+            setCharities(charityList || []);
 
             // Fetch settings for pricing accuracy
             const currentSettings = await getDrawSettings();
-            setSettings(currentSettings);
+            if (currentSettings) setSettings(currentSettings);
 
             // ALWAYS fetch live data for real-time dashboard accuracy
             const subCount = await getActiveSubscribersCount();
-            setLiveSubCount(subCount);
+            setLiveSubCount(subCount || 0);
         } catch (error) {
             console.error('Error fetching draw data:', error);
-            showMessage('error', 'Failed to load draw data');
+            addToast('error', 'Failed to load draw data');
         } finally {
             setLoading(false);
         }
@@ -122,22 +110,18 @@ export default function DrawManagement() {
         try {
             setExportingId(drawId);
             const winnersData = await getDrawWinnersExport(drawId);
-            if (winnersData.length > 0) {
+            if (winnersData && winnersData.length > 0) {
                 exportToCSV(winnersData, `Winners_${monthYear.replace(' ', '_')}`);
-                showMessage('success', `Exported winners for ${monthYear}`);
+                addToast('success', `Exported winners for ${monthYear}`);
             } else {
-                showMessage('info', 'No winners found for this draw');
+                addToast('info', 'No winners found for this draw');
             }
         } catch (error) {
             console.error('Export failed:', error);
-            showMessage('error', 'Failed to export winners');
+            addToast('error', 'Failed to export winners');
         } finally {
             setExportingId(null);
         }
-    };
-
-    const showMessage = (type, text) => {
-        addToast(type, text);
     };
 
     const toggleExpandDraw = async (drawId) => {
@@ -174,7 +158,8 @@ export default function DrawManagement() {
                     w.id === entryId ? { ...w, 'Verification Status': 'Verified' } : w
                 );
                 setDrawWinnersList(prev => ({ ...prev, [expandedDrawId]: updatedWinners }));
-                setSelectedWinner(updatedWinners.find(w => w.id === entryId));
+                const winner = updatedWinners.find(w => w.id === entryId);
+                if (winner) setSelectedWinner(winner);
             } else {
                 throw new Error(result.error);
             }
@@ -203,7 +188,8 @@ export default function DrawManagement() {
                     } : w
                 );
                 setDrawWinnersList(prev => ({ ...prev, [expandedDrawId]: updatedWinners }));
-                setSelectedWinner(updatedWinners.find(w => w.id === entryId));
+                const winner = updatedWinners.find(w => w.id === entryId);
+                if (winner) setSelectedWinner(winner);
             } else {
                 throw new Error(result.error);
             }
@@ -214,99 +200,13 @@ export default function DrawManagement() {
         }
     };
 
-    // Calculate days remaining in current month
-    const getDaysRemaining = () => {
-        return getTimeUntilDraw().days;
-    };
-
-    // Run simulation with current score range
-    const handleSimulate = async () => {
-        setIsSimulating(true);
-        try {
-            const result = await simulateDraw(scoreRange.min, scoreRange.max);
-
-            if (result.error) {
-                showMessage('error', result.error);
-                setSimulationResults(null);
-            } else {
-                setSimulationResults(result);
-                showMessage('success', 'Simulation complete - review results before running draw');
-            }
-        } catch (error) {
-            showMessage('error', 'Simulation failed: ' + error.message);
-        } finally {
-            setIsSimulating(false);
-        }
-    };
-
-    // Run the actual draw
-    const handleRunDraw = async () => {
-        setIsRunningDraw(true);
-        try {
-            let activeDrawId = currentDraw?.id;
-
-            // AUTO-SETUP: If no record exists, create it
-            if (!activeDrawId) {
-                const monthYear = getDrawMonthYear();
-                const newDraw = await createNewDraw(monthYear);
-                if (!newDraw) throw new Error('Failed to create monthly record');
-                activeDrawId = newDraw.id;
-            }
-
-            const result = await runDraw(activeDrawId, scoreRange.min, scoreRange.max);
-
-            if (result.success) {
-                setDrawResults(result.simulation);
-                showMessage('success', 'Draw completed! Review results and publish when ready.');
-                await fetchAllData();
-            } else {
-                showMessage('error', result.error || 'Draw failed');
-            }
-        } catch (error) {
-            showMessage('error', 'Draw failed: ' + error.message);
-        } finally {
-            setIsRunningDraw(false);
-        }
-    };
-
-    // Publish draw results
-    const handlePublishResults = async () => {
-        setIsPublishing(true);
-        try {
-            let activeDrawId = currentDraw?.id;
-
-            // AUTO-SETUP: If no record exists for this month, create it now
-            if (!activeDrawId) {
-                const monthYear = getDrawMonthYear();
-                const newDraw = await createNewDraw(monthYear);
-                if (!newDraw) throw new Error('Failed to create monthly record');
-                activeDrawId = newDraw.id;
-            }
-
-            const result = await publishDraw(activeDrawId);
-
-            if (result.success) {
-                showMessage('success', 'Results published successfully!');
-                setDrawResults(null);
-                setSimulationResults(null);
-
-                // AUTOMATICALLY BEGIN NEXT DRAW CYCLE
-                const nextMonthYear = getDrawMonthYear();
-                await createNewDraw(nextMonthYear);
-
-                await fetchAllData();
-            } else {
-                showMessage('error', result.error || 'Failed to publish');
-            }
-        } catch (error) {
-            showMessage('error', 'Publish failed: ' + error.message);
-        } finally {
-            setIsPublishing(false);
-        }
+    // Current draw month helper
+    const getTargetMonth = () => {
+        return currentDraw && currentDraw.status !== 'published' ? currentDraw.month_year : getDrawMonthYear();
     };
 
     // Filter draws by status
-    const completedDraws = draws.filter(d => d.status === 'completed' || d.status === 'published');
+    const completedDraws = Array.isArray(draws) ? draws.filter(d => d.status === 'completed' || d.status === 'published') : [];
 
     if (loading) {
         return (
@@ -344,11 +244,11 @@ export default function DrawManagement() {
                             Draw Management
                         </h1>
                         <p style={{ color: 'var(--color-neutral-400)' }}>
-                            Run monthly draws and manage results - Deterministic algorithm using score popularity
+                            View past results and manage winner verification
                         </p>
                     </motion.div>
 
-                    {/* Current Draw */}
+                    {/* Current Draw Summary Card */}
                     <motion.div
                         variants={fadeUp}
                         initial="initial"
@@ -359,23 +259,21 @@ export default function DrawManagement() {
                             <CardHeader>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-xl font-bold" style={{ color: 'var(--color-cream-100)' }}>
-                                        Current Draw: {currentDraw && currentDraw.status !== 'published' ? currentDraw.month_year : getDrawMonthYear()}
+                                        Current Draw: {getTargetMonth()}
                                     </h2>
                                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${currentDraw?.status === 'open' || !currentDraw || currentDraw?.status === 'published'
                                         ? 'bg-emerald-500/20 text-emerald-400'
-                                        : currentDraw?.status === 'completed'
-                                            ? 'bg-blue-500/20 text-blue-400'
-                                            : 'bg-zinc-500/20 text-zinc-400'
+                                        : 'bg-blue-500/20 text-blue-400'
                                         }`}>
                                         {currentDraw?.status === 'published' || !currentDraw ? 'Next Cycle Ready' :
                                             currentDraw?.status === 'open' ? 'Live Phase (Collecting)' :
-                                                currentDraw?.status === 'completed' ? 'Draw Completed' : 'No Active Draw'}
+                                                currentDraw?.status === 'completed' ? 'Draw Completed' : 'Active'}
                                     </span>
                                 </div>
                             </CardHeader>
                             <CardContent>
                                 {/* Stats Grid */}
-                                <div className="grid md:grid-cols-5 gap-4 mb-6">
+                                <div className="grid md:grid-cols-4 gap-4 mb-6">
                                     <div className="text-center p-4 rounded-xl" style={{ background: 'rgba(26, 77, 46, 0.3)' }}>
                                         <p className="text-2xl font-bold" style={{ color: '#c9a227' }}>
                                             {(currentDraw?.status === 'open' || !currentDraw || currentDraw?.status === 'published') ? liveSubCount : (currentDraw?.participants_count || 0)}
@@ -386,7 +284,7 @@ export default function DrawManagement() {
                                     </div>
                                     <div className="text-center p-4 rounded-xl" style={{ background: 'rgba(26, 77, 46, 0.3)' }}>
                                         <p className="text-2xl font-bold" style={{ color: '#22c55e' }}>
-                                            ${((currentDraw?.status === 'open' || !currentDraw || currentDraw?.status === 'published') ? (liveSubCount * settings.base_amount_per_sub) : (currentDraw?.prize_pool || 0)).toLocaleString()}
+                                            ${((currentDraw?.status === 'open' || !currentDraw || currentDraw?.status === 'published') ? (liveSubCount * settings.base_amount_per_sub) : (parseFloat(currentDraw?.prize_pool || 0))).toLocaleString()}
                                         </p>
                                         <p className="text-xs" style={{ color: 'var(--color-neutral-500)' }}>
                                             {(currentDraw?.status === 'open' || !currentDraw || currentDraw?.status === 'published') ? 'Projected Prize Pool' : 'Prize Pool'}
@@ -394,263 +292,36 @@ export default function DrawManagement() {
                                     </div>
                                     <div className="text-center p-4 rounded-xl" style={{ background: 'rgba(201, 162, 39, 0.2)' }}>
                                         <p className="text-2xl font-bold" style={{ color: '#c9a227' }}>
-                                            ${jackpot.toLocaleString()}
+                                            ${parseFloat(jackpot || 0).toLocaleString()}
                                         </p>
                                         <p className="text-xs" style={{ color: 'var(--color-neutral-500)' }}>Jackpot</p>
                                     </div>
                                     <div className="text-center p-4 rounded-xl" style={{ background: 'rgba(26, 77, 46, 0.3)' }}>
                                         <p className="text-2xl font-bold" style={{ color: '#a855f7' }}>
-                                            {getDaysRemaining()}
+                                            {getTimeUntilDraw().days}
                                         </p>
                                         <p className="text-xs" style={{ color: 'var(--color-neutral-500)' }}>Days Left</p>
                                     </div>
-                                    <div className="text-center p-4 rounded-xl" style={{ background: 'rgba(26, 77, 46, 0.3)' }}>
-                                        <p className="text-lg font-bold" style={{ color: '#38bdf8' }}>
-                                            {scoreRange.min}-{scoreRange.max}
-                                        </p>
-                                        <p className="text-xs" style={{ color: 'var(--color-neutral-500)' }}>Score Range</p>
-                                    </div>
                                 </div>
 
-                                {/* Score Range Selector */}
+                                {/* Link to cockpit */}
                                 {currentDraw?.status === 'open' && (
-                                    <div className="mb-6 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                                        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--color-cream-200)' }}>
-                                            Score Range Selection
-                                        </h3>
-                                        <div className="flex flex-wrap gap-2 mb-4">
-                                            {PRESET_RANGES.map((preset) => (
-                                                <button
-                                                    key={preset.label}
-                                                    onClick={() => {
-                                                        setScoreRange({ min: preset.min, max: preset.max });
-                                                        setCustomRange(false);
-                                                    }}
-                                                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${!customRange && scoreRange.min === preset.min && scoreRange.max === preset.max
-                                                        ? 'bg-emerald-500 text-white'
-                                                        : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
-                                                        }`}
-                                                >
-                                                    {preset.label}
-                                                </button>
-                                            ))}
-                                            <button
-                                                onClick={() => setCustomRange(true)}
-                                                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${customRange
-                                                    ? 'bg-emerald-500 text-white'
-                                                    : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
-                                                    }`}
-                                            >
-                                                Custom
-                                            </button>
-                                        </div>
-
-                                        {customRange && (
-                                            <div className="flex items-center gap-3">
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="44"
-                                                    value={scoreRange.min}
-                                                    onChange={(e) => setScoreRange(prev => ({ ...prev, min: parseInt(e.target.value) || 1 }))}
-                                                    className="w-20 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-center"
-                                                />
-                                                <span className="text-zinc-400">to</span>
-                                                <input
-                                                    type="number"
-                                                    min="2"
-                                                    max="45"
-                                                    value={scoreRange.max}
-                                                    onChange={(e) => setScoreRange(prev => ({ ...prev, max: parseInt(e.target.value) || 45 }))}
-                                                    className="w-20 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-center"
-                                                />
-                                            </div>
-                                        )}
-
-                                        <div className="flex gap-3 mt-4">
-                                            <Button
-                                                onClick={handleSimulate}
-                                                disabled={isSimulating}
-                                                variant="ghost"
-                                            >
-                                                {isSimulating ? (
-                                                    <>
-                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                                                        Simulating...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                                        </svg>
-                                                        Simulate
-                                                    </>
-                                                )}
+                                    <div className="p-6 rounded-2xl bg-zinc-800/40 border border-zinc-700/50 text-center">
+                                        <p className="text-zinc-400 mb-4 max-w-md mx-auto">
+                                            Simulation and execution controls are managed in the specialized Draw Control Center.
+                                        </p>
+                                        <Link to="/admin/draw">
+                                            <Button variant="accent">
+                                                Go to Draw Control Center
                                             </Button>
-                                            <Button
-                                                onClick={handleRunDraw}
-                                                disabled={isRunningDraw || !currentDraw}
-                                                variant="accent"
-                                            >
-                                                {isRunningDraw ? (
-                                                    <>
-                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                                                        Running Draw...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                        Run Draw
-                                                    </>
-                                                )}
-                                            </Button>
-                                        </div>
+                                        </Link>
                                     </div>
-                                )}
-
-                                {/* Simulation Results */}
-                                {simulationResults && !drawResults && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="p-6 rounded-xl mb-4"
-                                        style={{
-                                            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1))',
-                                            border: '1px solid rgba(59, 130, 246, 0.3)'
-                                        }}
-                                    >
-                                        <h3 className="text-lg font-bold mb-4 text-blue-400 flex items-center gap-2">
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                            </svg>
-                                            Simulation Preview (Range: {simulationResults.scoreRange.min}-{simulationResults.scoreRange.max})
-                                        </h3>
-
-                                        {/* Winning Numbers */}
-                                        <div className="mb-4">
-                                            <p className="text-sm text-zinc-400 mb-2">Simulated Winning Numbers:</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {simulationResults.winningNumbers.map((num, i) => (
-                                                    <div
-                                                        key={i}
-                                                        className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold"
-                                                        style={{
-                                                            background: i < 3
-                                                                ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)'
-                                                                : 'linear-gradient(135deg, #c9a227, #a68520)',
-                                                            color: i < 3 ? '#fff' : '#0f3621'
-                                                        }}
-                                                    >
-                                                        {num}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <p className="text-xs text-zinc-500 mt-1">Blue = Least popular, Gold = Most popular</p>
-                                        </div>
-
-                                        {/* Tier Results */}
-                                        <div className="grid md:grid-cols-3 gap-4 mb-4">
-                                            <div className="p-3 rounded-lg bg-white/5">
-                                                <p className="text-xs text-zinc-400">Tier 1 (5 Match)</p>
-                                                <p className="text-xl font-bold text-amber-400">{simulationResults.tier1.count} winners</p>
-                                                <p className="text-sm text-zinc-500">${simulationResults.tier1.payout.toFixed(2)} each</p>
-                                            </div>
-                                            <div className="p-3 rounded-lg bg-white/5">
-                                                <p className="text-xs text-zinc-400">Tier 2 (4 Match)</p>
-                                                <p className="text-xl font-bold text-emerald-400">{simulationResults.tier2.count} winners</p>
-                                                <p className="text-sm text-zinc-500">${simulationResults.tier2.payout.toFixed(2)} each</p>
-                                            </div>
-                                            <div className="p-3 rounded-lg bg-white/5">
-                                                <p className="text-xs text-zinc-400">Tier 3 (3 Match)</p>
-                                                <p className="text-xl font-bold text-blue-400">{simulationResults.tier3.count} winners</p>
-                                                <p className="text-sm text-zinc-500">${simulationResults.tier3.payout.toFixed(2)} each</p>
-                                            </div>
-                                        </div>
-
-                                        {simulationResults.tier1.count === 0 && (
-                                            <p className="text-sm text-amber-400">
-                                                ⚠️ No 5-match winners - ${simulationResults.jackpotRollover.toFixed(2)} will roll to jackpot
-                                            </p>
-                                        )}
-                                    </motion.div>
-                                )}
-
-                                {/* Draw Results (after running) */}
-                                {drawResults && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="p-6 rounded-xl"
-                                        style={{
-                                            background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(201, 162, 39, 0.1))',
-                                            border: '1px solid rgba(34, 197, 94, 0.3)'
-                                        }}
-                                    >
-                                        <h3 className="text-lg font-bold mb-4 text-green-400 flex items-center gap-2">
-                                            <CelebrationIcon size={20} color="#4ade80" strokeWidth={1.5} />
-                                            Draw Results - Ready to Publish
-                                        </h3>
-
-                                        {/* Winning Numbers */}
-                                        <div className="flex flex-wrap gap-3 mb-4">
-                                            {drawResults.winningNumbers.map((num, i) => (
-                                                <div
-                                                    key={i}
-                                                    className="w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold"
-                                                    style={{
-                                                        background: 'linear-gradient(135deg, #c9a227, #a68520)',
-                                                        color: '#0f3621'
-                                                    }}
-                                                >
-                                                    {num}
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        {/* Summary */}
-                                        <div className="grid md:grid-cols-4 gap-4 mb-4">
-                                            <div className="text-center p-3 rounded-lg bg-white/5">
-                                                <p className="text-2xl font-bold text-amber-400">{drawResults.tier1.count}</p>
-                                                <p className="text-xs text-zinc-400">5-Match Winners</p>
-                                            </div>
-                                            <div className="text-center p-3 rounded-lg bg-white/5">
-                                                <p className="text-2xl font-bold text-emerald-400">{drawResults.tier2.count}</p>
-                                                <p className="text-xs text-zinc-400">4-Match Winners</p>
-                                            </div>
-                                            <div className="text-center p-3 rounded-lg bg-white/5">
-                                                <p className="text-2xl font-bold text-blue-400">{drawResults.tier3.count}</p>
-                                                <p className="text-xs text-zinc-400">3-Match Winners</p>
-                                            </div>
-                                            <div className="text-center p-3 rounded-lg bg-white/5">
-                                                <p className="text-2xl font-bold text-green-400">${drawResults.prizePool}</p>
-                                                <p className="text-xs text-zinc-400">Total Prize Pool</p>
-                                            </div>
-                                        </div>
-
-                                        <Button
-                                            onClick={handlePublishResults}
-                                            disabled={isPublishing}
-                                            variant="primary"
-                                        >
-                                            {isPublishing ? (
-                                                <>
-                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                                                    Publishing...
-                                                </>
-                                            ) : (
-                                                'Publish Results'
-                                            )}
-                                        </Button>
-                                    </motion.div>
                                 )}
                             </CardContent>
                         </Card>
                     </motion.div>
 
-                    {/* Past Draws */}
+                    {/* Past Draws History */}
                     <motion.div
                         variants={staggerContainer}
                         initial="initial"
@@ -664,14 +335,12 @@ export default function DrawManagement() {
                             </CardHeader>
                             <CardContent>
                                 {completedDraws.length === 0 ? (
-                                    <p className="text-zinc-400 text-center py-8">No completed draws yet</p>
+                                    <p className="text-zinc-400 text-center py-12 border border-dashed border-zinc-800 rounded-xl">No completed draws record available</p>
                                 ) : (
                                     <div className="space-y-4">
                                         {completedDraws.map((draw) => {
                                             const isExpanded = expandedDrawId === draw.id;
                                             const winners = drawWinnersList[draw.id] || [];
-                                            const tier1Winners = winners.filter(w => w['Match Tier'] === '1-Match');
-                                            const tier2Winners = winners.filter(w => w['Match Tier'] === '2-Match'); // Note: labels in getDrawWinnersExport use Match Tier string
 
                                             return (
                                                 <motion.div
@@ -801,7 +470,7 @@ export default function DrawManagement() {
                                                                                         winner['Match Tier'] === '4-Match' ? 'bg-violet-500/20 text-violet-400' :
                                                                                             'bg-teal-500/20 text-teal-400'
                                                                                         }`}>
-                                                                                        {winner['Match Tier'].split('-')[0]}M
+                                                                                        {winner['Match Tier']?.split('-')[0] || '?'}M
                                                                                     </div>
                                                                                     <div>
                                                                                         <p className="text-sm font-bold text-white leading-none mb-1 group-hover:text-emerald-400 transition-colors">{winner['Name']}</p>
@@ -859,7 +528,7 @@ export default function DrawManagement() {
                                     </p>
                                 </div>
                             </div>
-                            {selectedWinner.isPaid && (
+                            {selectedWinner.isPaid && selectedWinner.paidAt && (
                                 <div className="text-right">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 leading-none mb-1">Paid On</p>
                                     <p className="text-xs font-bold text-white">{new Date(selectedWinner.paidAt).toLocaleDateString()}</p>
@@ -954,7 +623,7 @@ export default function DrawManagement() {
                 }}
                 userId={selectedUserId}
                 charities={charities}
-                onUpdate={fetchAllData} // Refresh draw data if user changed (e.g. balance)
+                onUpdate={fetchAllData}
             />
         </PageTransition>
     );

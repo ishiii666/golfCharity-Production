@@ -31,7 +31,7 @@ export function useCharities() {
             const { data, error } = await supabase
                 .from('charities')
                 .select('*')
-                .eq('is_active', true)
+                .eq('status', 'active')
                 .order('name');
 
             if (error) throw error;

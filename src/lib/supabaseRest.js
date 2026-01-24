@@ -280,15 +280,14 @@ export async function saveSiteContentBulk(items) {
 }
 
 /**
- * Get count of active subscribers
  */
-export async function getActiveSubscribersCount() {
+export async function getActiveSubscribersCount(drawId = null) {
     try {
         const authToken = await getAuthToken();
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
         // 1. Get profiles to distinguish admins from players
-        const profilesUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,role`;
+        const profilesUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,role,status`;
         const profileResponse = await fetch(profilesUrl, { headers });
         const profiles = await profileResponse.json();
 
@@ -296,27 +295,43 @@ export async function getActiveSubscribersCount() {
 
         const playerIds = new Set(profiles.filter(p => p.role !== 'admin' && p.status === 'active').map(p => p.id));
 
-        // 2. Get active subscriptions
-        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id,current_period_end`;
+        // 2. Identify the target drawId if not provided
+        let targetId = drawId;
+        if (!targetId) {
+            const currentDraw = await getCurrentDraw();
+            targetId = currentDraw?.id;
+        }
+
+        // 3. Get active subscriptions
+        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id,current_period_end,plan,assigned_draw_id`;
         const response = await fetch(url, { headers });
         const subscriptions = await response.json();
 
         if (!Array.isArray(subscriptions)) return 0;
 
-        // 3. Count only subscriptions belonging to players AND covering the next draw
-        const nextDraw = getNextDrawDate();
+        // 4. Count only subscriptions belonging to players AND matching eligibility rules
+        const nextDrawDate = getNextDrawDate();
         const activePlayerSubs = subscriptions.filter(s => {
             if (!playerIds.has(s.user_id)) return false;
-            if (!s.current_period_end) return false;
 
+            // Annual subscribers are always counted if active
+            if (s.plan === 'annual') return true;
+
+            // Monthly subscribers must be assigned to THIS target draw
+            if (s.assigned_draw_id && targetId) {
+                return s.assigned_draw_id === targetId;
+            }
+
+            // Legacy fallback (date-based) if no assigned_draw_id exists
+            if (!s.current_period_end) return false;
             const endDateString = s.current_period_end.replace(' ', 'T');
-            return new Date(endDateString) >= nextDraw;
+            return new Date(endDateString) >= nextDrawDate;
         });
 
-        console.log(`📊 Active subscribers for draw on ${nextDraw.toLocaleDateString()}: ${activePlayerSubs.length}`);
+        console.log(`📊 Active subscribers for draw ${targetId || 'scheduled'}: ${activePlayerSubs.length}`);
         return activePlayerSubs.length;
     } catch (error) {
-        console.error('Error counting active subscribers:', error);
+        console.error('Error fetching subscriber count:', error);
         return 0;
     }
 }
@@ -545,6 +560,8 @@ export async function adminUpdatePassword(userId, newPassword) {
 
 /**
  * Get admin dashboard stats - NOW WITH REAL DATA
+/**
+ * Get admin dashboard stats - NOW WITH REAL DATA
  */
 export async function getAdminStats() {
     console.log('📊 Fetching admin stats (real data)...');
@@ -552,27 +569,38 @@ export async function getAdminStats() {
     const authToken = await getAuthToken();
     const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-    // Fetch basic data using existing functions to ensure logic parity
-    const [charities, profiles, activeSubCount, totalDonated, recentActivity] = await Promise.all([
+    // 1. Get profiles
+    const playersRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&status=eq.active&select=id`, { headers });
+    const players = await playersRes.json();
+    const playerIds = new Set(players.map(p => p.id));
+
+    // 2. Clear Active Sub Count: Total anyone with 'active' status in subscriptions table
+    const subsRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id`, { headers });
+    const allActiveSubs = await subsRes.json();
+    const activeSubCount = allActiveSubs.filter(s => playerIds.has(s.user_id)).length;
+
+    // 3. Fetch other data
+    const [charities, totalDonated, recentActivity, currentDraw] = await Promise.all([
         getTableData('charities', 'id'),
-        getTableData('profiles', 'id,role'),
-        getActiveSubscribersCount(), // Use unified counting logic
         getTotalDonations(),
-        getRecentActivity(5)
+        getRecentActivity(5),
+        getCurrentDraw()
     ]);
 
-    // Filter out admins from counts
-    const charityCount = Array.isArray(charities) ? charities.length : 0;
-    const players = Array.isArray(profiles) ? profiles.filter(p => p.role !== 'admin') : [];
+    // Determine what draw is "Next"
+    const nextDrawLabel = currentDraw?.status === 'open'
+        ? currentDraw.month_year
+        : getDrawMonthYear();
 
-    console.log('📊 Stats fetched:', { charityCount, userCount: players.length, activeSubs: activeSubCount, totalDonated });
+    console.log('📊 Admin Stats Updated:', { activeSubCount, nextDrawLabel });
 
     return {
-        totalUsers: players.length,
+        totalUsers: (Array.isArray(players) ? players.length : 0),
         activeSubscribers: activeSubCount,
-        totalCharities: charityCount,
+        totalCharities: (Array.isArray(charities) ? charities.length : 0),
         totalDonated: totalDonated,
-        recentActivity: recentActivity
+        recentActivity: recentActivity,
+        nextDrawDate: nextDrawLabel
     };
 }
 
@@ -814,13 +842,13 @@ export async function getUsers() {
             const status = sub.status?.toLowerCase();
             const isActive = status === 'active' || status === 'trialing';
 
-            // Priority: keep active/trialing subscription info, otherwise any record
-            if (isActive || !subscriptionMap[sub.user_id]) {
-                subscriptionMap[sub.user_id] = sub.plan || sub.status || 'subscribed';
+            // Only map the plan if the subscription is currently active
+            if (isActive) {
+                subscriptionMap[sub.user_id] = sub.plan || 'active';
             }
         });
 
-        console.log('📋 Subscription map:', subscriptionMap);
+        console.log('📋 Subscription map (Active only):', subscriptionMap);
 
         // Merge subscription data into profiles
         const profilesWithSubs = profiles.map(profile => ({
@@ -906,17 +934,52 @@ export async function assignSubscription(userId, plan) {
 
     const existingSubs = await checkResponse.json();
 
+    // 1. Determine the target draw for this subscription
+    let targetDrawId = null;
+    let targetMonthYear = null;
+    let drawsRemaining = (plan === 'annual' ? 12 : 1);
+
+    try {
+        // Find the current active/open draw
+        const drawUrl = `${SUPABASE_URL}/rest/v1/draws?status=eq.open&select=id,month_year&limit=1&order=created_at.asc`;
+        const drawRes = await fetch(drawUrl, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        const openDraws = await drawRes.json();
+
+        if (openDraws && openDraws.length > 0) {
+            targetDrawId = openDraws[0].id;
+            targetMonthYear = openDraws[0].month_year;
+        } else {
+            // No open draw? Check if we need to assign to next month
+            targetMonthYear = getDrawMonthYear();
+            const nextDraw = await createNewDraw(targetMonthYear);
+            if (nextDraw) {
+                targetDrawId = nextDraw.id;
+            }
+        }
+    } catch (err) {
+        console.error('Error finding target draw:', err);
+    }
+
     const subscriptionData = {
         user_id: userId,
         plan: plan,
         status: 'active',
+        assigned_draw_id: targetDrawId,
+        assigned_draw_month: targetMonthYear,
+        draws_remaining: drawsRemaining,
+        // Legacy fields for compatibility
         current_period_start: new Date().toISOString(),
         current_period_end: new Date(Date.now() + (plan === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString(),
         stripe_subscription_id: `test_sub_${Date.now()}`,
         stripe_customer_id: `test_cus_${userId.substring(0, 8)}`
     };
 
-    if (existingSubs && existingSubs.length > 0) {
+    if (existingSubs && Array.isArray(existingSubs) && existingSubs.length > 0) {
         // Update existing subscription
         const updateUrl = `${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`;
         const response = await fetch(updateUrl, {
@@ -930,6 +993,9 @@ export async function assignSubscription(userId, plan) {
             body: JSON.stringify({
                 plan: plan,
                 status: 'active',
+                assigned_draw_id: subscriptionData.assigned_draw_id,
+                assigned_draw_month: subscriptionData.assigned_draw_month,
+                draws_remaining: subscriptionData.draws_remaining,
                 current_period_start: subscriptionData.current_period_start,
                 current_period_end: subscriptionData.current_period_end
             })
@@ -940,12 +1006,11 @@ export async function assignSubscription(userId, plan) {
             throw new Error(error);
         }
 
-        console.log('📋 Subscription updated');
-        return { success: true, message: 'Subscription updated' };
+        console.log(`📋 Subscription updated. Assigned to: ${targetMonthYear || 'Unknown'}`);
+        return { success: true, message: `Subscription updated for ${targetMonthYear || 'next cycle'}` };
     } else {
         // Create new subscription
-        const insertUrl = `${SUPABASE_URL}/rest/v1/subscriptions`;
-        const response = await fetch(insertUrl, {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
             method: 'POST',
             headers: {
                 'apikey': SUPABASE_KEY,
@@ -961,8 +1026,8 @@ export async function assignSubscription(userId, plan) {
             throw new Error(error);
         }
 
-        console.log('📋 Subscription created');
-        return { success: true, message: 'Subscription created' };
+        console.log(`📋 New subscription created. Assigned to: ${targetMonthYear || 'Unknown'}`);
+        return { success: true, message: `Subscribed to ${targetMonthYear || 'next cycle'}` };
     }
 }
 
@@ -1246,17 +1311,16 @@ export async function getUserScores(userId, limit = 5) {
 }
 
 /**
- * Get all eligible users for the draw
- * Eligible = active subscription + at least 5 scores
+ * Get all users eligible for a specific draw
+ * Filters by active subscriptions (Annual OR Monthly assigned to this draw)
  */
-export async function getEligibleUsers() {
+export async function getEligibleUsers(drawId = null) {
     try {
         const authToken = await getAuthToken();
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-        // 1. Get ALL active subscriptions that cover the next draw
-        const nextDrawDate = getNextDrawDate();
-        const subUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id,current_period_end`;
+        // 1. Get ALL active subscriptions
+        const subUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id,current_period_end,plan,assigned_draw_id`;
         const subResponse = await fetch(subUrl, { headers });
         const subscriptions = await subResponse.json();
 
@@ -1265,8 +1329,25 @@ export async function getEligibleUsers() {
             return [];
         }
 
-        // Filter for those valid on draw date
+        // Identify target draw if not provided
+        let targetId = drawId;
+        if (!targetId) {
+            const activeDraw = await getCurrentDraw();
+            targetId = activeDraw?.id;
+        }
+
+        // Filter for those valid for THIS specific draw
+        const nextDrawDate = getNextDrawDate();
         const validSubscriptions = subscriptions.filter(s => {
+            // Annual subscribers are always eligible if active
+            if (s.plan === 'annual') return true;
+
+            // Monthly subscribers must be assigned to THIS draw ID
+            if (s.assigned_draw_id && targetId) {
+                return s.assigned_draw_id === targetId;
+            }
+
+            // Legacy fallback (date-based)
             if (!s.current_period_end) return false;
             const endDateString = s.current_period_end.replace(' ', 'T');
             return new Date(endDateString) >= nextDrawDate;
@@ -1323,7 +1404,7 @@ export function countMatches(userScores, winningNumbers) {
  * Simulate a draw with given score range (admin preview)
  * Returns winner counts and estimated payouts without saving
  */
-export async function simulateDraw(minScore = 1, maxScore = 45) {
+export async function simulateDraw(minScore = 1, maxScore = 45, drawId = null) {
     try {
         // Get settings and frequencies in parallel
         const [settings, frequencies] = await Promise.all([
@@ -1338,8 +1419,8 @@ export async function simulateDraw(minScore = 1, maxScore = 45) {
         // Generate winning numbers
         const winningNumbers = generateWinningNumbers(frequencies);
 
-        // Get all eligible users
-        const eligibleUsers = await getEligibleUsers();
+        // Get all eligible users for this draw context
+        const eligibleUsers = await getEligibleUsers(drawId);
 
         if (eligibleUsers.length === 0) {
             return {
@@ -1445,8 +1526,8 @@ export async function runDraw(drawId, minScore = 1, maxScore = 45) {
     try {
         const authToken = await getAuthToken();
 
-        // First, simulate to get all data
-        const simulation = await simulateDraw(minScore, maxScore);
+        // First, simulate to get all data for THIS specific draw
+        const simulation = await simulateDraw(minScore, maxScore, drawId);
 
         if (simulation.error) {
             return { success: false, error: simulation.error };
@@ -1599,6 +1680,46 @@ export async function publishDraw(drawId) {
 
         if (!response.ok) {
             throw new Error('Failed to publish draw');
+        }
+
+        // 2. AUTOMATIC EXPIRATION: Expire all one-draw (monthly) subscriptions assigned to this draw
+        try {
+            // Fetch information about the draw we just published to get the month name
+            const drawDataRes = await fetch(`${SUPABASE_URL}/rest/v1/draws?id=eq.${drawId}&select=month_year`, {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
+            });
+            const drawData = await drawDataRes.json();
+            const monthName = drawData && drawData[0]?.month_year;
+
+            // Build a broad expiration filter to catch both ID-based and Month-based assignments
+            // This handles legacy users who might be missing the assigned_draw_id
+            const expireFilters = monthName
+                ? `assigned_draw_id.eq.${drawId},assigned_draw_month.eq.${monthName}`
+                : `assigned_draw_id.eq.${drawId}`;
+
+            const expireUrl = `${SUPABASE_URL}/rest/v1/subscriptions?plan=eq.monthly&or=(${expireFilters})`;
+
+            const expireRes = await fetch(expireUrl, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    status: 'cancelled',
+                    draws_remaining: 0,
+                    updated_at: new Date().toISOString()
+                })
+            });
+
+            if (expireRes.ok) {
+                console.log(`🔌 Robust Expiration: Monthly subscriptions for ${monthName || drawId} deactivated.`);
+            } else {
+                console.warn('⚠️ Expiration partial failure:', await expireRes.text());
+            }
+        } catch (expireErr) {
+            console.error('Error during robust subscription expiration:', expireErr);
         }
 
         await logActivity('draw_published', `Draw ${drawId} published`);

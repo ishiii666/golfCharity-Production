@@ -6,6 +6,7 @@ import Card, { CardContent } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import BackButton from '../../components/ui/BackButton';
+import { useToast } from '../../components/ui/Toast';
 import { fadeUp } from '../../utils/animations';
 import { getCharityById, insertRow, updateRow, uploadCharityImage, logActivity } from '../../lib/supabaseRest';
 import { useAuth } from '../../context/AuthContext';
@@ -32,7 +33,7 @@ export default function CharityEditor() {
 
     const [loading, setLoading] = useState(isEditing);
     const [saving, setSaving] = useState(false);
-    const [message, setMessage] = useState({ type: '', text: '' });
+    const { addToast } = useToast();
     const [imagePreview, setImagePreview] = useState(null);
     const [imageFile, setImageFile] = useState(null);
     const imageInputRef = useRef(null);
@@ -83,27 +84,22 @@ export default function CharityEditor() {
                 });
                 setImagePreview(charity.image_url);
             } else {
-                showMessage('error', 'Charity not found');
+                addToast('error', 'Charity not found');
                 setTimeout(() => navigate('/admin/charities'), 2000);
             }
         } catch (error) {
             console.error('Error fetching charity:', error);
-            showMessage('error', 'Failed to load charity');
+            addToast('error', 'Failed to load charity');
         } finally {
             setLoading(false);
         }
-    };
-
-    const showMessage = (type, text) => {
-        setMessage({ type, text });
-        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     };
 
     const handleImageSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
             if (file.size > 5 * 1024 * 1024) {
-                showMessage('error', 'Image must be less than 5MB');
+                addToast('error', 'Image must be less than 5MB');
                 return;
             }
             setImageFile(file);
@@ -117,7 +113,7 @@ export default function CharityEditor() {
         e.preventDefault();
 
         if (!formData.name.trim()) {
-            showMessage('error', 'Please enter a charity name');
+            addToast('error', 'Please enter a charity name');
             return;
         }
 
@@ -155,14 +151,14 @@ export default function CharityEditor() {
             if (isEditing) {
                 await updateRow('charities', id, charityData);
                 await logActivity('admin_action', `Updated charity: ${formData.name}`, { charityId: id });
-                showMessage('success', 'Charity updated successfully!');
+                addToast('success', 'Charity updated successfully!');
             } else {
                 charityData.total_raised = 0;
                 charityData.supporter_count = 0;
                 const result = await insertRow('charities', charityData);
                 const newData = Array.isArray(result) ? result[0] : result;
                 await logActivity('admin_action', `Created charity: ${formData.name}`, { charityId: newData?.id });
-                showMessage('success', 'Charity created successfully!');
+                addToast('success', 'Charity created successfully!');
             }
 
             // Navigate back after short delay
@@ -170,7 +166,22 @@ export default function CharityEditor() {
 
         } catch (error) {
             console.error('Error saving charity:', error);
-            showMessage('error', `Failed to save: ${error.message || 'Unknown error'}`);
+
+            let displayError = 'Unknown error';
+
+            // Handle JSON error strings from Supabase REST API
+            if (error.message && error.message.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(error.message);
+                    displayError = parsed.message || parsed.hint || displayError;
+                } catch (e) {
+                    displayError = error.message;
+                }
+            } else {
+                displayError = error.message;
+            }
+
+            addToast('error', `Failed to save: ${displayError}`);
         } finally {
             setSaving(false);
         }
@@ -214,25 +225,6 @@ export default function CharityEditor() {
                             </p>
                         </div>
                     </motion.div>
-
-                    {/* Message */}
-                    {message.text && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${message.type === 'success'
-                                ? 'bg-emerald-500/20 border border-emerald-500/30'
-                                : 'bg-red-500/20 border border-red-500/30'
-                                }`}
-                        >
-                            <span className={message.type === 'success' ? 'text-emerald-400' : 'text-red-400'}>
-                                {message.type === 'success' ? '✓' : '✕'}
-                            </span>
-                            <span className={message.type === 'success' ? 'text-emerald-300' : 'text-red-300'}>
-                                {message.text}
-                            </span>
-                        </motion.div>
-                    )}
 
                     {/* Form */}
                     <motion.div

@@ -5,6 +5,7 @@ import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardContent } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import { useToast } from '../../components/ui/Toast';
 import { fadeUp } from '../../utils/animations';
 import { insertRow, uploadCharityImage, logActivity } from '../../lib/supabaseRest';
 import { useAuth } from '../../context/AuthContext';
@@ -21,7 +22,7 @@ export default function AddCharity() {
     }
 
     const [saving, setSaving] = useState(false);
-    const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
+    const { addToast } = useToast();
     const [imagePreview, setImagePreview] = useState(null);
     const [imageFile, setImageFile] = useState(null);
     const imageInputRef = useRef(null);
@@ -41,16 +42,13 @@ export default function AddCharity() {
         charity_day_location: ''
     });
 
-    const showMessage = (type, text) => {
-        setActionMessage({ type, text });
-        setTimeout(() => setActionMessage({ type: '', text: '' }), 4000);
-    };
+
 
     const handleImageSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
             if (file.size > 5 * 1024 * 1024) {
-                showMessage('error', 'Image must be less than 5MB');
+                addToast('error', 'Image must be less than 5MB');
                 return;
             }
             setImageFile(file);
@@ -64,7 +62,7 @@ export default function AddCharity() {
 
     const handleSave = async () => {
         if (!formData.name.trim()) {
-            showMessage('error', 'Please enter a charity name.');
+            addToast('error', 'Please enter a charity name.');
             return;
         }
 
@@ -109,7 +107,7 @@ export default function AddCharity() {
                 charityId: newData.id
             });
 
-            showMessage('success', `"${formData.name}" added successfully!`);
+            addToast('success', `"${formData.name}" added successfully!`);
 
             // Navigate back to charity management after short delay
             setTimeout(() => {
@@ -120,9 +118,9 @@ export default function AddCharity() {
             console.error('Error saving charity:', error);
             const errorMsg = error.message || '';
             if (errorMsg.includes('42501') || errorMsg.includes('permission denied') || errorMsg.includes('401')) {
-                showMessage('error', 'Permission denied. Please make sure you are logged in as an admin.');
+                addToast('error', 'Permission denied. Please make sure you are logged in as an admin.');
             } else {
-                showMessage('error', 'Failed to save charity: ' + errorMsg);
+                addToast('error', 'Failed to save charity: ' + errorMsg);
             }
         } finally {
             setSaving(false);
@@ -157,25 +155,6 @@ export default function AddCharity() {
                             </p>
                         </div>
                     </motion.div>
-
-                    {/* Action Message */}
-                    {actionMessage.text && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${actionMessage.type === 'success'
-                                ? 'bg-emerald-500/20 border border-emerald-500/30'
-                                : 'bg-red-500/20 border border-red-500/30'
-                                }`}
-                        >
-                            <span className={actionMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}>
-                                {actionMessage.type === 'success' ? '✓' : '✕'}
-                            </span>
-                            <span className={actionMessage.type === 'success' ? 'text-emerald-300' : 'text-red-300'}>
-                                {actionMessage.text}
-                            </span>
-                        </motion.div>
-                    )}
 
                     {/* Form Card */}
                     <Card>

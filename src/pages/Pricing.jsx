@@ -5,6 +5,7 @@ import PageTransition from '../components/layout/PageTransition';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui/Toast';
 import { useCheckout } from '../hooks/useCheckout';
 import { openCustomerPortal, isStripeConfigured } from '../lib/stripe';
 import { HeartIcon, GolfFlagIcon } from '../components/ui/Icons';
@@ -60,7 +61,7 @@ export default function Pricing() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [manageLoading, setManageLoading] = useState(false);
-    const [successMessage, setSuccessMessage] = useState('');
+    const { addToast } = useToast();
     const [showSwitchModal, setShowSwitchModal] = useState(false);
     const [pendingSwitchPlan, setPendingSwitchPlan] = useState(null);
 
@@ -70,15 +71,23 @@ export default function Pricing() {
     // Handle success/cancel URL params from Stripe redirect
     useEffect(() => {
         if (searchParams.get('success') === 'true') {
-            setSuccessMessage('🎉 Subscription successful! Welcome to Golf Charity!');
+            addToast('success', '🎉 Subscription successful! Welcome to Golf Charity!');
             searchParams.delete('success');
             setSearchParams(searchParams);
         } else if (searchParams.get('canceled') === 'true') {
-            setSuccessMessage('Checkout was canceled. You can try again anytime.');
+            addToast('error', 'Checkout was canceled. You can try again anytime.');
             searchParams.delete('canceled');
             setSearchParams(searchParams);
         }
     }, [searchParams, setSearchParams]);
+
+    // Handle checkout errors
+    useEffect(() => {
+        if (error) {
+            addToast('error', error);
+            clearError();
+        }
+    }, [error, clearError, addToast]);
 
     const handleSubscribe = async (planId) => {
         if (!isAuthenticated) {
@@ -189,37 +198,9 @@ export default function Pricing() {
                         </p>
                     </motion.div>
 
-                    {/* Success/Error Messages */}
-                    {successMessage && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="max-w-md mx-auto mb-8 p-4 rounded-xl text-center"
-                            style={{
-                                background: successMessage.includes('canceled')
-                                    ? 'rgba(234, 179, 8, 0.1)'
-                                    : 'rgba(34, 197, 94, 0.1)',
-                                border: successMessage.includes('canceled')
-                                    ? '1px solid rgba(234, 179, 8, 0.3)'
-                                    : '1px solid rgba(34, 197, 94, 0.3)'
-                            }}
-                        >
-                            <p className={successMessage.includes('canceled') ? 'text-yellow-400' : 'text-green-400'}>
-                                {successMessage}
-                            </p>
-                        </motion.div>
-                    )}
 
-                    {error && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="max-w-md mx-auto mb-8 p-4 rounded-xl text-center"
-                            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}
-                        >
-                            <p className="text-red-400">{error}</p>
-                        </motion.div>
-                    )}
+
+
 
                     {/* Current Subscription Card - Only for subscribed users */}
                     {isSubscribed && subscription && (
@@ -393,15 +374,29 @@ export default function Pricing() {
                                                     ✓ Your Current Plan
                                                 </div>
                                             ) : (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="lg"
-                                                    fullWidth
-                                                    onClick={() => handleSwitchPlan(plan.id)}
-                                                    loading={manageLoading}
-                                                >
-                                                    Switch to {plan.name}
-                                                </Button>
+                                                // Don't allow downgrade from annual to monthly
+                                                currentPlan === 'annual' && plan.id === 'monthly' ? (
+                                                    <div
+                                                        className="w-full py-3 px-4 rounded-xl text-center text-xs font-medium"
+                                                        style={{
+                                                            background: 'rgba(255, 255, 255, 0.05)',
+                                                            color: 'var(--color-neutral-500)',
+                                                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                                                        }}
+                                                    >
+                                                        Annual plan active. Contact support to downgrade.
+                                                    </div>
+                                                ) : (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="lg"
+                                                        fullWidth
+                                                        onClick={() => handleSwitchPlan(plan.id)}
+                                                        loading={manageLoading}
+                                                    >
+                                                        Switch to {plan.name}
+                                                    </Button>
+                                                )
                                             )
                                         ) : (
                                             <Button

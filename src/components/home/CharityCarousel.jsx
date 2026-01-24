@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import { getFeaturedCharities } from '../../lib/supabaseRest';
+import { supabase } from '../../lib/supabase';
 
 /**
  * CharityCarousel - Premium auto-rotating charity showcase

@@ -4,6 +4,7 @@ import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardContent, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import BackButton from '../../components/ui/BackButton';
+import { useToast } from '../../components/ui/Toast';
 import { fadeUp, staggerContainer, staggerItem } from '../../utils/animations';
 import { getSiteContent, saveSiteContentBulk } from '../../lib/supabaseRest';
 
@@ -106,9 +107,34 @@ export default function ContentManagement() {
     const [activeSection, setActiveSection] = useState('hero');
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [message, setMessage] = useState({ type: '', text: '' });
+    const { addToast } = useToast();
     const [previewMode, setPreviewMode] = useState(false);
+    const [originalValues, setOriginalValues] = useState({});
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+    // Track changes by comparing current state with original database values
+    useEffect(() => {
+        const currentValues = {};
+        categories.forEach(cat => {
+            cat.sections.forEach(sec => {
+                sec.fields.forEach(field => {
+                    const key = `${field.section || sec.id}_${field.name}`;
+                    currentValues[key] = field.value;
+                });
+            });
+        });
+
+        // Check if any value differs
+        let changed = false;
+        for (const key in currentValues) {
+            // Compare as strings to avoid type issues (number vs string from input)
+            if (String(currentValues[key] || '') !== String(originalValues[key] || '')) {
+                changed = true;
+                break;
+            }
+        }
+        setHasUnsavedChanges(changed);
+    }, [categories, originalValues]);
 
     // Fetch content from database on mount
     useEffect(() => {
@@ -135,20 +161,24 @@ export default function ContentManagement() {
                         })
                     }))
                 })));
+
+                // Store flat values for comparison
+                const values = {};
+                dbContent.forEach(item => {
+                    values[`${item.section_id}_${item.field_name}`] = item.field_value || '';
+                });
+                setOriginalValues(values);
             }
             console.log('📝 Content loaded from database');
         } catch (error) {
             console.error('Error fetching content:', error);
-            showMessage('error', 'Failed to load content');
+            addToast('error', 'Failed to load content');
         } finally {
             setLoading(false);
         }
     };
 
-    const showMessage = (type, text) => {
-        setMessage({ type, text });
-        setTimeout(() => setMessage({ type: '', text: '' }), 4000);
-    };
+
 
     const currentCategory = categories.find(c => c.id === activeCategory);
     const currentSection = currentCategory?.sections.find(s => s.id === activeSection);
@@ -168,7 +198,6 @@ export default function ContentManagement() {
                 return section;
             })
         })));
-        setHasUnsavedChanges(true);
     };
 
     const handleSave = async () => {
@@ -189,11 +218,18 @@ export default function ContentManagement() {
             });
 
             await saveSiteContentBulk(items);
-            showMessage('success', 'All content saved successfully!');
-            setHasUnsavedChanges(false);
+
+            // Update original values to current state after successful save
+            const newOriginals = {};
+            items.forEach(item => {
+                newOriginals[`${item.section_id}_${item.field_name}`] = item.field_value;
+            });
+            setOriginalValues(newOriginals);
+
+            addToast('success', 'All content saved successfully!');
         } catch (error) {
             console.error('Error saving content:', error);
-            showMessage('error', 'Failed to save content');
+            addToast('error', 'Failed to save content');
         } finally {
             setIsSaving(false);
         }
@@ -236,58 +272,62 @@ export default function ContentManagement() {
                                 Edit website content, legal pages, and more
                             </p>
                         </div>
-                        <Button
-                            onClick={handleSave}
-                            disabled={isSaving || !hasUnsavedChanges}
-                            variant={hasUnsavedChanges ? 'primary' : 'ghost'}
-                            style={{
-                                opacity: hasUnsavedChanges ? 1 : 0.5,
-                                cursor: hasUnsavedChanges ? 'pointer' : 'default'
-                            }}
-                        >
-                            {isSaving ? (
-                                <span className="flex items-center gap-2">
-                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Saving...
-                                </span>
-                            ) : (
-                                <>
-                                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    Save All Changes
-                                </>
-                            )}
-                        </Button>
-                    </motion.div>
-
-                    {/* Message Notification */}
-                    <AnimatePresence>
-                        {message.text && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -10 }}
-                                className={`mb-6 p-4 rounded-xl border ${message.type === 'success'
-                                    ? 'bg-green-500/10 border-green-500/30'
-                                    : 'bg-red-500/10 border-red-500/30'
-                                    }`}
+                        <div className="flex items-center gap-4">
+                            <AnimatePresence>
+                                {hasUnsavedChanges && (
+                                    <motion.span
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 10 }}
+                                        className="text-xs font-bold text-amber-500 uppercase tracking-widest bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20"
+                                    >
+                                        Unsaved Changes
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
+                            <Button
+                                onClick={handleSave}
+                                disabled={isSaving || !hasUnsavedChanges}
+                                className={`relative group overflow-hidden transition-all duration-500 ${hasUnsavedChanges
+                                    ? 'shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)]'
+                                    : ''}`}
+                                style={{
+                                    background: hasUnsavedChanges
+                                        ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                                        : 'rgba(39, 39, 42, 0.5)',
+                                    border: hasUnsavedChanges
+                                        ? '1px solid rgba(255,255,255,0.2)'
+                                        : '1px solid rgba(255,255,255,0.05)',
+                                    color: hasUnsavedChanges ? '#ffffff' : '#71717a',
+                                    minWidth: '180px',
+                                    height: '48px',
+                                    borderRadius: '14px'
+                                }}
                             >
-                                <p className={`flex items-center gap-2 ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
-                                    {message.type === 'success' ? (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
+                                <div className="flex items-center justify-center gap-2 relative z-10">
+                                    {isSaving ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            <span className="font-bold">Saving...</span>
+                                        </>
                                     ) : (
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
+                                        <>
+                                            <svg className={`w-5 h-5 transition-transform duration-300 ${hasUnsavedChanges ? 'scale-110' : 'opacity-50'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            <span className="font-bold tracking-tight">Save All Changes</span>
+                                        </>
                                     )}
-                                    {message.text}
-                                </p>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                                </div>
+                                {hasUnsavedChanges && (
+                                    <motion.div
+                                        layoutId="glow"
+                                        className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    />
+                                )}
+                            </Button>
+                        </div>
+                    </motion.div>
 
                     {/* Category Tabs */}
                     <div className="flex gap-2 mb-6">

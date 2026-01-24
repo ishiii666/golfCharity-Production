@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 // Pages
 import Home from './pages/Home';
+import About from './pages/About';
 import HowItWorks from './pages/HowItWorks';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
@@ -221,6 +222,7 @@ function AppRoutes() {
       <Route path="/" element={<Layout />}>
         {/* Public Routes */}
         <Route index element={<Home />} />
+        <Route path="about" element={<About />} />
         <Route path="login" element={<Auth />} />
         <Route path="signup" element={<Auth />} />
         <Route path="how-it-works" element={<HowItWorks />} />
@@ -337,10 +339,10 @@ function App() {
         <SmoothScroll>
           {/* Scroll to top on route change */}
           <ScrollToTop />
-          {/* Cinematic Entry Animation - plays once per session */}
-          {showEntryAnimation && (
+          {/* Cinematic Entry Animation - temporarily disabled to fix black screen */}
+          {/* {showEntryAnimation && (
             <EntryAnimation onComplete={handleAnimationComplete} />
-          )}
+          )} */}
           <AppRoutes />
         </SmoothScroll>
       </AuthProvider>

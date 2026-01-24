@@ -40,6 +40,22 @@ const getNextMonthName = (currentMonthYear) => {
     }
 };
 
+// Helper: check if a draw month name is in the future
+const isFutureCycle = (monthYearStr) => {
+    if (!monthYearStr) return false;
+    try {
+        const [month, year] = monthYearStr.split(' ');
+        // Target: 1st of the draw month
+        const cycleDate = new Date(`${month} 1, ${year}`);
+        const now = new Date();
+        // Compare against 1st of current month
+        const currentMonthFirst = new Date(now.getFullYear(), now.getMonth(), 1);
+        return cycleDate > currentMonthFirst;
+    } catch (e) {
+        return false;
+    }
+};
+
 // Score range presets
 const SCORE_RANGE_PRESETS = [
     { label: 'Full Range (1-45)', min: 1, max: 45 },
@@ -91,13 +107,16 @@ export default function DrawControl() {
     const fetchData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const [users, jackpot, draw, currentSettings, allDraws, subCount] = await Promise.all([
-                getEligibleUsers(),
+            // First get the current draw to have the correct context
+            const draw = await getCurrentDraw();
+            const targetDrawId = draw?.id;
+
+            const [users, jackpot, currentSettings, allDraws, subCount] = await Promise.all([
+                getEligibleUsers(targetDrawId),
                 getJackpot(),
-                getCurrentDraw(),
                 getDrawSettings(),
                 getDraws(),
-                getActiveSubscribersCount()
+                getActiveSubscribersCount(targetDrawId)
             ]);
 
             setSettings(currentSettings || settings);
@@ -161,7 +180,7 @@ export default function DrawControl() {
     const runAnalysis = async () => {
         setIsAnalyzing(true);
         try {
-            const results = await simulateDraw(rangeMin, rangeMax);
+            const results = await simulateDraw(rangeMin, rangeMax, currentDraw?.id);
 
             if (results.error) {
                 addToast('error', results.error);
@@ -187,21 +206,50 @@ export default function DrawControl() {
 
         setIsPublishing(true);
         try {
-            let activeDrawId = currentDraw?.id;
+            // Determine the target month for the draw.
+            // Prioritize an existing 'open' draw. If none, use the current calendar month.
+            const targetMonth = currentDraw && currentDraw.status === 'open'
+                ? currentDraw.month_year
+                : getDrawMonthYear();
 
-            // AUTO-SETUP: If no record exists for this month, create it silently
-            if (!activeDrawId) {
-                const monthYear = getDrawMonthYear();
-                const newDraw = await createNewDraw(monthYear);
-                if (!newDraw) throw new Error('Failed to create monthly record. Please try again.');
-                activeDrawId = newDraw.id;
+            let activeDrawId = null;
+
+            // 1. Ensure we have an OPEN record for the target month
+            if (currentDraw && currentDraw.status === 'open') {
+                activeDrawId = currentDraw.id;
+            } else {
+                // If no current record or it's published, find/create for calendar month
+                const newDraw = await createNewDraw(targetMonth);
+                if (!newDraw) throw new Error(`Failed to initialize record for ${targetMonth}.`);
+
+                if (newDraw.status === 'published') {
+                    // If the draw for the target month is already published,
+                    // it means we missed a cycle or are ahead.
+                    // Try to create/use the next month's draw.
+                    const nextMonth = getNextMonthName(targetMonth);
+                    const nextDraw = await createNewDraw(nextMonth);
+                    if (!nextDraw) throw new Error(`Failed to initialize record for ${nextMonth}.`);
+                    activeDrawId = nextDraw.id;
+                } else {
+                    activeDrawId = newDraw.id;
+                }
             }
 
+            // 2. Execute and Publish
             const result = await runDraw(activeDrawId, rangeMin, rangeMax);
             if (!result.success) throw new Error(result.error || 'Draw execution failed');
 
             const publishResult = await publishDraw(activeDrawId);
             if (!publishResult.success) throw new Error(publishResult.error || 'Publish failed');
+
+            // 3. Automation: Proactively create the NEXT record to ensure cycle continuity
+            try {
+                const finishedMonth = (currentDraw?.month_year || targetMonth); // Use the month that was just published
+                const nextMonth = getNextMonthName(finishedMonth);
+                await createNewDraw(nextMonth);
+            } catch (nextMonthErr) {
+                console.warn('Failed to auto-create next month record:', nextMonthErr);
+            }
 
             setIsPublished(true);
             setAnalysisResults(null);
@@ -215,6 +263,12 @@ export default function DrawControl() {
             setIsPublishing(false);
         }
     };
+
+    const activeCycleMonth = currentDraw && currentDraw.status === 'open'
+        ? currentDraw.month_year
+        : getDrawMonthYear();
+
+    const isFutureDraw = isFutureCycle(activeCycleMonth);
 
     if (loading) {
         return (
@@ -294,12 +348,12 @@ export default function DrawControl() {
                                             onChange={(e) => setRangeMax(parseInt(e.target.value) || 45)}
                                         />
                                     </div>
-                                    <Button onClick={runAnalysis} fullWidth disabled={isAnalyzing}>
+                                    <Button onClick={runAnalysis} fullWidth disabled={isAnalyzing || isFutureDraw}>
                                         <div className="flex items-center justify-center gap-2">
                                             {isAnalyzing ? (
                                                 <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /><span>Analyzing...</span></>
                                             ) : (
-                                                <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg><span>Run Analysis</span></>
+                                                <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg><span>{isFutureDraw ? 'Starts next month' : 'Run Analysis'}</span></>
                                             )}
                                         </div>
                                     </Button>
@@ -329,18 +383,25 @@ export default function DrawControl() {
                                                 {currentDraw && currentDraw.status !== 'published' ? 'Active Cycle' : 'Upcoming Cycle'}
                                             </h4>
                                             <p className="text-xl font-black text-white tracking-tight">
-                                                {currentDraw && currentDraw.status !== 'published'
+                                                {currentDraw && currentDraw.status === 'open'
                                                     ? currentDraw.month_year
                                                     : getDrawMonthYear()}
                                             </p>
                                             <div className="flex items-center gap-2 mt-2">
-                                                <span className={`w-2 h-2 rounded-full ${currentDraw && currentDraw.status !== 'published' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]' : 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'}`} />
+                                                <span className={`w-2 h-2 rounded-full ${currentDraw && currentDraw.status === 'open' && !isFutureDraw ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]' : 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'}`} />
                                                 <p className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] font-black leading-none">
-                                                    {currentDraw && currentDraw.status !== 'published'
-                                                        ? currentDraw.status
-                                                        : `Starts ${getTimeUntilDraw().days}d ${getTimeUntilDraw().hours}h`}
+                                                    {currentDraw && currentDraw.status === 'open'
+                                                        ? (isFutureDraw ? 'Cycle locked until next month' : 'Ready to Run')
+                                                        : `Scheduled for ${getDrawMonthYear()}`}
                                                 </p>
                                             </div>
+                                            {isFutureDraw && (
+                                                <div className="mt-3 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                                                    <p className="text-[9px] text-amber-500 font-bold leading-tight">
+                                                        Note: You cannot run a draw for a future month. This cycle will unlock on the 1st.
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </CardContent>
@@ -520,9 +581,30 @@ export default function DrawControl() {
                                         </div>
 
                                         {!isPublished && (
-                                            <Button variant="accent" fullWidth onClick={handlePublish} disabled={isPublishing} className="h-16 text-lg font-bold">
-                                                {isPublishing ? "Publishing..." : "Lock & Publish results"}
-                                            </Button>
+                                            <div className="space-y-4">
+                                                {isFutureDraw && (
+                                                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-4">
+                                                        <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                                                            <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="text-sm text-zinc-300">
+                                                            <strong className="text-amber-400 block mb-1">Cycle Locked</strong>
+                                                            The February cycle is currently collecting data. You can only finalize results once the month has officially started.
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                <Button
+                                                    variant="accent"
+                                                    fullWidth
+                                                    onClick={handlePublish}
+                                                    disabled={isPublishing || isFutureDraw}
+                                                    className="h-16 text-lg font-bold"
+                                                >
+                                                    {isPublishing ? "Publishing..." : isFutureDraw ? "Execution Phase Not Started" : "Lock & Publish results"}
+                                                </Button>
+                                            </div>
                                         )}
                                     </CardContent>
                                 </Card>

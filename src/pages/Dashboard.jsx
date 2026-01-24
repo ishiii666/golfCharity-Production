@@ -14,8 +14,8 @@ import { getTimeUntilDraw, getNextDrawDateFormatted, DRAW_SCHEDULE_SHORT } from 
 export default function Dashboard() {
     const { user, isAdmin } = useAuth();
     const { scores, scoreValues, hasEnoughScores, averageScore, isLoading: scoresLoading } = useScores();
-    const { subscription, isActive, daysRemaining, planLabel, isLoading: subLoading } = useSubscription();
-    const { getCharityById } = useCharities();
+    const { subscription, isActive, daysRemaining, eligibilityInfo, planLabel, isLoading: subLoading } = useSubscription();
+    const { getCharityById, isLoading: charitiesLoading } = useCharities();
 
     // Redirect admins to admin dashboard - admins cannot participate in games
     if (isAdmin) {
@@ -28,7 +28,7 @@ export default function Dashboard() {
 
     const selectedCharity = user?.selectedCharityId ? getCharityById(user.selectedCharityId) : null;
 
-    if (scoresLoading || subLoading) {
+    if (scoresLoading || subLoading || charitiesLoading) {
         return (
             <PageTransition>
                 <div className="min-h-screen flex items-center justify-center">
@@ -288,12 +288,27 @@ export default function Dashboard() {
                                     </div>
                                     <p className="text-sm" style={{ color: 'var(--color-neutral-400)' }}>
                                         {planLabel}
-                                        {daysRemaining > 0 && ` • ${daysRemaining} days remaining`}
+                                        {subscription?.plan === 'monthly' ? ` • ${eligibilityInfo}` : (daysRemaining > 0 && ` • ${daysRemaining} days remaining`)}
                                     </p>
                                 </div>
                                 <Link to="/pricing">
-                                    <Button variant="outline" size="sm">
-                                        Manage Subscription
+                                    <Button
+                                        variant="outline"
+                                        size="md"
+                                        className="relative group overflow-hidden border-emerald-500/30 hover:border-emerald-500/50 transition-all duration-300"
+                                        style={{
+                                            background: 'rgba(16, 185, 129, 0.05)',
+                                            borderRadius: '12px',
+                                            paddingLeft: '24px',
+                                            paddingRight: '24px'
+                                        }}
+                                    >
+                                        <span className="relative z-10 flex items-center gap-2 text-emerald-400 font-bold uppercase tracking-wider text-xs">
+                                            Manage Plan
+                                            <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                            </svg>
+                                        </span>
                                     </Button>
                                 </Link>
                             </div>

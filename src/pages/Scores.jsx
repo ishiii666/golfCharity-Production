@@ -295,10 +295,31 @@ export default function Scores() {
                             <Input
                                 label="Stableford Score"
                                 type="number"
+                                inputMode="numeric"
                                 min="1"
                                 max="45"
                                 value={newScore}
-                                onChange={(e) => setNewScore(e.target.value)}
+                                onChange={(e) => {
+                                    // Remove any non-numeric characters just in case
+                                    const val = e.target.value.replace(/[^0-9]/g, '');
+                                    if (val === '') {
+                                        setNewScore('');
+                                        return;
+                                    }
+                                    const num = parseInt(val);
+                                    // Clamp to max 45 instantly for better UX
+                                    if (num > 45) {
+                                        setNewScore('45');
+                                    } else {
+                                        setNewScore(val);
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    // Block characters typically allowed in type="number" but not wanted here
+                                    if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+                                        e.preventDefault();
+                                    }
+                                }}
                                 placeholder="Enter score (1-45)"
                                 error={error && error.includes('Score') ? error : undefined}
                             />

@@ -7,6 +7,7 @@ import BackButton from '../../components/ui/BackButton';
 import { CountUp } from '../../components/ui/AnimatedNumber';
 import { staggerContainer, staggerItem, fadeUp } from '../../utils/animations';
 import { getAdminStats } from '../../lib/supabaseRest';
+import { supabase } from '../../lib/supabase';
 import { formatDrawDateShort, getNextDrawDate } from '../../utils/drawSchedule';
 
 // Helper function to format timestamps as relative time
@@ -30,6 +31,7 @@ export default function AdminDashboard() {
         totalCharities: 0,
         totalDonated: 0,
         recentActivity: [],
+        nextDrawDate: null,
         loading: true
     });
 
@@ -55,7 +57,7 @@ export default function AdminDashboard() {
         { label: 'Total Registered', value: stats.totalUsers, color: 'text-teal-400', icon: '👥' },
         { label: 'Active Subscribers', value: stats.activeSubscribers, color: 'text-emerald-400', icon: '⭐' },
         { label: 'Partner Charities', value: stats.totalCharities, color: 'text-amber-400', icon: '💚' },
-        { label: 'Total Donated', value: stats.totalDonated, prefix: '$', color: 'text-rose-400', icon: '💰' }
+        { label: 'Total Donated', prefix: '$', value: stats.totalDonated, color: 'text-rose-400', icon: '💰' }
     ];
 
     // Admin navigation cards
@@ -71,7 +73,7 @@ export default function AdminDashboard() {
             to: '/admin/draw',
             color: 'from-orange-500 to-amber-500',
             stat: 'Next draw',
-            statValue: formatDrawDateShort(getNextDrawDate())
+            statValue: stats.loading ? '...' : (stats.nextDrawDate || formatDrawDateShort(getNextDrawDate()))
         },
         {
             title: 'User Management',

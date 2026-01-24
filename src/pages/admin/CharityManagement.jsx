@@ -8,6 +8,7 @@ import Input from '../../components/ui/Input';
 import BackButton from '../../components/ui/BackButton';
 import { fadeUp, staggerContainer, staggerItem } from '../../utils/animations';
 import { getCharities, updateRow, deleteRow, uploadCharityImage, logActivity } from '../../lib/supabaseRest';
+import { useToast } from '../../components/ui/Toast';
 
 const categories = ['Health Research', 'Mental Health', 'Community Support', 'Children', 'Animal Welfare', 'Humanitarian', 'Education', 'Environment', 'Disability Support'];
 
@@ -19,7 +20,7 @@ export default function CharityManagement() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCharity, setEditingCharity] = useState(null);
-    const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
+    const { addToast } = useToast();
     const [imagePreview, setImagePreview] = useState(null);
     const [imageFile, setImageFile] = useState(null);
     const imageInputRef = useRef(null);
@@ -79,10 +80,7 @@ export default function CharityManagement() {
     );
 
     // Show action message with auto-dismiss
-    const showMessage = (type, text) => {
-        setActionMessage({ type, text });
-        setTimeout(() => setActionMessage({ type: '', text: '' }), 4000);
-    };
+
 
     // Navigate to add charity page
     const handleAddNew = () => {
@@ -99,7 +97,7 @@ export default function CharityManagement() {
         const file = e.target.files[0];
         if (file) {
             if (file.size > 5 * 1024 * 1024) {
-                showMessage('error', 'Image must be less than 5MB');
+                addToast('error', 'Image must be less than 5MB');
                 return;
             }
             setImageFile(file);
@@ -114,7 +112,7 @@ export default function CharityManagement() {
     const handleSave = async () => {
         // Validate required fields
         if (!formData.name.trim()) {
-            showMessage('error', 'Please enter a charity name.');
+            addToast('error', 'Please enter a charity name.');
             return;
         }
 
@@ -154,7 +152,7 @@ export default function CharityManagement() {
                         ? { ...c, ...formData, image: charityData.image_url }
                         : c
                 ));
-                showMessage('success', `"${formData.name}" updated successfully!`);
+                addToast('success', `"${formData.name}" updated successfully!`);
             } else {
                 console.log('📝 Creating new charity:', formData.name);
                 const result = await insertRow('charities', {
@@ -187,7 +185,7 @@ export default function CharityManagement() {
                     status: 'active'
                 };
                 setCharities(prev => [newCharity, ...prev]);
-                showMessage('success', `"${formData.name}" added successfully!`);
+                addToast('success', `"${formData.name}" added successfully!`);
             }
 
             setIsModalOpen(false);
@@ -196,11 +194,23 @@ export default function CharityManagement() {
         } catch (error) {
             console.error('Error saving charity:', error);
             const errorMsg = error.message || '';
+
             if (errorMsg.includes('42501') || errorMsg.includes('permission denied') || errorMsg.includes('401')) {
-                showMessage('error', 'Permission denied. Please make sure you are logged in as an admin.');
-            } else {
-                showMessage('error', 'Failed to save charity: ' + errorMsg);
+                addToast('error', 'Permission denied. Please make sure you are logged in as an admin.');
+                return;
             }
+
+            let displayError = errorMsg;
+            if (errorMsg.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(errorMsg);
+                    displayError = parsed.message || parsed.hint || errorMsg;
+                } catch (e) {
+                    // Stay with original message
+                }
+            }
+
+            addToast('error', 'Failed to save charity: ' + displayError);
         } finally {
             setSaving(false);
         }
@@ -256,10 +266,10 @@ export default function CharityManagement() {
             });
 
             setCharities(prev => prev.filter(c => c.id !== charityToDelete.id));
-            showMessage('success', `"${charityToDelete.name}" deleted successfully!`);
+            addToast('success', `"${charityToDelete.name}" deleted successfully!`);
         } catch (error) {
             console.error('Error deleting charity:', error);
-            showMessage('error', `Failed to delete: ${error.message || 'Unknown error'}`);
+            addToast('error', `Failed to delete: ${error.message || 'Unknown error'}`);
         } finally {
             setDeleteModalOpen(false);
             setCharityToDelete(null);
@@ -296,27 +306,7 @@ export default function CharityManagement() {
                         </Button>
                     </motion.div>
 
-                    {/* Action Message Notification */}
-                    <AnimatePresence>
-                        {actionMessage.text && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                                className={`mb-6 p-4 rounded-xl flex items-center gap-3 ${actionMessage.type === 'success'
-                                    ? 'bg-emerald-500/20 border border-emerald-500/30'
-                                    : 'bg-red-500/20 border border-red-500/30'
-                                    }`}
-                            >
-                                <span className={actionMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}>
-                                    {actionMessage.type === 'success' ? '✓' : '✕'}
-                                </span>
-                                <span className={actionMessage.type === 'success' ? 'text-emerald-300' : 'text-red-300'}>
-                                    {actionMessage.text}
-                                </span>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+
 
                     {/* Stats Cards */}
                     <motion.div

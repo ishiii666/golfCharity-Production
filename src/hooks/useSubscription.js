@@ -174,10 +174,9 @@ export function useSubscription() {
     useEffect(() => {
         if (!isLoading) {
             console.log('[SUBSCRIPTION] Final state:', {
-                user: user?.email,
-                status: subscription?.status,
                 isActive,
-                plan: subscription?.plan
+                plan: subscription?.plan,
+                draw: subscription?.assigned_draw_id
             });
         }
     }, [isLoading, subscription, user?.email, isActive]);
@@ -185,6 +184,13 @@ export function useSubscription() {
     const daysRemaining = subscription?.current_period_end
         ? Math.max(0, Math.ceil((new Date(subscription.current_period_end) - new Date()) / (1000 * 60 * 60 * 24)))
         : 0;
+
+    // Build a human-friendly eligibility message
+    const eligibilityInfo = subscription?.plan === 'annual'
+        ? 'Eligible for all draws'
+        : subscription?.assigned_draw_id
+            ? `Assigned to ${subscription.assigned_draw_month || 'current cycle'}`
+            : (isActive ? 'Entered in next draw' : 'No active draw entry');
 
     const planLabel = subscription?.plan === 'annual' ? 'Annual Plan - $108/year' : 'Monthly Plan - $9/month';
 
@@ -196,6 +202,7 @@ export function useSubscription() {
         isPastDue,
         isCancelled,
         daysRemaining,
+        eligibilityInfo,
         planLabel,
         refresh: fetchSubscription
     };
