@@ -340,9 +340,9 @@ function App() {
           {/* Scroll to top on route change */}
           <ScrollToTop />
           {/* Cinematic Entry Animation - temporarily disabled to fix black screen */}
-          {/* {showEntryAnimation && (
+          {showEntryAnimation && (
             <EntryAnimation onComplete={handleAnimationComplete} />
-          )} */}
+          )}
           <AppRoutes />
         </SmoothScroll>
       </AuthProvider>
