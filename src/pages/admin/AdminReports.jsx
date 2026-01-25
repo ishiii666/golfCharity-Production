@@ -73,7 +73,7 @@ export default function AdminReports() {
             setRevenueData(revenue);
             setUserGrowthData(growth);
 
-            console.log('📊 All report data loaded');
+            console.log('📊 Real-time report data synchronized');
         } catch (error) {
             console.error('Error fetching reports:', error);
         } finally {
@@ -87,6 +87,8 @@ export default function AdminReports() {
             setWinners(prev => prev.map(w =>
                 w.id === entryId ? { ...w, verification_status: status } : w
             ));
+            // Refresh stats since verification might affect donations
+            fetchAllData();
         }
     };
 
@@ -122,7 +124,7 @@ export default function AdminReports() {
         }
     };
 
-    const formatCurrency = (value) => `$${(value || 0).toLocaleString()}`;
+    const formatCurrency = (value) => `$${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     if (loading) {
         return (
@@ -132,7 +134,7 @@ export default function AdminReports() {
                         <div className="flex items-center justify-center min-h-[400px]">
                             <div className="text-center">
                                 <div className="w-12 h-12 mx-auto mb-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-                                <p className="text-zinc-400">Loading reports...</p>
+                                <p className="text-zinc-400 font-bold uppercase tracking-widest text-[10px]">Syncing Real-time Reports...</p>
                             </div>
                         </div>
                     </div>
@@ -146,40 +148,54 @@ export default function AdminReports() {
             <div className="py-8 lg:py-12">
                 <div className="container-app">
                     {/* Header */}
-                    <BackButton to="/admin" label="Admin Dashboard" className="mb-6" />
-                    <motion.div
-                        variants={fadeUp}
-                        initial="initial"
-                        animate="animate"
-                        className="flex items-center justify-between mb-8"
-                    >
-                        <div>
-                            <h1
-                                className="text-3xl lg:text-4xl font-bold mb-2"
-                                style={{ fontFamily: 'var(--font-display)', color: '#f9f5e3' }}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
+                        <div className="mb-4 md:mb-0">
+                            <BackButton to="/admin" label="Admin Dashboard" className="mb-6" />
+                            <motion.div
+                                variants={fadeUp}
+                                initial="initial"
+                                animate="animate"
                             >
-                                Reports & Analytics
-                            </h1>
-                            <p style={{ color: 'var(--color-neutral-400)' }}>
-                                Track revenue, user growth, and donation metrics
-                            </p>
+                                <h1
+                                    className="text-3xl lg:text-4xl font-bold mb-2"
+                                    style={{ fontFamily: 'var(--font-display)', color: '#f9f5e3' }}
+                                >
+                                    Reports & Analytics
+                                </h1>
+                                <p style={{ color: 'var(--color-neutral-400)' }}>
+                                    Live revenue tracking and donor metrics
+                                </p>
+                            </motion.div>
                         </div>
-                        <select
-                            value={timeRange}
-                            onChange={(e) => setTimeRange(e.target.value)}
-                            className="px-4 py-2 rounded-xl"
-                            style={{
-                                background: 'rgba(26, 77, 46, 0.3)',
-                                border: '1px solid rgba(201, 162, 39, 0.2)',
-                                color: '#f9f5e3'
-                            }}
-                        >
-                            <option value="1m" style={{ background: '#0f3621' }}>Last Month</option>
-                            <option value="3m" style={{ background: '#0f3621' }}>Last 3 Months</option>
-                            <option value="6m" style={{ background: '#0f3621' }}>Last 6 Months</option>
-                            <option value="1y" style={{ background: '#0f3621' }}>Last Year</option>
-                        </select>
-                    </motion.div>
+                        <div className="flex items-center gap-4">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center gap-2 border-emerald-500/30 font-black text-[10px] uppercase tracking-widest"
+                                onClick={fetchAllData}
+                            >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Refresh Sync
+                            </Button>
+                            <select
+                                value={timeRange}
+                                onChange={(e) => setTimeRange(e.target.value)}
+                                className="px-4 py-2 rounded-xl text-sm font-bold"
+                                style={{
+                                    background: 'rgba(26, 77, 46, 0.3)',
+                                    border: '1px solid rgba(201, 162, 39, 0.2)',
+                                    color: '#f9f5e3'
+                                }}
+                            >
+                                <option value="1m" style={{ background: '#0f3621' }}>Last Month</option>
+                                <option value="3m" style={{ background: '#0f3621' }}>Last 3 Months</option>
+                                <option value="6m" style={{ background: '#0f3621' }}>Last 6 Months</option>
+                                <option value="1y" style={{ background: '#0f3621' }}>Last Year</option>
+                            </select>
+                        </div>
+                    </div>
 
                     {/* Quick Stats */}
                     <motion.div
@@ -190,14 +206,14 @@ export default function AdminReports() {
                     >
                         {[
                             { label: 'Total Revenue', value: formatCurrency(stats?.totalRevenue), color: '#c9a227' },
-                            { label: 'Active Players', value: stats?.totalUsers?.toLocaleString() || '0', color: '#22c55e' },
+                            { label: 'Active Subscribers', value: stats?.activeSubscribers?.toLocaleString() || '0', color: '#22c55e' },
                             { label: 'Total Donated', value: formatCurrency(stats?.totalDonated), color: '#a855f7' },
                             { label: 'Current Jackpot', value: formatCurrency(jackpotData.current), color: '#f59e0b' }
                         ].map((stat) => (
                             <motion.div key={stat.label} variants={staggerItem}>
-                                <Card variant="glass" padding="p-4">
-                                    <p className="text-sm mb-1" style={{ color: 'var(--color-neutral-500)' }}>{stat.label}</p>
-                                    <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
+                                <Card variant="glass" padding="p-5">
+                                    <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: 'var(--color-neutral-500)' }}>{stat.label}</p>
+                                    <p className="text-2xl font-black" style={{ color: stat.color }}>{stat.value}</p>
                                 </Card>
                             </motion.div>
                         ))}

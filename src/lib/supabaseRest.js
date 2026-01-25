@@ -583,8 +583,6 @@ export async function adminUpdatePassword(userId, newPassword) {
 
 /**
  * Get admin dashboard stats - NOW WITH REAL DATA
-/**
- * Get admin dashboard stats - NOW WITH REAL DATA
  */
 export async function getAdminStats() {
     console.log('📊 Fetching admin stats (real data)...');
@@ -594,7 +592,8 @@ export async function getAdminStats() {
 
     // 1. Get profiles
     const playersRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&status=eq.active&select=id`, { headers });
-    const players = await playersRes.json();
+    const playersArr = await playersRes.json();
+    const players = Array.isArray(playersArr) ? playersArr : [];
 
     // 2. Fetch other stats
     const [charities, totalDonated, recentActivity, currentDraw] = await Promise.all([
@@ -1906,6 +1905,11 @@ export async function resetDraw(drawId) {
 
         if (!resetResponse.ok) throw new Error('Failed to reset draw record');
 
+        // 6. Delete associated donations
+        // This ensures the "Total Donated" metrics are updated correctly
+        const deleteDonationsUrl = `${SUPABASE_URL}/rest/v1/donations?draw_id=eq.${drawId}`;
+        await fetch(deleteDonationsUrl, { method: 'DELETE', headers });
+
         await logActivity('draw_reset', `Draw ${drawId} (${monthName}) has been reset to OPEN status.`);
         console.log('🔄 Draw reset successfully');
         return { success: true };
@@ -1975,49 +1979,43 @@ export async function createNewDraw(monthYear) {
  * Get draw analysis report for a specific draw
  * Returns winner counts by tier and payout details
  */
-export async function getDrawAnalysisReport(drawId = null) {
+export async function getDrawAnalysisReport() {
     try {
         const authToken = await getAuthToken();
+        const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-        // Get draw data
-        let drawUrl = `${SUPABASE_URL}/rest/v1/draws?select=*&order=created_at.desc`;
-        if (drawId) {
-            drawUrl += `&id=eq.${drawId}`;
-        }
-
-        const drawResponse = await fetch(drawUrl, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+        // ONLY GET COMPLETED OR PUBLISHED DRAWS FOR THE ANALYSIS REPORT
+        // This ensures the report only shows finished results, not 'Live' or 'Reset' draws.
+        const drawUrl = `${SUPABASE_URL}/rest/v1/draws?status=in.(completed,published)&select=*&order=draw_date.desc`;
+        const drawResponse = await fetch(drawUrl, { headers });
+        if (!drawResponse.ok) return [];
 
         const draws = await drawResponse.json();
+        if (!Array.isArray(draws)) return [];
 
-        // For each draw, get winner breakdown
         const reports = [];
         for (const draw of draws) {
             const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?draw_id=eq.${draw.id}&select=*`;
-            const entriesResponse = await fetch(entriesUrl, {
-                headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${authToken}`
-                }
-            });
-            const entries = await entriesResponse.json();
+            const entriesResponse = await fetch(entriesUrl, { headers });
+
+            let entries = [];
+            if (entriesResponse.ok) {
+                const data = await entriesResponse.json();
+                if (Array.isArray(data)) entries = data;
+            }
 
             reports.push({
                 ...draw,
                 entries_count: entries.length,
-                tier1_entries: entries.filter(e => e.tier === 1),
-                tier2_entries: entries.filter(e => e.tier === 2),
-                tier3_entries: entries.filter(e => e.tier === 3),
-                total_charity: entries.reduce((sum, e) => sum + (e.charity_amount || 0), 0),
-                total_payout: entries.reduce((sum, e) => sum + (e.net_payout || 0), 0)
+                tier1_winners: entries.filter(e => e.tier === 1).length,
+                tier2_winners: entries.filter(e => e.tier === 2).length,
+                tier3_winners: entries.filter(e => e.tier === 3).length,
+                total_charity: entries.reduce((sum, e) => sum + (Number(e.charity_amount) || 0), 0),
+                total_payout: entries.reduce((sum, e) => sum + (Number(e.net_payout) || 0), 0)
             });
         }
 
-        console.log('📊 Draw analysis report generated');
+        console.log('📊 Draw analysis reports generated:', reports.length);
         return reports;
     } catch (error) {
         console.error('Error getting draw analysis:', error);
@@ -2159,34 +2157,25 @@ export async function getJackpotHistory() {
  * Get winners for verification
  * Returns entries that need admin verification
  */
-export async function getWinnersForVerification(drawId = null) {
+export async function getWinnersForVerification() {
     try {
         const authToken = await getAuthToken();
+        const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-        // Simplified query - skip the joins that might fail
-        let url = `${SUPABASE_URL}/rest/v1/draw_entries?select=*&tier=not.is.null`;
-        if (drawId) {
-            url += `&draw_id=eq.${drawId}`;
-        }
-        url += '&order=created_at.desc';
+        // Fetch winners with draw and profile info
+        // We filter out winners from 'open' draws to ensure consistency with results
+        const url = `${SUPABASE_URL}/rest/v1/draw_entries?select=*,draws(month_year,status),profiles(full_name)&tier=not.is.null&draws.status=in.(completed,published)&order=created_at.desc`;
 
-        const response = await fetch(url, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+        const response = await fetch(url, { headers });
+        const data = await (response.ok ? response.json() : []);
 
-        const data = await response.json();
+        if (!Array.isArray(data)) return [];
 
-        // Ensure we always return an array
-        if (!Array.isArray(data)) {
-            console.warn('getWinnersForVerification received non-array:', data);
-            return [];
-        }
+        // Manual filter backup for Nested status check
+        const filteredData = data.filter(e => e.draws?.status !== 'open');
 
-        console.log('📊 Winners for verification:', data.length);
-        return data;
+        console.log('📊 Winners for verification:', filteredData.length);
+        return filteredData;
     } catch (error) {
         console.error('Error getting winners:', error);
         return [];
@@ -2480,43 +2469,32 @@ export async function getReportStats() {
         const authToken = await getAuthToken();
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-        // Get total subscriptions revenue (active * $5)
-        const subsUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=id`;
-        const subsResponse = await fetch(subsUrl, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
-        });
-        const subscriptions = await subsResponse.json();
-        const totalRevenue = subscriptions.length * 5; // $5 per user
+        // 1. Get current draw to scope subscribers (sync with dashboard)
+        const currentDraw = await getCurrentDraw();
+        const activeSubscribers = await getActiveSubscribersCount(currentDraw?.id);
 
-        // Get total users, filtered by role
-        const usersUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,role`;
-        const usersResponse = await fetch(usersUrl, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
-        });
-        const users = await usersResponse.json();
+        // 2. Calculate Total Revenue from the current pool
+        const totalRevenue = activeSubscribers * 5;
 
-        const players = users.filter(u => u.role !== 'admin');
-        const admins = users.filter(u => u.role === 'admin');
+        // 3. Get total players
+        const usersUrl = `${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&select=id`;
+        const usersResponse = await fetch(usersUrl, { headers });
+        const users = usersResponse.ok ? await usersResponse.json() : [];
+        const totalUsers = Array.isArray(users) ? users.length : 0;
 
-        // Get total donated
-        const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?select=charity_amount`;
-        const entriesResponse = await fetch(entriesUrl, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
-        });
-        const entries = await entriesResponse.json();
-        const totalDonated = entries.reduce((sum, e) => sum + (e.charity_amount || 0), 0);
+        // 4. Get total donated (uses donations table, cleaned by resetDraw)
+        const totalDonated = await getTotalDonations();
 
         return {
             totalRevenue,
-            activeUsers: subscriptions.length,
-            totalUsers: players.length, // Only count players in reports
-            totalAdmins: admins.length,
+            activeSubscribers,
+            totalUsers,
             totalDonated,
-            avgDonation: totalDonated > 0 ? totalDonated / entries.filter(e => e.charity_amount > 0).length : 0
+            avgDonation: totalDonated > 0 ? totalDonated / (activeSubscribers || 1) : 0
         };
     } catch (error) {
         console.error('Error getting report stats:', error);
-        return { totalRevenue: 0, activeUsers: 0, totalUsers: 0, totalAdmins: 0, totalDonated: 0, avgDonation: 0 };
+        return { totalRevenue: 0, activeSubscribers: 0, totalUsers: 0, totalDonated: 0, avgDonation: 0 };
     }
 }
 

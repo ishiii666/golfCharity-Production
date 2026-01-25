@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import ScrollytellingHero from '../components/home/ScrollytellingHero';
 import CharityImpactSection from '../components/home/CharityImpactSection';
+import ImpactMoment from '../components/home/ImpactMoment';
 import HowItWorksCTA from '../components/home/HowItWorksCTA';
 import CharityCarousel from '../components/home/CharityCarousel';
 import HowItWorks from '../components/home/HowItWorks';
 import LeaderboardSection from '../components/home/LeaderboardSection';
-import LuckyNumbersReveal from '../components/home/LuckyNumbersReveal';
 import WhyJoinSection from '../components/home/WhyJoinSection';
 import Button from '../components/ui/Button';
 import { GolferIcon, HeartIcon } from '../components/ui/Icons';
@@ -26,11 +26,11 @@ export default function Home() {
                 }}
             />
 
-            {/* NEW: Charity Impact Section - Moved to top priority */}
-            <CharityImpactSection />
+            {/* Impact Moment - Visual Breakthrough */}
+            <ImpactMoment />
 
-            {/* Lucky Numbers Reveal - Monthly Draw Results */}
-            <LuckyNumbersReveal />
+            {/* Charity Impact Section - Community Achievement */}
+            <CharityImpactSection />
 
             {/* How It Works CTA - Brief intro section */}
             <HowItWorksCTA />

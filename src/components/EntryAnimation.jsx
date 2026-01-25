@@ -26,7 +26,7 @@ const TIMING = {
     DROP_DURATION: 1500,     // 0.2s - 1.7s (faster drop)
     IMPACT_DURATION: 150,    // 1.7s - 1.85s
     LOGO_DURATION: 1200,     // 1.85s - 3.05s
-    EXIT_DURATION: 400,      // Fade out duration
+    EXIT_DURATION: 500,      // Fade out duration
     TOTAL: 3050              // Total animation time
 };
 
@@ -192,7 +192,7 @@ export default function EntryAnimation({ onComplete }) {
         <AnimatePresence>
             {isVisible && (
                 <motion.div
-                    className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
+                    className="fixed inset-0 z-[999] flex items-center justify-center overflow-hidden"
                     style={{ backgroundColor: '#020202', pointerEvents: phase === PHASES.EXIT ? 'none' : 'auto' }}
                     variants={overlayVariants}
                     initial="visible"
