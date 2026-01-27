@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Card from '../ui/Card';
 import { HeartIcon, GolfFlagIcon, TargetIcon, HandshakeIcon } from '../ui/Icons';
-import { getHomePageStats, getSiteContent } from '../../lib/supabaseRest';
+import { getSiteContent } from '../../lib/supabaseRest';
 
 /**
  * HowItWorks - Premium dynamic explanation with charity focus
@@ -46,34 +46,14 @@ const defaultSteps = [
     }
 ];
 
-// Build impact stats from fetched data
-function buildImpactStats(stats) {
-    const avgDonation = stats.golferCount > 0
-        ? Math.round((stats.totalRaised / (stats.golferCount * 10)) * 100)
-        : 25;
-
-    return [
-        { label: 'Average Donation', value: `${Math.min(avgDonation, 100)}%`, color: '#10b981' },
-        { label: 'Golfers This Year', value: stats.golferCount?.toLocaleString() || '0', color: '#ffffff' },
-        { label: 'Total to Charities', value: `$${Math.round((stats.totalRaised || 0) / 1000)}K+`, color: '#34d399' }
-    ];
-}
 
 export default function HowItWorks() {
-    const [impactStats, setImpactStats] = useState([
-        { label: 'Average Donation', value: '...', color: '#10b981' },
-        { label: 'Golfers This Year', value: '...', color: '#ffffff' },
-        { label: 'Total to Charities', value: '...', color: '#34d399' }
-    ]);
     const [dynamicSteps, setDynamicSteps] = useState(defaultSteps);
 
     // Fetch real data from database
     useEffect(() => {
         async function fetchData() {
             try {
-                // Fetch impact stats
-                const stats = await getHomePageStats();
-                setImpactStats(buildImpactStats(stats));
 
                 // Fetch CMS content
                 const content = await getSiteContent();
@@ -209,47 +189,7 @@ export default function HowItWorks() {
                     ))}
                 </div>
 
-                {/* Impact Stats Instead of Prize Distribution */}
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                >
-                    <Card variant="gradient" className="max-w-3xl mx-auto">
-                        <h3
-                            className="text-2xl font-bold text-center mb-8 text-white"
-                            style={{ fontFamily: 'var(--font-display)' }}
-                        >
-                            Our Community's Impact
-                        </h3>
 
-                        <div className="grid grid-cols-3 gap-4 lg:gap-8">
-                            {impactStats.map((stat) => (
-                                <motion.div
-                                    key={stat.label}
-                                    className="text-center"
-                                    whileHover={{ scale: 1.05 }}
-                                    transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-                                >
-                                    <div
-                                        className="text-3xl lg:text-4xl font-bold mb-2"
-                                        style={{ fontFamily: 'var(--font-display)', color: stat.color }}
-                                    >
-                                        {stat.value}
-                                    </div>
-                                    <div className="text-sm text-zinc-400">
-                                        {stat.label}
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-
-                        <p className="text-center text-sm mt-8 text-zinc-500">
-                            Every golfer in our community is making a difference, one round at a time.
-                        </p>
-                    </Card>
-                </motion.div>
             </div>
         </section>
     );

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
@@ -13,6 +14,25 @@ import { GolferIcon, HeartIcon } from '../components/ui/Icons';
 // are kept in the project but removed from the Home page layout as requested.
 
 export default function Home() {
+    const [isReady, setIsReady] = useState(() => {
+        // Correct check for sessionStorage
+        return sessionStorage.getItem('entryAnimationPlayed') === 'true';
+    });
+
+    useEffect(() => {
+        if (!isReady) {
+            // Wait for EntryAnimation (3.05s total + 0.5s fade-out)
+            const timer = setTimeout(() => {
+                setIsReady(true);
+            }, 3200);
+            return () => clearTimeout(timer);
+        }
+    }, [isReady]);
+
+    if (!isReady) {
+        return <div className="min-h-screen bg-[#020202]" />;
+    }
+
     return (
         <PageTransition>
             {/* 1. Impact Moment - Visual Breakthrough */}
