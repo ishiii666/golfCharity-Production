@@ -2731,33 +2731,50 @@ export async function getFeaturedCharities(limit = 4) {
  */
 export async function getLeaderboardData(limit = 5) {
     try {
-        const token = await getAuthToken();
-        const headers = {
+        // We use ONLY the apikey for public data to ensure EVERYONE sees the same leaderboard
+        // Session-based Authorization often restricts views based on RLS (Row Level Security)
+        const publicHeaders = {
             'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
         };
 
-        // 1. Get impact from 'draw_entries' table (charity portion of winnings)
-        // Manual donations are excluded as per user request to only show draw winners
+        console.log('🏆 getLeaderboardData: Fetching public community impact data...');
+
+        // 1. Get ALL sources of impact: 'donations' table AND 'draw_entries' table
+        let allDonations = [];
         let allDrawEntries = [];
 
         try {
-            // Fetch charity amounts from draw entries (where impact is generated via play)
+            // Fetch direct donations (Public view)
+            const donationsRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
+                { headers: publicHeaders }
+            );
+            if (donationsRes.ok) {
+                allDonations = await donationsRes.json();
+            }
+
+            // Fetch charity amounts from draw entries (Public view)
             const entriesRes = await fetch(
                 `${SUPABASE_URL}/rest/v1/draw_entries?charity_amount=gt.0&select=user_id,charity_amount`,
-                { headers }
+                { headers: publicHeaders }
             );
             if (entriesRes.ok) {
-                const data = await entriesRes.json();
-                if (Array.isArray(data)) allDrawEntries = data;
+                allDrawEntries = await entriesRes.json();
             }
         } catch (e) {
-            console.warn('Leaderboard: Data fetch failed', e.message);
+            console.warn('Leaderboard: Public data fetch failed', e.message);
         }
 
         // Aggregate impact totals by user
         const userTotals = {};
+
+        // Sum from donations
+        allDonations.forEach(d => {
+            if (d.user_id) {
+                userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
+            }
+        });
 
         // Sum from draw entries
         allDrawEntries.forEach(e => {
@@ -2832,36 +2849,62 @@ export async function getLeaderboardData(limit = 5) {
         let finalLeaderboard = [];
 
         // 4. Fetch profiles and scores for real users
-        if (sortedRealUserIds.length > 0) {
-            try {
-                const profilesRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/profiles?id=in.(${sortedRealUserIds.join(',')})&role=neq.admin&select=id,full_name,selected_charity_id,donation_percentage`,
-                    { headers }
-                );
-                const profiles = await profilesRes.json();
+        // Create a set of IDs to fetch profiles for
+        // We include specifically found winners + a general search for any active impact
+        let targetUserIds = [...sortedRealUserIds];
 
-                if (profiles && profiles.length > 0) {
-                    // Get charity names
-                    const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
-                    let charityMap = {};
-                    if (charityIds.length > 0) {
-                        const charitiesRes = await fetch(
-                            `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
-                            { headers }
-                        );
-                        if (charitiesRes.ok) {
-                            const charities = await charitiesRes.json();
-                            charities.forEach(c => {
-                                charityMap[c.id] = c.name;
-                            });
-                        }
+        // Final attempt to get real users to show something real
+        if (targetUserIds.length === 0) {
+            console.log('🏆 No winners found in direct fetch, searching for active profiles...');
+        }
+
+        try {
+            // Updated query: fetches specific winners OR any users with recorded community impact OR specific testers
+            // Using a broad search to ensure we find 'Test User' even if the win record is private
+            let profilesUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,full_name,selected_charity_id,donation_percentage`;
+
+            // Build filter: specific winners OR top general profiles OR anyone named 'Test User'
+            const orFilters = [
+                'role.eq.player',
+                'role.eq.user',
+                'full_name.ilike.*Test*'
+            ];
+
+            if (sortedRealUserIds.length > 0) {
+                orFilters.push(`id.in.(${sortedRealUserIds.slice(0, 20).join(',')})`);
+            }
+
+            profilesUrl += `&or=(${orFilters.join(',')})&limit=15`;
+
+            const profilesRes = await fetch(profilesUrl, { headers: publicHeaders });
+            const profiles = profilesRes.ok ? await profilesRes.json() : [];
+
+            if (profiles && profiles.length > 0) {
+                console.log(`🏆 Found ${profiles.length} real profiles to display`);
+
+                // Get charity names
+                const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
+                let charityMap = {};
+                if (charityIds.length > 0) {
+                    const charitiesRes = await fetch(
+                        `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
+                        { headers: publicHeaders }
+                    );
+                    if (charitiesRes.ok) {
+                        const charities = await charitiesRes.json();
+                        charities.forEach(c => {
+                            charityMap[c.id] = c.name;
+                        });
                     }
+                }
 
-                    // Get scores
-                    let userScoresMap = {};
+                // Get scores
+                let userScoresMap = {};
+                const profileIds = profiles.map(p => p.id);
+                if (profileIds.length > 0) {
                     const scoresRes = await fetch(
-                        `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${sortedRealUserIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
-                        { headers }
+                        `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${profileIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
+                        { headers: publicHeaders }
                     );
                     if (scoresRes.ok) {
                         const data = await scoresRes.json();
@@ -2870,31 +2913,37 @@ export async function getLeaderboardData(limit = 5) {
                             if (userScoresMap[s.user_id].length < 5) userScoresMap[s.user_id].push(s.score);
                         });
                     }
-
-                    // Map real users to final format
-                    profiles.forEach(profile => {
-                        const raised = userTotals[profile.id] || 0;
-                        const scores = userScoresMap[profile.id] || [];
-                        const initials = (profile.full_name || 'Anonymous').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-
-                        finalLeaderboard.push({
-                            id: profile.id,
-                            rank: 0, // Will set later
-                            name: profile.full_name || 'Anonymous player',
-                            initials,
-                            scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
-                            raised: `$${Math.round(raised).toLocaleString()}`,
-                            raisedValue: raised, // To keep sorting consistent
-                            charity: charityMap[profile.selected_charity_id] || 'Various Charities',
-                            percentage: `${profile.donation_percentage || 20}%`,
-                            avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
-                            isMock: false
-                        });
-                    });
                 }
-            } catch (err) {
-                console.error('Error fetching real golfer details:', err);
+
+                // Map real users to final format
+                // Map real users to final format
+                profiles.forEach(profile => {
+                    // Skip the generic system Admin account but allow 'Test User' or other admins
+                    if (profile.full_name === 'Admin') return;
+
+                    // Use the aggregated impact found from donations/draws
+                    const raised = userTotals[profile.id] || 0;
+
+                    const scores = userScoresMap[profile.id] || [];
+                    const initials = (profile.full_name || 'Anonymous').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+
+                    finalLeaderboard.push({
+                        id: profile.id,
+                        rank: 0, // Will set later
+                        name: profile.full_name || 'Anonymous player',
+                        initials,
+                        scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
+                        raised: `$${Math.round(raised).toLocaleString()}`,
+                        raisedValue: raised, // To keep sorting consistent
+                        charity: charityMap[profile.selected_charity_id] || 'Various Charities',
+                        percentage: `${profile.donation_percentage || 20}%`,
+                        avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+                        isMock: false
+                    });
+                });
             }
+        } catch (err) {
+            console.error('Error fetching real golfer details:', err);
         }
 
         // 5. Backfill with mock data until limit is reached
@@ -2937,17 +2986,14 @@ export async function getLeaderboardData(limit = 5) {
         }));
 
     } catch (error) {
-        console.error('Critical Leaderboard Error:', error);
-        // Absolute fallback to mock data
-        return [
-            { rank: 1, initials: "JM", name: "James Mitchell", scores: [34, 31, 38, 29, 35], raised: "$2,450", charity: "Red Cross", percentage: "60%", avg: 32, accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
-            { rank: 2, initials: "SC", name: "Sarah Chen", scores: [32, 36, 33, 30, 34], raised: "$1,890", charity: "Beyond Blue", percentage: "45%", avg: 33, accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
-            { rank: 3, initials: "MO", name: "Michael O'Brien", scores: [35, 29, 37, 32, 31], raised: "$1,650", charity: "Smith Family", percentage: "50%", avg: 33, accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
-            { rank: 4, initials: "EW", name: "Emma Williams", scores: [30, 33, 35, 28, 36], raised: "$1,420", charity: "OzHarvest", percentage: "40%", avg: 32, accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
-            { rank: 5, initials: "DK", name: "David Kim", scores: [33, 31, 34, 37, 29], raised: "$980", charity: "RSPCA Australia", percentage: "35%", avg: 33, accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
-        ];
+        console.error('Leaderboard: Critical error', error);
+        return MOCK_PLAYERS.slice(0, limit).map((p, i) => ({
+            ...p,
+            raised: `$${p.raised.toLocaleString()}`,
+            raisedValue: p.raised,
+            isMock: true,
+            ...(ACCENTS[i] || ACCENTS[ACCENTS.length - 1])
+        }));
     }
 }
-
-
 

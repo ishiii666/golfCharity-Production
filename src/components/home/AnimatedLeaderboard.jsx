@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
+import { getLeaderboardData } from '../../lib/supabaseRest';
 
 /**
  * AnimatedLeaderboard - Premium animated leaderboard with 3D tilt
@@ -12,14 +13,7 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
  * - Glassmorphism styling
  */
 
-// Mock leaderboard data
-const mockPlayers = [
-    { id: 1, rank: 1, name: 'James Mitchell', scores: [34, 31, 38, 29, 35], totalRaised: 2450, charity: 'Beyond Blue', donationPct: 50, avatar: 'JM' },
-    { id: 2, rank: 2, name: 'Sarah Chen', scores: [32, 36, 33, 30, 34], totalRaised: 1890, charity: 'Cancer Council', donationPct: 75, avatar: 'SC' },
-    { id: 3, rank: 3, name: 'Michael O\'Brien', scores: [35, 29, 37, 32, 31], totalRaised: 1650, charity: 'Salvation Army', donationPct: 40, avatar: 'MO' },
-    { id: 4, rank: 4, name: 'Emma Williams', scores: [30, 33, 35, 28, 36], totalRaised: 1420, charity: 'Red Cross', donationPct: 60, avatar: 'EW' },
-    { id: 5, rank: 5, name: 'David Kim', scores: [33, 31, 34, 37, 29], totalRaised: 980, charity: 'Starlight', donationPct: 35, avatar: 'DK' }
-];
+
 
 function PlayerRow({ player, index, isExpanded, onToggle }) {
     // 3D tilt state
@@ -188,11 +182,57 @@ function PlayerRow({ player, index, isExpanded, onToggle }) {
 
 export default function AnimatedLeaderboard({ title = 'Top Players This Month' }) {
     const [expandedId, setExpandedId] = useState(null);
-    const [players] = useState(mockPlayers);
+    const [players, setPlayers] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchLiveLeaderboard() {
+            try {
+                setLoading(true);
+                // Fetch top 5 players (includes 'Test User' via the special recovery logic we added)
+                const liveData = await getLeaderboardData(5);
+
+                // Map the shared data structure to the props this component expects
+                const mappedPlayers = liveData.map(p => ({
+                    id: p.id || Math.random(),
+                    rank: p.rank,
+                    name: p.name,
+                    scores: p.scores || [0, 0, 0, 0, 0],
+                    totalRaised: p.raisedValue || 0,
+                    charity: p.charity,
+                    donationPct: parseInt(p.percentage) || 20,
+                    avatar: p.initials || '??'
+                }));
+
+                setPlayers(mappedPlayers);
+            } catch (error) {
+                console.error('Failed to load leaderboard:', error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchLiveLeaderboard();
+    }, []);
 
     const handleToggle = (id) => {
         setExpandedId(expandedId === id ? null : id);
     };
+
+    if (loading) {
+        return (
+            <div className="space-y-4 animate-pulse">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="h-8 bg-white/5 rounded-lg w-1/2" />
+                </div>
+                <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="h-20 bg-white/5 rounded-2xl" />
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
