@@ -49,7 +49,7 @@ export default function FAQ() {
             questions: [
                 {
                     q: 'How are winners selected each month?',
-                    a: 'Our unique algorithm analyzes all entered scores and selects the least common score combinations as winners. This means rare, unique score patterns have better odds! The draw is conducted transparently on the last day of each month, and results are published immediately.'
+                    a: 'Our unique algorithm analyzes all entered scores and selects the least common score combinations as winners. This means rare, unique score patterns have better odds! The draw is conducted transparently on the 9th of each month, and results are published immediately.'
                 },
                 {
                     q: 'What happens when I win?',
@@ -70,7 +70,7 @@ export default function FAQ() {
                 },
                 {
                     q: 'How do charities get the donation money?',
-                    a: 'Donations are transferred directly to charities at the end of each month. We maintain complete transparency - you can track your contributions in your dashboard, and charities receive detailed reports. 100% of the donation portion goes to charity; we don\'t take any cut from donations.'
+                    a: 'Donations are transferred directly to charities shortly after each monthly draw on the 9th. We maintain complete transparency - you can track your contributions in your dashboard, and charities receive detailed reports. 100% of the donation portion goes to charity; we don\'t take any cut from donations.'
                 },
                 {
                     q: 'Can my golf club or company become a charity partner?',
@@ -91,7 +91,7 @@ export default function FAQ() {
                 },
                 {
                     q: 'Can I update my scores after entering them?',
-                    a: 'You can update your scores up until the draw deadline (last day of each month at 11:59 PM AEST). After the draw, scores are locked for that month. New scores you enter will apply to the next month\'s draw.'
+                    a: 'You can update your scores up until the draw deadline (24 hours before the draw on the 9th). After the draw, scores are locked for that month. New scores you enter will apply to the next month\'s draw.'
                 }
             ]
         }

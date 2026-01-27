@@ -2738,9 +2738,12 @@ export async function getLeaderboardData(limit = 5) {
             'Content-Type': 'application/json'
         };
 
-        // 1. Get all donations and aggregate by user
+        // 1. Get ALL sources of impact: 'donations' table AND 'draw_entries' table
         let allDonations = [];
+        let allDrawEntries = [];
+
         try {
+            // Fetch direct donations
             const donationsRes = await fetch(
                 `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
                 { headers }
@@ -2749,245 +2752,216 @@ export async function getLeaderboardData(limit = 5) {
                 const data = await donationsRes.json();
                 if (Array.isArray(data)) allDonations = data;
             }
+
+            // Fetch charity amounts from draw entries (where impact is generated via play)
+            const entriesRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/draw_entries?charity_amount=gt.0&select=user_id,charity_amount`,
+                { headers }
+            );
+            if (entriesRes.ok) {
+                const data = await entriesRes.json();
+                if (Array.isArray(data)) allDrawEntries = data;
+            }
         } catch (e) {
-            console.warn('Leaderboard: Donations fetch failed', e.message);
+            console.warn('Leaderboard: Data fetch failed', e.message);
         }
 
+        // Aggregate impact totals by user
         const userTotals = {};
+
+        // Sum from donations
         allDonations.forEach(d => {
             if (d.user_id) {
                 userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
             }
         });
 
-        // 2. Sort and get top user IDs
-        const topUserIds = Object.entries(userTotals)
+        // Sum from draw entries (charity portion of winnings)
+        allDrawEntries.forEach(e => {
+            if (e.user_id) {
+                userTotals[e.user_id] = (userTotals[e.user_id] || 0) + (parseFloat(e.charity_amount) || 0);
+            }
+        });
+
+        // 2. Sort real users by combined impact
+        const sortedRealUserIds = Object.entries(userTotals)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, limit)
             .map(([id]) => id);
 
-        if (topUserIds.length === 0) {
-            // Fallback: Get some profiles if no donations yet
-            const profilesRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/profiles?select=id,full_name,selected_charity_id,donation_percentage&limit=${limit}`,
-                { headers }
-            );
-            const profiles = await profilesRes.json();
-            topUserIds.push(...profiles.map(p => p.id));
-        }
-        let leaderboard = [];
-        if (topUserIds.length === 0) {
-            // No users found at all, we'll let it fall through to the mock data fallback
-            console.log('ℹ️ No golfers found in database, falling back to mock data');
-        } else {
-            // 3. Get profiles for top users, ensuring they are not admins
-            const profilesRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/profiles?id=in.(${topUserIds.join(',')})&role=neq.admin&select=id,full_name,selected_charity_id,donation_percentage`,
-                { headers }
-            );
-            const profiles = await profilesRes.json();
-
-            // 4. Get charity names
-            const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
-            let charityMap = {};
-            if (charityIds.length > 0) {
-                const charitiesRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
-                    { headers }
-                );
-                const charities = await charitiesRes.json();
-                charities.forEach(c => {
-                    charityMap[c.id] = c.name;
-                });
+        // 3. Define the "Placeholder Champions" (Mock data for backfilling)
+        const MOCK_PLAYERS = [
+            {
+                name: "James Mitchell",
+                initials: "JM",
+                scores: [34, 31, 38, 29, 35],
+                raised: 2450,
+                charity: "Red Cross",
+                donation_percentage: 60,
+                avg: 32
+            },
+            {
+                name: "Sarah Chen",
+                initials: "SC",
+                scores: [32, 36, 33, 30, 34],
+                raised: 1890,
+                charity: "Beyond Blue",
+                donation_percentage: 45,
+                avg: 33
+            },
+            {
+                name: "Michael O'Brien",
+                initials: "MO",
+                scores: [35, 29, 37, 32, 31],
+                raised: 1650,
+                charity: "Smith Family",
+                donation_percentage: 50,
+                avg: 33
+            },
+            {
+                name: "Emma Williams",
+                initials: "EW",
+                scores: [30, 33, 35, 28, 36],
+                raised: 1420,
+                charity: "OzHarvest",
+                donation_percentage: 40,
+                avg: 32
+            },
+            {
+                name: "David Kim",
+                initials: "DK",
+                scores: [33, 31, 34, 37, 29],
+                raised: 980,
+                charity: "RSPCA Australia",
+                donation_percentage: 35,
+                avg: 33
             }
+        ];
 
-            // 5. Get scores for top users
-            let userScoresMap = {};
+        // Style presets for the ranks
+        const ACCENTS = [
+            { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
+            { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
+            { accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
+            { accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
+            { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
+        ];
+
+        let finalLeaderboard = [];
+
+        // 4. Fetch profiles and scores for real users
+        if (sortedRealUserIds.length > 0) {
             try {
-                const scoresRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${topUserIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
+                // Fetch profiles - excluding admins specifically
+                const profilesRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/profiles?id=in.(${sortedRealUserIds.join(',')})&role=neq.admin&select=id,full_name,selected_charity_id,donation_percentage`,
                     { headers }
                 );
-                if (scoresRes.ok) {
-                    const data = await scoresRes.json();
-                    if (Array.isArray(data)) {
+                const profiles = await profilesRes.json();
+
+                if (profiles && profiles.length > 0) {
+                    // Get charity names
+                    const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
+                    let charityMap = {};
+                    if (charityIds.length > 0) {
+                        const charitiesRes = await fetch(
+                            `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
+                            { headers }
+                        );
+                        if (charitiesRes.ok) {
+                            const charities = await charitiesRes.json();
+                            charities.forEach(c => {
+                                charityMap[c.id] = c.name;
+                            });
+                        }
+                    }
+
+                    // Get scores
+                    let userScoresMap = {};
+                    const scoresRes = await fetch(
+                        `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${sortedRealUserIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
+                        { headers }
+                    );
+                    if (scoresRes.ok) {
+                        const data = await scoresRes.json();
                         data.forEach(s => {
                             if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = [];
-                            if (userScoresMap[s.user_id].length < 5) {
-                                userScoresMap[s.user_id].push(s.score);
-                            }
+                            if (userScoresMap[s.user_id].length < 5) userScoresMap[s.user_id].push(s.score);
                         });
                     }
+
+                    // Map real users to final format
+                    profiles.forEach(profile => {
+                        const raised = userTotals[profile.id] || 0;
+                        const scores = userScoresMap[profile.id] || [];
+                        const initials = (profile.full_name || 'Anonymous').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+
+                        finalLeaderboard.push({
+                            id: profile.id,
+                            rank: 0, // Will set later
+                            name: profile.full_name || 'Anonymous player',
+                            initials,
+                            scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
+                            raised: `$${Math.round(raised).toLocaleString()}`,
+                            raisedValue: raised, // To keep sorting consistent
+                            charity: charityMap[profile.selected_charity_id] || 'Various Charities',
+                            percentage: `${profile.donation_percentage || 20}%`,
+                            avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+                            isMock: false
+                        });
+                    });
                 }
-            } catch (e) {
-                console.warn('Leaderboard: Scores fetch failed', e.message);
+            } catch (err) {
+                console.error('Error fetching real golfer details:', err);
             }
+        }
 
-            // 6. Assemble leaderboard
-            leaderboard = topUserIds.map((userId, index) => {
-                const profile = profiles.find(p => p.id === userId) || { full_name: 'Anonymous' };
-                const name = profile.full_name || 'Anonymous';
-                const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-                const raised = userTotals[userId] || 0;
-                const scores = userScoresMap[userId] || [0, 0, 0, 0, 0];
-                const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+        // Sort combined real users
+        finalLeaderboard.sort((a, b) => b.raisedValue - a.raisedValue);
 
-                // Generate some consistent accents based on rank
-                const accents = [
-                    { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
-                    { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
-                    { accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
-                    { accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
-                    { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
-                ];
-
-                return {
-                    rank: index + 1,
-                    id: userId,
-                    initials,
-                    name,
-                    scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
-                    raised: `$${raised.toLocaleString()}`,
-                    charity: charityMap[profile.selected_charity_id] || 'Various Charities',
-                    percentage: `${profile.donation_percentage || 20}%`,
-                    avg,
-                    ...(accents[index] || accents[accents.length - 1])
-                };
+        // 5. Backfill with mock data until limit is reached
+        let mockIndex = 0;
+        while (finalLeaderboard.length < limit && mockIndex < MOCK_PLAYERS.length) {
+            const mock = MOCK_PLAYERS[mockIndex];
+            finalLeaderboard.push({
+                ...mock,
+                rank: finalLeaderboard.length + 1,
+                raised: `$${mock.raised.toLocaleString()}`,
+                raisedValue: mock.raised,
+                isMock: true
             });
+            mockIndex++;
         }
 
-        // 7. Fallback to mock data if no database players
-        if (leaderboard.length === 0) {
-            return [
-                {
-                    rank: 1,
-                    initials: "JM",
-                    name: "James Mitchell",
-                    scores: [34, 31, 38, 29, 35],
-                    raised: "$2,450",
-                    charity: "Red Cross",
-                    percentage: "60%",
-                    avg: 32,
-                    accent: "from-emerald-400 to-teal-600",
-                    glow: "rgba(16, 185, 129, 0.3)"
-                },
-                {
-                    rank: 2,
-                    initials: "SC",
-                    name: "Sarah Chen",
-                    scores: [32, 36, 33, 30, 34],
-                    raised: "$1,890",
-                    charity: "Beyond Blue",
-                    percentage: "45%",
-                    avg: 33,
-                    accent: "from-teal-400 to-emerald-600",
-                    glow: "rgba(20, 184, 166, 0.3)"
-                },
-                {
-                    rank: 3,
-                    initials: "MO",
-                    name: "Michael O'Brien",
-                    scores: [35, 29, 37, 32, 31],
-                    raised: "$1,650",
-                    charity: "Smith Family",
-                    percentage: "50%",
-                    avg: 33,
-                    accent: "from-lime-400 to-emerald-600",
-                    glow: "rgba(163, 230, 53, 0.3)"
-                },
-                {
-                    rank: 4,
-                    initials: "EW",
-                    name: "Emma Williams",
-                    scores: [30, 33, 35, 28, 36],
-                    raised: "$1,420",
-                    charity: "OzHarvest",
-                    percentage: "40%",
-                    avg: 32,
-                    accent: "from-emerald-500 to-emerald-800",
-                    glow: "rgba(16, 185, 129, 0.2)"
-                },
-                {
-                    rank: 5,
-                    initials: "DK",
-                    name: "David Kim",
-                    scores: [33, 31, 34, 37, 29],
-                    raised: "$980",
-                    charity: "RSPCA Australia",
-                    percentage: "35%",
-                    avg: 33,
-                    accent: "from-zinc-500 to-zinc-800",
-                    glow: "rgba(113, 113, 122, 0.2)"
-                },
-            ];
-        }
-
-        return leaderboard;
-    } catch (error) {
-        console.error('Error getting leaderboard data:', error);
-        return [
-            {
-                rank: 1,
-                initials: "JM",
-                name: "James Mitchell",
-                scores: [34, 31, 38, 29, 35],
-                raised: "$2,450",
-                charity: "Red Cross",
-                percentage: "60%",
-                avg: 32,
-                accent: "from-emerald-400 to-teal-600",
-                glow: "rgba(16, 185, 129, 0.3)"
-            },
-            {
-                rank: 2,
-                initials: "SC",
-                name: "Sarah Chen",
-                scores: [32, 36, 33, 30, 34],
-                raised: "$1,890",
-                charity: "Beyond Blue",
-                percentage: "45%",
-                avg: 33,
-                accent: "from-teal-400 to-emerald-600",
-                glow: "rgba(20, 184, 166, 0.3)"
-            },
-            {
-                rank: 3,
-                initials: "MO",
-                name: "Michael O'Brien",
-                scores: [35, 29, 37, 32, 31],
-                raised: "$1,650",
-                charity: "Smith Family",
-                percentage: "50%",
-                avg: 33,
-                accent: "from-lime-400 to-emerald-600",
-                glow: "rgba(163, 230, 53, 0.3)"
-            },
-            {
-                rank: 4,
-                initials: "EW",
-                name: "Emma Williams",
-                scores: [30, 33, 35, 28, 36],
-                raised: "$1,420",
-                charity: "OzHarvest",
-                percentage: "40%",
-                avg: 32,
-                accent: "from-emerald-500 to-emerald-800",
-                glow: "rgba(16, 185, 129, 0.2)"
-            },
-            {
-                rank: 5,
-                initials: "DK",
-                name: "David Kim",
-                scores: [33, 31, 34, 37, 29],
-                raised: "$980",
-                charity: "RSPCA Australia",
-                percentage: "35%",
-                avg: 33,
-                accent: "from-zinc-500 to-zinc-800",
-                glow: "rgba(113, 113, 122, 0.2)"
+        // 6. FINAL SORT: Prioritize Real Players over Mock Data
+        // This ensures real club members are ALWAYS on top, even if their impact is low.
+        finalLeaderboard.sort((a, b) => {
+            // First Priority: Real vs Mock
+            if (a.isMock !== b.isMock) {
+                return a.isMock ? 1 : -1; // Real users (-1) come first
             }
+            // Second Priority: Impact value (highest first)
+            return (b.raisedValue || 0) - (a.raisedValue || 0);
+        });
+
+        // 7. Truncate to limit and assign rank + styling
+        return finalLeaderboard.slice(0, limit).map((player, index) => ({
+            ...player,
+            rank: index + 1, // Reset rank according to final sorted position
+            ...(ACCENTS[index] || ACCENTS[ACCENTS.length - 1])
+        }));
+
+    } catch (error) {
+        console.error('Critical Leaderboard Error:', error);
+        // Absolute fallback to mock data
+        return [
+            { rank: 1, initials: "JM", name: "James Mitchell", scores: [34, 31, 38, 29, 35], raised: "$2,450", charity: "Red Cross", percentage: "60%", avg: 32, accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
+            { rank: 2, initials: "SC", name: "Sarah Chen", scores: [32, 36, 33, 30, 34], raised: "$1,890", charity: "Beyond Blue", percentage: "45%", avg: 33, accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
+            { rank: 3, initials: "MO", name: "Michael O'Brien", scores: [35, 29, 37, 32, 31], raised: "$1,650", charity: "Smith Family", percentage: "50%", avg: 33, accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
+            { rank: 4, initials: "EW", name: "Emma Williams", scores: [30, 33, 35, 28, 36], raised: "$1,420", charity: "OzHarvest", percentage: "40%", avg: 32, accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
+            { rank: 5, initials: "DK", name: "David Kim", scores: [33, 31, 34, 37, 29], raised: "$980", charity: "RSPCA Australia", percentage: "35%", avg: 33, accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
         ];
     }
 }
+
 
 

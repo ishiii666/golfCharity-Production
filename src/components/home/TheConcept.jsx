@@ -45,7 +45,7 @@ export default function TheConcept() {
                             <h3 className="text-2xl font-bold text-white mb-8 tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>How the Draw Works</h3>
                             <div className="space-y-5">
                                 {[
-                                    { text: "All player scores are analyzed at month's end", icon: <CheckCircle className="w-5 h-5 text-emerald-500" /> },
+                                    { text: "All player scores are analyzed on the 9th of each month", icon: <CheckCircle className="w-5 h-5 text-emerald-500" /> },
                                     { text: "We find statistical outliers in the data", icon: <Target className="w-5 h-5 text-emerald-500" /> },
                                     { text: "3 rarest + 2 most common = winning combo", icon: <Coins className="w-5 h-5 text-emerald-500" /> },
                                     { text: "Match your scores to win & give!", icon: <Trophy className="w-5 h-5 text-emerald-500" /> }

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRight, Trophy, Zap, Info, Calendar, Target, Heart, Crown, Star, ArrowUpRight, X, ExternalLink } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { getLeaderboardData, getJackpot } from "../../lib/supabaseRest";
+import { getTimeUntilDraw } from "../../utils/drawSchedule";
 
 export default function LeaderboardSection() {
     const [players, setPlayers] = useState([]);
@@ -206,7 +207,7 @@ export default function LeaderboardSection() {
                             <div className="flex items-center justify-center gap-8">
                                 <div className="flex flex-col items-center">
                                     <span className="text-white font-bold text-3xl leading-none">
-                                        {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate()}
+                                        {getTimeUntilDraw().days}
                                     </span>
                                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">Days Left</span>
                                 </div>
