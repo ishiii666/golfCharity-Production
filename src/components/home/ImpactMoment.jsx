@@ -35,7 +35,7 @@ export default function ImpactMoment() {
     }, [isInView]);
 
     return (
-        <section ref={containerRef} className="py-20 lg:py-28 relative bg-zinc-950 overflow-hidden min-h-[600px]">
+        <section ref={containerRef} className="pt-4 pb-12 lg:pt-6 lg:pb-16 relative bg-zinc-950 overflow-hidden min-h-[600px]">
             {/* Background */}
             <div
                 className="absolute inset-0"
@@ -57,17 +57,34 @@ export default function ImpactMoment() {
                 <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={isInView ? { opacity: 1, y: 0 } : {}}
-                    transition={{ duration: 0.6 }}
-                    className="text-center mb-16"
+                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                    className="text-center mb-12"
                 >
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={isInView ? { opacity: 1, scale: 1 } : {}}
+                        transition={{ delay: 0.2, duration: 0.8 }}
+                        className="inline-block px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 mb-6"
+                    >
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500">The Ultimate Payoff</span>
+                    </motion.div>
+
                     <h2
-                        className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 text-white"
+                        className="text-4xl sm:text-5xl lg:text-7xl font-black mb-4 text-white leading-[0.9] tracking-tighter"
                         style={{ fontFamily: 'var(--font-display)' }}
                     >
-                        THE MOMENT OF IMPACT
+                        THE MOMENT OF <br />
+                        <span className="text-gradient-emerald italic">IMPACT</span>
                     </h2>
-                    <p className="text-lg text-zinc-400">
-                        Every round has the power to change a story.
+                    <motion.div
+                        initial={{ width: 0 }}
+                        animate={isInView ? { width: "60px" } : { width: 0 }}
+                        transition={{ delay: 0.5, duration: 1 }}
+                        className="h-1 bg-gradient-to-r from-emerald-500 to-transparent mx-auto mb-6"
+                    />
+                    <p className="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto font-medium leading-relaxed">
+                        Where every swing ripples beyond the fairway.
+                        Join the community turning <span className="text-white italic">passion into progress.</span>
                     </p>
                 </motion.div>
 

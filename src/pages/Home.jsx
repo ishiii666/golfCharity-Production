@@ -1,55 +1,36 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
-import ScrollytellingHero from '../components/home/ScrollytellingHero';
-import CharityImpactSection from '../components/home/CharityImpactSection';
 import ImpactMoment from '../components/home/ImpactMoment';
-import HowItWorksCTA from '../components/home/HowItWorksCTA';
-import CharityCarousel from '../components/home/CharityCarousel';
-import HowItWorks from '../components/home/HowItWorks';
+import TheConcept from '../components/home/TheConcept';
+import HowGivesBackHero from '../components/home/HowGivesBackHero';
 import LeaderboardSection from '../components/home/LeaderboardSection';
-import WhyJoinSection from '../components/home/WhyJoinSection';
+import HowItWorks from '../components/home/HowItWorks';
 import Button from '../components/ui/Button';
 import { GolferIcon, HeartIcon } from '../components/ui/Icons';
+
+// Note: Other components like ScrollytellingHero, CharityImpactSection, etc. 
+// are kept in the project but removed from the Home page layout as requested.
 
 export default function Home() {
     return (
         <PageTransition>
-            {/* Scrollytelling Hero - Main narrative */}
-            <ScrollytellingHero />
-
-            {/* Gradient Transition from Hero to Content */}
-            <div
-                className="relative h-32 -mt-32 z-10"
-                style={{
-                    background: 'linear-gradient(to bottom, transparent 0%, rgba(9, 9, 11, 0.5) 30%, rgba(9, 9, 11, 0.9) 70%, rgb(9, 9, 11) 100%)'
-                }}
-            />
-
-            {/* Impact Moment - Visual Breakthrough */}
+            {/* 1. Impact Moment - Visual Breakthrough */}
             <ImpactMoment />
 
-            {/* Charity Impact Section - Community Achievement */}
-            <CharityImpactSection />
+            {/* 2. The Concept - How the Draw Works (from How It Works page) */}
+            <TheConcept />
 
-            {/* How It Works CTA - Brief intro section */}
-            <HowItWorksCTA />
+            {/* 3. How Golf Gives Back Hero (from How It Works page) */}
+            <HowGivesBackHero />
 
-            {/* Leaderboard Of Impact - Show real player rankings */}
+            {/* 4. Leaderboard Of Impact - Show real player rankings */}
             <LeaderboardSection />
 
-            {/* Charity Carousel - Moved UP for prominence */}
-            <CharityCarousel />
-
-            {/* How It Works - Reframed as giving journey */}
+            {/* 5. How You Make a Difference (Home component with stats) */}
             <HowItWorks />
 
-            {/* Why Join Our Community */}
-            <WhyJoinSection />
-
-
-
-            {/* Final CTA Section - Charity focused */}
+            {/* 6. Final CTA Section - Charity focused */}
             <section className="py-24 lg:py-32 relative overflow-hidden">
                 {/* Background effects */}
                 <div className="absolute inset-0">
@@ -107,4 +88,5 @@ export default function Home() {
         </PageTransition>
     );
 }
+
 

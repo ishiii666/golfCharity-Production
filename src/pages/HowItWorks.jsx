@@ -108,72 +108,70 @@ export default function HowItWorks() {
 
     return (
         <PageTransition>
-            <main className="min-h-screen bg-black text-white selection:bg-emerald-500 selection:text-white font-sans overflow-x-hidden pt-0">
-                {/* Hero Section */}
-                <section className="relative pt-12 pb-10 overflow-hidden">
-                    <div className="absolute inset-0 z-0 pointer-events-none">
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[400px] bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.1),transparent_70%)] opacity-60" />
-                    </div>
+            <main className="min-h-screen bg-black text-white selection:bg-emerald-500 selection:text-white font-sans overflow-x-hidden pt-12 md:pt-16">
 
-                    <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
+                {/* 1. Prize Distribution Section */}
+                <section className="pt-6 pb-16 px-6 relative overflow-hidden bg-black">
+                    <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-emerald-500/5 via-transparent to-transparent pointer-events-none" />
+                    <div className="max-w-7xl mx-auto text-center">
                         <motion.div
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="flex items-center justify-center gap-4 mb-6"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            whileInView={{ opacity: 1, scale: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ delay: 0.2, duration: 0.8 }}
+                            className="inline-block px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 mb-8"
                         >
-                            <motion.div
-                                animate={{ y: [0, -8, 0] }}
-                                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                className="w-12 h-12 rounded-full border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.1)]"
-                            >
-                                <User className="w-6 h-6 text-emerald-500" />
-                            </motion.div>
-                            <motion.div
-                                animate={{ y: [0, 8, 0] }}
-                                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                                className="w-12 h-12 rounded-full border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.1)]"
-                            >
-                                <Heart className="w-6 h-6 text-emerald-500" />
-                            </motion.div>
+                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500">Value of Play</span>
                         </motion.div>
 
-                        <motion.h1
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-5xl md:text-7xl font-bold text-white mb-8 tracking-tight leading-[1.1]"
+                        <motion.h2
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                            className="text-3xl sm:text-4xl lg:text-6xl font-black text-white mb-6 tracking-tighter leading-[0.9]"
                             style={{ fontFamily: 'var(--font-display)' }}
                         >
-                            How <span className="text-emerald-500 italic">Golf</span> Gives Back
-                        </motion.h1>
-
-                        <motion.p
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.2 }}
-                            className="text-zinc-400 max-w-2xl mx-auto text-lg md:text-xl leading-relaxed mb-12 font-medium"
-                        >
-                            Turn your passion for golf into meaningful impact. Play your regular rounds, enter our unique lucky draw, and support Australian charities — all while winning prizes!
-                        </motion.p>
+                            WIN BIG, <br />
+                            <span className="text-gradient-emerald italic">GIVE BIGGER</span>
+                        </motion.h2>
 
                         <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.3 }}
-                            className="flex flex-col sm:flex-row items-center justify-center gap-6"
-                        >
-                            <Link to="/signup" className="group relative px-10 py-5 bg-emerald-500 text-black rounded-2xl transition-all font-black uppercase text-xs tracking-[0.2em] shadow-[0_10px_30px_rgba(16,185,129,0.2)] hover:bg-emerald-400 hover:scale-[1.02] active:scale-95 overflow-hidden">
-                                <span className="relative z-10 flex items-center gap-2">Start Playing <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
-                                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                            </Link>
-                            <Link to="/charities" className="px-10 py-5 border border-white/10 text-white hover:bg-white/5 hover:border-white/20 rounded-2xl transition-all font-black uppercase text-xs tracking-[0.2em]">
-                                View Our Charities
-                            </Link>
-                        </motion.div>
+                            initial={{ width: 0 }}
+                            whileInView={{ width: "60px" }}
+                            viewport={{ once: true }}
+                            transition={{ delay: 0.5, duration: 1 }}
+                            className="h-1 bg-gradient-to-r from-emerald-500 to-transparent mx-auto mb-16"
+                        />
+
+                        <div className="grid md:grid-cols-3 gap-8 mb-16">
+                            {[
+                                { percent: "40%", label: "Jackpot", desc: "Match 5 Numbers", glow: "border-emerald-500/30 bg-[#0a0a0a]", highlight: "shadow-[0_0_50px_rgba(16,185,129,0.1)] border-emerald-500/40 scale-105 z-10" },
+                                { percent: "35%", label: "Second Tier", desc: "Match 4 Numbers", glow: "border-white/5 bg-[#0a0a0a]", highlight: "hover:border-emerald-500/20" },
+                                { percent: "25%", label: "Third Tier", desc: "Match 3 Numbers", glow: "border-white/5 bg-[#0a0a0a]", highlight: "hover:border-emerald-500/20" }
+                            ].map((tier, i) => (
+                                <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: i * 0.1 }}
+                                    className={cn(
+                                        "p-10 md:p-12 rounded-[2.5rem] border transition-all duration-500 group",
+                                        tier.glow,
+                                        tier.highlight
+                                    )}
+                                >
+                                    <span className="text-5xl md:text-6xl font-bold text-white group-hover:text-emerald-400 mb-6 block tracking-tighter transition-all duration-500" style={{ fontFamily: 'var(--font-display)' }}>{tier.percent}</span>
+                                    <h4 className="text-lg md:text-xl font-bold text-white mb-2 tracking-tight">{tier.label}</h4>
+                                    <p className="text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-bold">{tier.desc}</p>
+                                </motion.div>
+                            ))}
+                        </div>
                     </div>
                 </section>
 
-                {/* The Concept Section */}
-                <section className="py-8 px-6 relative bg-[#020202]">
+                {/* 2. The Concept Section */}
+                <section className="py-16 px-6 relative bg-[#020202]">
                     <div className="max-w-7xl mx-auto text-center">
                         <motion.span
                             initial={{ opacity: 0 }}
@@ -198,7 +196,6 @@ export default function HowItWorks() {
                             Unlike random lotteries, our draw is based on real golf performance. Your authentic Stableford scores from the course become your entry numbers. The more unique your scores, the better your chances!
                         </motion.p>
 
-                        {/* How the Draw Works Card */}
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             whileInView={{ opacity: 1, scale: 1 }}
@@ -252,126 +249,7 @@ export default function HowItWorks() {
                     </div>
                 </section>
 
-                {/* Step by Step Section */}
-                <section className="py-16 px-6 bg-black">
-                    <div className="max-w-4xl mx-auto">
-                        <div className="text-center mb-16">
-                            <motion.span
-                                initial={{ opacity: 0 }}
-                                whileInView={{ opacity: 1 }}
-                                className="text-emerald-500/80 text-[10px] font-black tracking-[0.4em] uppercase mb-6 block"
-                            >
-                                STEP BY STEP
-                            </motion.span>
-                            <motion.h2
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                className="text-3xl md:text-5xl font-bold text-white tracking-tight"
-                                style={{ fontFamily: 'var(--font-display)' }}
-                            >
-                                Your Journey to <span className="text-emerald-500 italic">Giving Back</span>
-                            </motion.h2>
-                        </div>
-
-                        <div className="space-y-6 md:space-y-8">
-                            {STEPS.map((step, idx) => (
-                                <motion.div
-                                    key={step.id}
-                                    initial={{ opacity: 0, y: 30 }}
-                                    whileInView={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: idx * 0.1 }}
-                                    whileHover={{ y: -5, scale: 1.01 }}
-                                    className="group relative bg-[#0a0a0a] border border-white/5 hover:border-emerald-500/30 p-8 md:p-12 rounded-[2.5rem] transition-all duration-500 overflow-hidden shadow-xl"
-                                >
-                                    <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.07] group-hover:scale-125 transition-all duration-1000 pointer-events-none rotate-12">
-                                        <step.icon className="w-56 h-56 text-white" />
-                                    </div>
-
-                                    <div className="relative z-10">
-                                        <div className="flex flex-col md:flex-row gap-8 items-start">
-                                            <div className="shrink-0">
-                                                <span className="text-5xl font-bold text-white/5 group-hover:text-emerald-500/10 transition-colors uppercase italic tracking-tighter block mb-4" style={{ fontFamily: 'var(--font-display)' }}>{step.id}</span>
-                                                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center bg-white/5 group-hover:bg-emerald-500/10 transition-all duration-500", step.color)}>
-                                                    <step.icon className="w-7 h-7" />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <h3 className="text-xl md:text-2xl font-bold text-white mb-4 flex items-center gap-4 tracking-tight group-hover:text-emerald-400 transition-colors">
-                                                    {step.title}
-                                                </h3>
-                                                <p className="text-zinc-500 text-base md:text-lg leading-relaxed mb-6 max-w-2xl font-medium">
-                                                    {step.desc}
-                                                </p>
-                                                <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4">
-                                                    {step.items.map((item, i) => (
-                                                        <motion.div
-                                                            key={i}
-                                                            initial={{ opacity: 0 }}
-                                                            whileInView={{ opacity: 1 }}
-                                                            transition={{ delay: 0.3 + (i * 0.1) }}
-                                                            className="flex items-center gap-3 text-zinc-400 group-hover:text-zinc-300 transition-colors"
-                                                        >
-                                                            <CheckCircle2 className="w-4 h-4 text-emerald-500/50 shrink-0" />
-                                                            <span className="text-sm font-medium">{item}</span>
-                                                        </motion.div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* Prize Distribution Section */}
-                <section className="py-16 px-6 relative overflow-hidden bg-[#020202]">
-                    <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-emerald-500/5 via-transparent to-transparent pointer-events-none" />
-                    <div className="max-w-7xl mx-auto text-center">
-                        <motion.span
-                            initial={{ opacity: 0 }}
-                            whileInView={{ opacity: 1 }}
-                            className="text-emerald-500/80 text-[10px] font-black tracking-[0.4em] uppercase mb-6 block"
-                        >
-                            PRIZE DISTRIBUTION
-                        </motion.span>
-                        <motion.h2
-                            initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            className="text-3xl md:text-5xl font-bold text-white mb-16 tracking-tight"
-                            style={{ fontFamily: 'var(--font-display)' }}
-                        >
-                            Win Big, <span className="text-emerald-500 italic">Give Bigger</span>
-                        </motion.h2>
-
-                        <div className="grid md:grid-cols-3 gap-8 mb-16">
-                            {[
-                                { percent: "40%", label: "Jackpot", desc: "Match 5 Numbers", glow: "border-emerald-500/30 bg-[#0a0a0a]", highlight: "shadow-[0_0_50px_rgba(16,185,129,0.1)] border-emerald-500/40 scale-105 z-10" },
-                                { percent: "35%", label: "Second Tier", desc: "Match 4 Numbers", glow: "border-white/5 bg-[#0a0a0a]", highlight: "hover:border-emerald-500/20" },
-                                { percent: "25%", label: "Third Tier", desc: "Match 3 Numbers", glow: "border-white/5 bg-[#0a0a0a]", highlight: "hover:border-emerald-500/20" }
-                            ].map((tier, i) => (
-                                <motion.div
-                                    key={i}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    whileInView={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: i * 0.1 }}
-                                    className={cn(
-                                        "p-10 md:p-12 rounded-[2.5rem] border transition-all duration-500 group",
-                                        tier.glow,
-                                        tier.highlight
-                                    )}
-                                >
-                                    <span className="text-5xl md:text-6xl font-bold text-white group-hover:text-emerald-400 mb-6 block tracking-tighter transition-all duration-500" style={{ fontFamily: 'var(--font-display)' }}>{tier.percent}</span>
-                                    <h4 className="text-lg md:text-xl font-bold text-white mb-2 tracking-tight">{tier.label}</h4>
-                                    <p className="text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-bold">{tier.desc}</p>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* FAQ Section */}
+                {/* 3. FAQ Section */}
                 <section className="py-16 px-6 bg-black">
                     <div className="max-w-4xl mx-auto">
                         <div className="text-center mb-16">
@@ -433,7 +311,7 @@ export default function HowItWorks() {
                     </div>
                 </section>
 
-                {/* CTA Section */}
+                {/* 4. CTA Section */}
                 <section className="py-16 px-6 bg-[#020202]">
                     <div className="max-w-4xl mx-auto bg-zinc-950 border border-white/5 p-12 md:p-16 rounded-[3rem] text-center relative overflow-hidden shadow-2xl group/cta">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 blur-[100px] rounded-full pointer-events-none group-hover/cta:bg-emerald-500/10 transition-colors duration-700" />
@@ -464,3 +342,4 @@ export default function HowItWorks() {
         </PageTransition>
     );
 }
+
