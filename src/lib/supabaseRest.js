@@ -2738,21 +2738,11 @@ export async function getLeaderboardData(limit = 5) {
             'Content-Type': 'application/json'
         };
 
-        // 1. Get ALL sources of impact: 'donations' table AND 'draw_entries' table
-        let allDonations = [];
+        // 1. Get impact from 'draw_entries' table (charity portion of winnings)
+        // Manual donations are excluded as per user request to only show draw winners
         let allDrawEntries = [];
 
         try {
-            // Fetch direct donations
-            const donationsRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
-                { headers }
-            );
-            if (donationsRes.ok) {
-                const data = await donationsRes.json();
-                if (Array.isArray(data)) allDonations = data;
-            }
-
             // Fetch charity amounts from draw entries (where impact is generated via play)
             const entriesRes = await fetch(
                 `${SUPABASE_URL}/rest/v1/draw_entries?charity_amount=gt.0&select=user_id,charity_amount`,
@@ -2769,14 +2759,7 @@ export async function getLeaderboardData(limit = 5) {
         // Aggregate impact totals by user
         const userTotals = {};
 
-        // Sum from donations
-        allDonations.forEach(d => {
-            if (d.user_id) {
-                userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
-            }
-        });
-
-        // Sum from draw entries (charity portion of winnings)
+        // Sum from draw entries
         allDrawEntries.forEach(e => {
             if (e.user_id) {
                 userTotals[e.user_id] = (userTotals[e.user_id] || 0) + (parseFloat(e.charity_amount) || 0);
@@ -2851,7 +2834,6 @@ export async function getLeaderboardData(limit = 5) {
         // 4. Fetch profiles and scores for real users
         if (sortedRealUserIds.length > 0) {
             try {
-                // Fetch profiles - excluding admins specifically
                 const profilesRes = await fetch(
                     `${SUPABASE_URL}/rest/v1/profiles?id=in.(${sortedRealUserIds.join(',')})&role=neq.admin&select=id,full_name,selected_charity_id,donation_percentage`,
                     { headers }
@@ -2915,20 +2897,24 @@ export async function getLeaderboardData(limit = 5) {
             }
         }
 
-        // Sort combined real users
-        finalLeaderboard.sort((a, b) => b.raisedValue - a.raisedValue);
-
         // 5. Backfill with mock data until limit is reached
+        // We already have real users in finalLeaderboard from the profiles loop
         let mockIndex = 0;
         while (finalLeaderboard.length < limit && mockIndex < MOCK_PLAYERS.length) {
             const mock = MOCK_PLAYERS[mockIndex];
-            finalLeaderboard.push({
-                ...mock,
-                rank: finalLeaderboard.length + 1,
-                raised: `$${mock.raised.toLocaleString()}`,
-                raisedValue: mock.raised,
-                isMock: true
-            });
+
+            // Check if mock user name is already in the list (prevents duplicates during tests)
+            const isAlreadyPresent = finalLeaderboard.some(p => p.name === mock.name);
+
+            if (!isAlreadyPresent) {
+                finalLeaderboard.push({
+                    ...mock,
+                    rank: finalLeaderboard.length + 1,
+                    raised: `$${mock.raised.toLocaleString()}`,
+                    raisedValue: mock.raised,
+                    isMock: true
+                });
+            }
             mockIndex++;
         }
 
