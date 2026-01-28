@@ -28,10 +28,12 @@ Deno.serve(async (req) => {
 
         // Parse request body
         let userId = null;
+        let force = false;
         try {
             const body = await req.json();
             userId = body.user_id;
-            console.log('Request user_id:', userId);
+            force = body.force || false;
+            console.log('Request user_id:', userId, 'force:', force);
         } catch {
             return new Response(
                 JSON.stringify({ error: 'user_id required' }),
@@ -50,20 +52,22 @@ Deno.serve(async (req) => {
             auth: { autoRefreshToken: false, persistSession: false }
         });
 
-        // Check existing subscription
-        const { data: existingSub, error: subErr } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('user_id', userId)
-            .maybeSingle();
+        // Check existing subscription unless force sync is requested
+        if (!force) {
+            const { data: existingSub, error: subErr } = await supabase
+                .from('subscriptions')
+                .select('*')
+                .eq('user_id', userId)
+                .maybeSingle();
 
-        console.log('Existing sub check:', { found: !!existingSub, error: subErr?.message });
+            console.log('Existing sub check:', { found: !!existingSub, error: subErr?.message });
 
-        if (existingSub) {
-            return new Response(
-                JSON.stringify({ subscription: existingSub, source: 'database', synced: true }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+            if (existingSub) {
+                return new Response(
+                    JSON.stringify({ subscription: existingSub, source: 'database', synced: true }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+            }
         }
 
         // Get profile with stripe_customer_id
@@ -89,7 +93,7 @@ Deno.serve(async (req) => {
             );
         }
 
-        // Fetch from Stripe
+        // Fetch all subscriptions from Stripe (including cancelled/past_due)
         console.log('Fetching from Stripe:', profile.stripe_customer_id);
         const stripeRes = await fetch(
             `https://api.stripe.com/v1/subscriptions?customer=${profile.stripe_customer_id}&status=all&limit=1`,
@@ -100,8 +104,13 @@ Deno.serve(async (req) => {
         console.log('Stripe response:', { ok: stripeRes.ok, hasData: !!stripeData.data?.length });
 
         if (!stripeData.data?.length) {
+            // If we found NO subscription on Stripe, we should deactivate the DB record if it exists
+            if (force) {
+                await supabase.from('subscriptions').delete().eq('user_id', userId);
+                await supabase.from('profiles').update({ subscription_type: 'none' }).eq('id', userId);
+            }
             return new Response(
-                JSON.stringify({ subscription: null, message: 'No Stripe subscription' }),
+                JSON.stringify({ subscription: null, message: 'No Stripe subscription found' }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
         }
@@ -115,57 +124,49 @@ Deno.serve(async (req) => {
             stripe_customer_id: profile.stripe_customer_id,
             stripe_subscription_id: s.id,
             plan: s.items?.data?.[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly',
-            status: s.status === 'active' ? 'active' : 'cancelled',
+            status: s.status, // Preserve actual Stripe status (active, past_due, canceled, trialing, etc.)
             current_period_start: s.current_period_start ? new Date(s.current_period_start * 1000).toISOString() : now,
             current_period_end: s.current_period_end ? new Date(s.current_period_end * 1000).toISOString() : now,
             cancel_at_period_end: s.cancel_at_period_end || false,
             updated_at: now
         };
 
-        console.log('Inserting subscription:', JSON.stringify(subRecord));
+        console.log('Upserting subscription:', JSON.stringify(subRecord));
 
-        // Try INSERT first (simpler than upsert)
-        const { data: inserted, error: insertErr } = await supabase
+        // Use UPSERT by user_id
+        const { data: upserted, error: upsertErr } = await supabase
             .from('subscriptions')
-            .insert(subRecord)
+            .upsert(subRecord, { onConflict: 'user_id' })
             .select()
             .single();
 
-        if (insertErr) {
-            console.error('INSERT FAILED:', insertErr.message, insertErr.details, insertErr.hint);
-
-            // Try update if insert failed (record might exist)
-            const { data: updated, error: updateErr } = await supabase
-                .from('subscriptions')
-                .update(subRecord)
-                .eq('user_id', userId)
-                .select()
-                .single();
-
-            if (updateErr) {
-                console.error('UPDATE ALSO FAILED:', updateErr.message);
-                return new Response(
-                    JSON.stringify({
-                        subscription: subRecord,
-                        source: 'stripe',
-                        synced: false,
-                        error: insertErr.message,
-                        updateError: updateErr.message
-                    }),
-                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-                );
-            }
-
-            console.log('✅ Updated existing record');
+        if (upsertErr) {
+            console.error('UPSERT FAILED:', upsertErr.message);
+            // Fallback for environments where unique constraints might be different
+            // Return the record we intended to save so the UI can at least show current Stripe truth
             return new Response(
-                JSON.stringify({ subscription: updated, source: 'stripe', synced: true }),
+                JSON.stringify({
+                    subscription: subRecord,
+                    source: 'stripe',
+                    synced: false,
+                    error: upsertErr.message
+                }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
         }
 
-        console.log('✅ Inserted new subscription');
+        // Also update the profile for quick access
+        const isSubscribed = ['active', 'trialing'].includes(s.status);
+        await supabase
+            .from('profiles')
+            .update({
+                subscription_type: isSubscribed ? subRecord.plan : 'none'
+            })
+            .eq('id', userId);
+
+        console.log('✅ Synchronized with Stripe and updated profile');
         return new Response(
-            JSON.stringify({ subscription: inserted, source: 'stripe', synced: true }),
+            JSON.stringify({ subscription: upserted, source: 'stripe', synced: true }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 

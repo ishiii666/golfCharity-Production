@@ -276,7 +276,7 @@ export default function LeaderboardSection() {
                             </div>
 
                             {/* Modal Content */}
-                            <div className="relative z-10 bg-zinc-900 px-8 pb-10 -mt-24">
+                            <div className="relative z-10 bg-zinc-900 px-8 pb-10 -mt-6 pt-4">
                                 <div className="grid grid-cols-3 gap-3 mb-8">
                                     <div className="bg-zinc-800/50 p-4 rounded-2xl border border-white/5 text-center">
                                         <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Rank</span>
@@ -297,12 +297,15 @@ export default function LeaderboardSection() {
                                         <h4 className="flex items-center gap-2 text-[10px] font-black text-white uppercase tracking-[0.2em]">
                                             <Heart className="w-3 h-3 text-emerald-500" /> Primary Charity
                                         </h4>
-                                        <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 flex items-center justify-between group cursor-pointer hover:bg-emerald-500/10 transition-all">
+                                        <div
+                                            onClick={() => navigate('/charities')}
+                                            className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 flex items-center justify-between group cursor-pointer hover:bg-emerald-500/10 transition-all"
+                                        >
                                             <div className="flex flex-col">
                                                 <span className="text-white font-bold">{selectedPlayer.charity}</span>
                                                 <span className="text-xs text-zinc-500 font-medium">{selectedPlayer.percentage} donation share</span>
                                             </div>
-                                            <ExternalLink className="w-4 h-4 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            <ExternalLink className="w-4 h-4 text-emerald-500 opacity-60 group-hover:opacity-100 transition-opacity" />
                                         </div>
                                     </div>
                                 </div>

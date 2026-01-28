@@ -179,6 +179,18 @@ body {
   -ms-overflow-style: none;
 }
 
+/* Hide number input spinners/counters */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+
 /* Focus Styles - Clean, non-artifact producing */
 *:focus-visible {
   outline: 2px solid var(--color-primary-500);
@@ -468,10 +480,10 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     display: none;
   }
 
-  /* Improve touch targets on mobile */
-  button,
-  a,
-  [role="button"] {
+  /* Improve touch targets on mobile - Exclude small toggles */
+  button:not(.no-touch-target),
+  a:not(.no-touch-target),
+  [role="button"]:not(.no-touch-target) {
     min-height: 44px;
     min-width: 44px;
   }

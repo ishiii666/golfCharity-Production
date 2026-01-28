@@ -141,7 +141,7 @@ export default function DrawControl() {
                 getJackpot(),
                 getDrawSettings(),
                 getDraws(),
-                getActiveSubscribersCount(targetDrawId)
+                getActiveSubscribersCount(targetDrawId, true)
             ]);
 
             setSettings(currentSettings || settings);

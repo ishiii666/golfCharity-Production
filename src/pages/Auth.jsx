@@ -4,9 +4,10 @@ import { motion } from 'framer-motion';
 import PageTransition from '../components/layout/PageTransition';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
+import Input, { Select } from '../components/ui/Input';
 import { useAuth } from '../context/AuthContext';
 import { fadeUp } from '../utils/animations';
+import { getCharities } from '../lib/supabaseRest';
 
 export default function Auth() {
     const navigate = useNavigate();
@@ -21,13 +22,34 @@ export default function Auth() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [charities, setCharities] = useState([]);
+    const [selectedCharityId, setSelectedCharityId] = useState('');
+    const [isLoadingCharities, setIsLoadingCharities] = useState(false);
 
-    // Redirect if already authenticated
     useEffect(() => {
         if (isAuthenticated) {
             navigate('/dashboard');
         }
     }, [isAuthenticated, navigate]);
+
+    // Fetch charities for signup
+    useEffect(() => {
+        if (isSignup) {
+            const fetchCharities = async () => {
+                setIsLoadingCharities(true);
+                try {
+                    const data = await getCharities();
+                    // Filter for active charities if applicable, or just use all
+                    setCharities(Array.isArray(data) ? data : []);
+                } catch (err) {
+                    console.error('Failed to fetch charities:', err);
+                } finally {
+                    setIsLoadingCharities(false);
+                }
+            };
+            fetchCharities();
+        }
+    }, [isSignup]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -35,8 +57,8 @@ export default function Auth() {
         setSuccess('');
 
         // Validation
-        if (!email || !password) {
-            setError('Please fill in all required fields');
+        if (!email || !password || (isSignup && (!fullName || !selectedCharityId))) {
+            setError(isSignup ? 'Please fill in all fields to create your account' : 'Please fill in all required fields');
             return;
         }
 
@@ -55,7 +77,7 @@ export default function Auth() {
 
         try {
             const result = isSignup
-                ? await signup(email, password, fullName)
+                ? await signup(email, password, fullName, selectedCharityId)
                 : await login(email, password);
 
             if (result.success) {
@@ -144,7 +166,20 @@ export default function Auth() {
                                     type="text"
                                     value={fullName}
                                     onChange={(e) => setFullName(e.target.value)}
-                                    placeholder="John Smith"
+                                />
+                            )}
+
+                            {isSignup && (
+                                <Select
+                                    label="Support a Charity"
+                                    value={selectedCharityId}
+                                    onChange={(e) => setSelectedCharityId(e.target.value)}
+                                    required
+                                    options={[
+                                        { value: '', label: 'Select a charity to support' },
+                                        ...charities.map(c => ({ value: c.id, label: c.name }))
+                                    ]}
+                                    error={isSignup && !selectedCharityId && error === 'Please fill in all fields to create your account' ? 'Please select a charity' : ''}
                                 />
                             )}
 

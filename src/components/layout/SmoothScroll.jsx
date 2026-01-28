@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import Lenis from '@studio-freight/lenis';
 
 /**
@@ -11,6 +12,7 @@ import Lenis from '@studio-freight/lenis';
  */
 export default function SmoothScroll({ children }) {
     const lenisRef = useRef(null);
+    const { pathname } = useLocation();
 
     useEffect(() => {
         // Initialize Lenis
@@ -26,23 +28,30 @@ export default function SmoothScroll({ children }) {
         });
 
         lenisRef.current = lenis;
+        window.lenis = lenis;
 
         // RAF loop
+        let rafId;
         function raf(time) {
             lenis.raf(time);
-            requestAnimationFrame(raf);
+            rafId = requestAnimationFrame(raf);
         }
 
         requestAnimationFrame(raf);
 
-        // Make lenis available globally for GSAP ScrollTrigger
-        window.lenis = lenis;
-
         return () => {
+            if (rafId) cancelAnimationFrame(rafId);
             lenis.destroy();
             window.lenis = null;
         };
     }, []);
+
+    // Reset scroll on pathname change (safety backup for ScrollToTop)
+    useEffect(() => {
+        if (lenisRef.current) {
+            lenisRef.current.scrollTo(0, { immediate: true });
+        }
+    }, [pathname]);
 
     return children;
 }

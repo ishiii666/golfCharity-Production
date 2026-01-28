@@ -135,8 +135,8 @@ export default function UserEditModal({
 
             onUpdate();
         } catch (error) {
-            console.error('Error saving user:', error);
-            addToast('error', 'Failed to save changes');
+            console.error('❌ Error saving user:', error);
+            addToast('error', `Save failed: ${error.message || 'Unknown error'}`);
         } finally {
             setSaving(false);
         }
@@ -420,12 +420,38 @@ export default function UserEditModal({
                                     </div>
 
                                     <div className="p-10 rounded-[3rem] bg-white/[0.01] border border-white/5">
-                                        <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8">Remittance</h4>
                                         <div className="space-y-6">
-                                            <Input label="Bank Institution" value={editData.bankName || ''} onChange={(e) => setEditData({ ...editData, bankName: e.target.value })} className="bg-slate-900/60" />
+                                            <div className="flex items-center justify-between px-1">
+                                                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em]">Remittance</h4>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditData(prev => ({ ...prev, showBanking: !prev.showBanking }))}
+                                                    className="text-[9px] font-black text-emerald-500 uppercase tracking-widest hover:text-emerald-400 transition-colors"
+                                                >
+                                                    {editData.showBanking ? 'Mask Details' : 'View Details'}
+                                                </button>
+                                            </div>
+                                            <Input
+                                                label="Bank Institution"
+                                                value={editData.bankName || ''}
+                                                onChange={(e) => setEditData({ ...editData, bankName: e.target.value })}
+                                                className="bg-slate-900/60"
+                                            />
                                             <div className="grid grid-cols-2 gap-4">
-                                                <Input label="BSB" value={editData.bsbNumber || ''} onChange={(e) => setEditData({ ...editData, bsbNumber: e.target.value })} className="bg-slate-900/60 font-mono text-xs" />
-                                                <Input label="Account" value={editData.accountNumber || ''} onChange={(e) => setEditData({ ...editData, accountNumber: e.target.value })} className="bg-slate-900/60 font-mono text-xs" />
+                                                <Input
+                                                    label="BSB"
+                                                    type={editData.showBanking ? "number" : "text"}
+                                                    value={editData.showBanking ? editData.bsbNumber : 'xxx-xxx'}
+                                                    onChange={(e) => setEditData({ ...editData, bsbNumber: e.target.value.replace(/\D/g, '') })}
+                                                    className="bg-slate-900/60 font-mono text-xs"
+                                                />
+                                                <Input
+                                                    label="Account"
+                                                    type={editData.showBanking ? "number" : "text"}
+                                                    value={editData.showBanking ? editData.accountNumber : 'xxxx' + String(editData.accountNumber || '').slice(-2)}
+                                                    onChange={(e) => setEditData({ ...editData, accountNumber: e.target.value.replace(/\D/g, '') })}
+                                                    className="bg-slate-900/60 font-mono text-xs"
+                                                />
                                             </div>
                                         </div>
                                     </div>

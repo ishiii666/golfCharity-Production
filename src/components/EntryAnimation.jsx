@@ -38,8 +38,9 @@ export default function EntryAnimation({ onComplete }) {
     const [phase, setPhase] = useState(PHASES.LINE);
     const [isVisible, setIsVisible] = useState(true);
 
-    // Phase state machine
     useEffect(() => {
+        // Safety: if onComplete is not provided, we can't notify App to unmount
+        // But the internal timers will still run
         const timers = [];
 
         // Phase 2: Drop starts after line completes
@@ -64,9 +65,13 @@ export default function EntryAnimation({ onComplete }) {
 
         // Complete - remove from DOM
         timers.push(setTimeout(() => {
+            console.log('🎬 Entry Animation Complete');
             setIsVisible(false);
             setPhase(PHASES.COMPLETE);
-            onComplete?.();
+            // Delay onComplete slightly to ensure setIsVisible(false) has a chance to trigger exit
+            setTimeout(() => {
+                onComplete?.();
+            }, 50);
         }, TIMING.TOTAL + TIMING.EXIT_DURATION));
 
         return () => timers.forEach(clearTimeout);
@@ -192,12 +197,21 @@ export default function EntryAnimation({ onComplete }) {
         <AnimatePresence>
             {isVisible && (
                 <motion.div
-                    className="fixed inset-0 z-[999] flex items-center justify-center overflow-hidden"
-                    style={{ backgroundColor: '#020202', pointerEvents: phase === PHASES.EXIT ? 'none' : 'auto' }}
+                    className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
+                    style={{
+                        backgroundColor: '#020202',
+                        // CRITICAL: Ensure no pointer events when finished or exiting
+                        pointerEvents: (phase === PHASES.EXIT || phase === PHASES.COMPLETE || !isVisible) ? 'none' : 'auto'
+                    }}
                     variants={overlayVariants}
                     initial="visible"
-                    animate={phase === PHASES.EXIT ? 'exit' : 'visible'}
+                    animate={phase === PHASES.EXIT || phase === PHASES.COMPLETE ? 'exit' : 'visible'}
                     exit="exit"
+                    onAnimationComplete={() => {
+                        if (phase === PHASES.COMPLETE) {
+                            setIsVisible(false);
+                        }
+                    }}
                 >
                     {/* Phase 1: Vertical Gradient Line */}
                     <AnimatePresence>

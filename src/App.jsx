@@ -118,7 +118,12 @@ function AdminProtectedRoute({ children }) {
 
   // Not admin - show access denied and redirect
   if (!isAdmin) {
-    console.warn('🚫 Non-admin user attempted to access admin route:', user?.email);
+    console.warn('🚫 Admin access denied:', {
+      email: user?.email,
+      role: user?.app_metadata?.role || user?.user_metadata?.role || 'none',
+      profileRole: profile?.role || 'none'
+    });
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
         <div className="text-center max-w-md mx-auto p-8">
@@ -129,17 +134,17 @@ function AdminProtectedRoute({ children }) {
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
           <p className="text-zinc-400 mb-6">
-            You don't have permission to access this area. This section is restricted to administrators only.
+            You don't have permission to access the administrative area.
           </p>
-          <a
-            href="/dashboard"
+          <Link
+            to="/dashboard"
             className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
             Go to Dashboard
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -325,13 +330,32 @@ function AppRoutes() {
 function App() {
   // Show entry animation only once per session
   const [showEntryAnimation, setShowEntryAnimation] = useState(() => {
-    return !sessionStorage.getItem('entryAnimationPlayed');
+    // Check if animation has already played in this session
+    const played = sessionStorage.getItem('entryAnimationPlayed');
+    // Also check if we are on a login or join page - we might skip animation there
+    const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
+
+    // Default to false if already played
+    if (played === 'true') return false;
+
+    // If not played, return true
+    return true;
   });
 
   const handleAnimationComplete = useCallback(() => {
+    console.log('✅ App: Entry animation complete notification received');
     sessionStorage.setItem('entryAnimationPlayed', 'true');
     setShowEntryAnimation(false);
   }, []);
+
+  // Safety Effect: Ensure animation is cleared if storage key exists
+  useEffect(() => {
+    const played = sessionStorage.getItem('entryAnimationPlayed');
+    if (played === 'true' && showEntryAnimation) {
+      console.log('🛡️ App Safety: Clearing stuck entry animation state');
+      setShowEntryAnimation(false);
+    }
+  }, [showEntryAnimation]);
 
   return (
     <ToastProvider>

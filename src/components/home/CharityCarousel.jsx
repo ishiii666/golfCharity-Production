@@ -72,7 +72,7 @@ export default function CharityCarousel() {
                         transition={{ duration: 1 }}
                         className="absolute inset-0"
                         style={{
-                            backgroundImage: `url(${activeCharity.image})`,
+                            backgroundImage: `url(${activeCharity.image && activeCharity.image.includes('unsplash') ? activeCharity.image.split('?')[0] + '?ixlib=rb-1.2.1&auto=format&fit=crop&q=40&w=800' : activeCharity.image})`,
                             backgroundSize: 'cover',
                             backgroundPosition: 'center',
                             filter: 'blur(40px) saturate(0.5)'
@@ -123,9 +123,10 @@ export default function CharityCarousel() {
                             className="relative aspect-[4/3] rounded-2xl overflow-hidden"
                         >
                             <img
-                                src={activeCharity.image}
+                                src={activeCharity.image && activeCharity.image.includes('unsplash') ? activeCharity.image.split('?')[0] + '?ixlib=rb-1.2.1&auto=format&fit=crop&q=80&w=800' : activeCharity.image}
                                 alt={activeCharity.name}
                                 className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
                             />
                             <div
                                 className="absolute inset-0"

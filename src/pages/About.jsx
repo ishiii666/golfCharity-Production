@@ -7,16 +7,16 @@ import { fadeUp, staggerContainer, staggerItem } from '../utils/animations';
 export default function About() {
     return (
         <PageTransition>
-            <div className="py-20 lg:py-32 relative overflow-hidden">
+            <div className="py-16 sm:py-20 lg:py-32 relative overflow-hidden">
                 {/* Background Decorations */}
-                <div className="absolute inset-0 z-0">
-                    <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[120px]" />
-                    <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[120px]" />
+                <div className="absolute inset-0 z-0 pointer-events-none">
+                    <div className="absolute top-0 left-1/4 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-emerald-500/5 rounded-full blur-[80px] sm:blur-[120px]" />
+                    <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-emerald-500/5 rounded-full blur-[80px] sm:blur-[120px]" />
                 </div>
 
                 <div className="container-app relative z-10">
                     {/* Hero Section */}
-                    <div className="max-w-3xl mx-auto text-center mb-20">
+                    <div className="max-w-3xl mx-auto text-center mb-16 sm:mb-20">
                         <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -28,14 +28,14 @@ export default function About() {
                             }}
                         >
                             <HeartIcon size={16} color="#10b981" />
-                            <span className="text-emerald-400 text-sm font-bold uppercase tracking-wider">Our Story</span>
+                            <span className="text-emerald-400 text-xs sm:text-sm font-bold uppercase tracking-wider">Our Story</span>
                         </motion.div>
 
                         <motion.h1
                             variants={fadeUp}
                             initial="initial"
                             animate="animate"
-                            className="text-4xl sm:text-5xl lg:text-7xl font-bold text-white mb-6"
+                            className="text-3xl sm:text-5xl lg:text-7xl font-bold text-white mb-6"
                             style={{ fontFamily: 'var(--font-display)' }}
                         >
                             Precision with <span className="text-gradient-emerald">Purpose</span>
@@ -46,7 +46,7 @@ export default function About() {
                             initial="initial"
                             animate="animate"
                             transition={{ delay: 0.1 }}
-                            className="text-lg text-zinc-400 leading-relaxed"
+                            className="text-base sm:text-lg text-zinc-400 leading-relaxed px-4 sm:px-0"
                         >
                             GOLFCHARITY was founded on a simple belief: that the world's greatest game could be used to solve some of the world's greatest challenges. We combine the competitive spirit of golf with a transparent, impact-driven giving platform.
                         </motion.p>
@@ -58,7 +58,7 @@ export default function About() {
                         initial="initial"
                         whileInView="animate"
                         viewport={{ once: true }}
-                        className="grid md:grid-cols-3 gap-8 mb-32"
+                        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 mb-20 sm:mb-32"
                     >
                         {[
                             {
@@ -77,10 +77,10 @@ export default function About() {
                                 description: 'Direct, transparent funding for verified Australian charities focusing on health, education, and the environment.'
                             }
                         ].map((item, index) => (
-                            <motion.div key={index} variants={staggerItem}>
-                                <Card variant="glass" className="h-full text-center p-8 group">
-                                    <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
-                                        <item.icon size={32} color="#10b981" strokeWidth={1.5} />
+                            <motion.div key={index} variants={staggerItem} className={index === 2 ? "sm:col-span-2 lg:col-span-1" : ""}>
+                                <Card variant="glass" className="h-full text-center p-6 sm:p-8 group">
+                                    <div className="w-14 sm:w-16 h-14 sm:h-16 mx-auto mb-6 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
+                                        <item.icon size={28} color="#10b981" strokeWidth={1.5} />
                                     </div>
                                     <h3 className="text-xl font-bold text-white mb-4" style={{ fontFamily: 'var(--font-display)' }}>
                                         {item.title}
@@ -94,32 +94,35 @@ export default function About() {
                     </motion.div>
 
                     {/* Founder Section */}
-                    <div className="max-w-5xl mx-auto">
-                        <Card variant="glow" className="overflow-hidden">
-                            <div className="grid md:grid-cols-2">
-                                <div className="p-8 lg:p-12 flex flex-col justify-center">
-                                    <h2 className="text-3xl lg:text-4xl font-bold text-white mb-6" style={{ fontFamily: 'var(--font-display)' }}>
+                    <div className="max-w-5xl mx-auto px-1 sm:px-0">
+                        <Card variant="glow" className="overflow-hidden" padding="p-0">
+                            <div className="grid grid-cols-1 md:grid-cols-2">
+                                <div className="p-8 sm:p-10 lg:p-12 flex flex-col justify-center order-2 md:order-1">
+                                    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-6" style={{ fontFamily: 'var(--font-display)' }}>
                                         Why We Started
                                     </h2>
-                                    <div className="space-y-4 text-zinc-400">
+                                    <div className="space-y-4 text-sm sm:text-base text-zinc-400">
                                         <p>
                                             In 2025, we saw a gap between the charity events we loved playing in and the daily rounds we played with friends. We wondered: what if every round mattered?
                                         </p>
                                         <p>
-                                            GOLFCHARITY was born from that question. We built a platform that allows golfers to compete for massive monthly prizes while donating a portion of their winnings to causes they care about.
+                                            GOLFCHARITY was born from that question. We built a platform that allows golfers to compete for massive monthly prizes while donating a portion of their membership to causes they care about.
                                         </p>
-                                        <p className="italic text-emerald-400 font-medium pt-4">
+                                        <p className="italic text-emerald-400 font-medium pt-4 border-t border-emerald-500/10">
                                             "Our goal is to raise $10 million for Australian charities by 2030, one swing at a time."
                                         </p>
                                     </div>
                                 </div>
-                                <div className="relative aspect-square md:aspect-auto min-h-[400px]">
+                                <div className="relative aspect-video sm:aspect-square md:aspect-auto min-h-[300px] sm:min-h-[400px] order-1 md:order-2 overflow-hidden">
                                     <img
                                         src="https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=800&h=1000&fit=crop"
                                         alt="Golfing impact"
-                                        className="absolute inset-0 w-full h-full object-cover"
+                                        className="absolute inset-0 w-full h-full object-cover grayscale-[0.2] hover:grayscale-0 transition-all duration-700"
                                     />
-                                    <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-transparent to-transparent" />
+                                    {/* Desktop Gradient (Left to Right) */}
+                                    <div className="hidden md:block absolute inset-0 bg-gradient-to-r from-zinc-950 via-transparent to-transparent opacity-90" />
+                                    {/* Mobile Gradient (Bottom to Top) */}
+                                    <div className="md:hidden absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent" />
                                 </div>
                             </div>
                         </Card>

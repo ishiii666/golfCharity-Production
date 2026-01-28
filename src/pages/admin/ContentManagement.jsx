@@ -16,27 +16,6 @@ const contentCategories = [
         icon: '🏠',
         sections: [
             {
-                id: 'hero',
-                title: 'Hero Section',
-                description: 'Main hero with rotating headlines',
-                fields: [
-                    { name: 'badgeText', label: 'Badge Text (top indicator)', type: 'text', value: '' },
-                    { name: 'headline1Top', label: 'Headline 1 - Line 1', type: 'text', value: '' },
-                    { name: 'headline1Middle', label: 'Headline 1 - Line 2', type: 'text', value: '' },
-                    { name: 'headline1Accent', label: 'Headline 1 - Accent (green)', type: 'text', value: '' },
-                    { name: 'headline2Top', label: 'Headline 2 - Line 1', type: 'text', value: '' },
-                    { name: 'headline2Middle', label: 'Headline 2 - Line 2', type: 'text', value: '' },
-                    { name: 'headline2Accent', label: 'Headline 2 - Accent (green)', type: 'text', value: '' },
-                    { name: 'headline3Top', label: 'Headline 3 - Line 1', type: 'text', value: '' },
-                    { name: 'headline3Middle', label: 'Headline 3 - Line 2', type: 'text', value: '' },
-                    { name: 'headline3Accent', label: 'Headline 3 - Accent (green)', type: 'text', value: '' },
-                    { name: 'headline4Top', label: 'Headline 4 - Line 1', type: 'text', value: '' },
-                    { name: 'headline4Middle', label: 'Headline 4 - Line 2', type: 'text', value: '' },
-                    { name: 'headline4Accent', label: 'Headline 4 - Accent (green)', type: 'text', value: '' },
-                    { name: 'subtext', label: 'Subtext (below headlines)', type: 'textarea', value: '' }
-                ]
-            },
-            {
                 id: 'stats',
                 title: 'Impact Statistics',
                 description: 'Numbers displayed on homepage',
@@ -49,7 +28,7 @@ const contentCategories = [
             {
                 id: 'howItWorks',
                 title: 'How It Works',
-                description: 'Step-by-step process',
+                description: 'Step-by-step instructions on the homepage',
                 fields: [
                     { name: 'step1Title', label: 'Step 1 Title', type: 'text', value: '' },
                     { name: 'step1Desc', label: 'Step 1 Description', type: 'textarea', value: '' },
@@ -69,7 +48,7 @@ const contentCategories = [
                 description: 'Footer text and tagline',
                 fields: [
                     { name: 'copyright', label: 'Copyright Text', type: 'text', value: '' },
-                    { name: 'tagline', label: 'Tagline', type: 'text', value: '' }
+                    { name: 'tagline', label: 'Description/Tagline', type: 'textarea', value: '' }
                 ]
             }
         ]
@@ -230,7 +209,7 @@ export default function ContentManagement() {
             });
             setOriginalValues(newOriginals);
 
-            addToast('success', 'All content saved successfully!');
+            addToast('success', 'All content published successfully!');
         } catch (error) {
             console.error('Error saving content:', error);
             addToast('error', 'Failed to save content');
@@ -319,7 +298,7 @@ export default function ContentManagement() {
                                             <svg className={`w-5 h-5 transition-transform duration-300 ${hasUnsavedChanges ? 'scale-110' : 'opacity-50'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                             </svg>
-                                            <span className="font-bold tracking-tight">Save All Changes</span>
+                                            <span className="font-bold tracking-tight">Publish Changes</span>
                                         </>
                                     )}
                                 </div>

@@ -63,24 +63,32 @@ Deno.serve(async (req) => {
         const userEmail = user.email;
         console.log('=== DELETING USER ===', { userId, userEmail });
 
-        // Step 1: Delete scores
-        console.log('Step 1: Deleting scores...');
-        const { error: scoresError, count: scoresCount } = await supabaseAdmin
+        // Step 1: Delete activity logs (Must happen before auth user deletion as it references auth.users)
+        console.log('Step 1: Deleting activity logs...');
+        const { error: logsError } = await supabaseAdmin
+            .from('activity_log')
+            .delete()
+            .eq('user_id', userId);
+        console.log('Activity logs deleted:', { error: logsError?.message });
+
+        // Step 2: Delete scores
+        console.log('Step 2: Deleting scores...');
+        const { error: scoresError } = await supabaseAdmin
             .from('scores')
             .delete()
             .eq('user_id', userId);
-        console.log('Scores deleted:', { error: scoresError?.message, count: scoresCount });
+        console.log('Scores deleted:', { error: scoresError?.message });
 
-        // Step 2: Delete subscription record
-        console.log('Step 2: Deleting subscription...');
+        // Step 3: Delete subscription record
+        console.log('Step 3: Deleting subscription...');
         const { error: subError } = await supabaseAdmin
             .from('subscriptions')
             .delete()
             .eq('user_id', userId);
         console.log('Subscription deleted:', { error: subError?.message });
 
-        // Step 3: Anonymize donations
-        console.log('Step 3: Anonymizing donations...');
+        // Step 4: Anonymize donations
+        console.log('Step 4: Anonymizing donations...');
         const { error: donationError } = await supabaseAdmin
             .from('donations')
             .update({
@@ -91,16 +99,16 @@ Deno.serve(async (req) => {
             .eq('user_id', userId);
         console.log('Donations anonymized:', { error: donationError?.message });
 
-        // Step 4: Delete profile
-        console.log('Step 4: Deleting profile...');
+        // Step 5: Delete profile
+        console.log('Step 5: Deleting profile...');
         const { error: profileError } = await supabaseAdmin
             .from('profiles')
             .delete()
             .eq('id', userId);
         console.log('Profile deleted:', { error: profileError?.message });
 
-        // Step 5: DELETE THE AUTH USER
-        console.log('Step 5: Deleting auth user...');
+        // Step 6: DELETE THE AUTH USER
+        console.log('Step 6: Deleting auth user...');
         const { data: deleteData, error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
         console.log('Auth user deletion result:', {

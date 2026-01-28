@@ -319,7 +319,7 @@ export default function CharityManagement() {
                             { label: 'Total Charities', value: loading ? '...' : charities.length, color: 'text-rose-400' },
                             { label: 'Featured', value: loading ? '...' : charities.filter(c => c.featured).length, color: 'text-amber-400' },
                             { label: 'Total Raised', value: loading ? '...' : `$${(totalRaised / 1000).toFixed(1)}K`, color: 'text-green-400' },
-                            { label: 'Active', value: loading ? '...' : charities.filter(c => c.status === 'active').length, color: 'text-violet-400' }
+                            { label: 'Active Charities', value: loading ? '...' : charities.filter(c => c.status === 'active').length, color: 'text-violet-400' }
                         ].map((stat) => (
                             <motion.div key={stat.label} variants={staggerItem}>
                                 <Card variant="glass" padding="p-4">
@@ -404,13 +404,26 @@ export default function CharityManagement() {
                                             >
                                                 {charity.category}
                                             </span>
-                                            <div className="flex items-center justify-between text-sm mb-4">
+                                            <div className="flex items-center justify-between text-sm mb-2">
                                                 <span style={{ color: 'var(--color-neutral-400)' }}>
                                                     ${charity.totalRaised.toLocaleString()} raised
                                                 </span>
                                                 <span style={{ color: 'var(--color-neutral-500)' }}>
                                                     {charity.supporters} supporters
                                                 </span>
+                                            </div>
+                                            <div className="mb-4">
+                                                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider mb-1 text-zinc-500 font-bold">
+                                                    <span>Impact Share</span>
+                                                    <span>{totalRaised > 0 ? Math.round((charity.totalRaised / totalRaised) * 100) : 0}%</span>
+                                                </div>
+                                                <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                                                    <motion.div
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${totalRaised > 0 ? (charity.totalRaised / totalRaised) * 100 : 0}%` }}
+                                                        className="h-full bg-emerald-500"
+                                                    />
+                                                </div>
                                             </div>
                                             <div className="flex gap-2">
                                                 <Button variant="ghost" size="sm" onClick={() => handleEdit(charity)}>

@@ -73,16 +73,51 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
 
     if (!charity) return null;
 
-    // Charity data with real supporters
+    // Diverse gallery placeholders based on charity name/category
+    const getGallery = () => {
+        if (charity.gallery && charity.gallery.length > 0) return charity.gallery;
+
+        const name = charity.name?.toLowerCase() || '';
+        const category = charity.category?.toLowerCase() || '';
+
+        // Mental Health
+        if (name.includes('blue') || category.includes('mental')) {
+            return [
+                '/images/charities/beyond_blue_gallery_1.png',
+                '/images/charities/beyond_blue_gallery_2.png',
+                '/images/charities/beyond_blue_gallery_3.png'
+            ];
+        }
+        // Medical / Research
+        if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
+            return [
+                '/images/charities/cancer_council_gallery_1.png',
+                '/images/charities/cancer_council_gallery_2.png',
+                '/images/charities/cancer_council_gallery_3.png'
+            ];
+        }
+        // Environment / Wildlife
+        if (name.includes('wild') || category.includes('environ') || category.includes('nature')) {
+            return [
+                'https://images.unsplash.com/photo-1441974231531-c6227db76b6e', // Forest
+                'https://images.unsplash.com/photo-1500485035515-3eeef1a4458e', // Mountain
+                'https://images.unsplash.com/photo-1470770841072-f978cf4d019e'  // Scenic
+            ];
+        }
+
+        // Default placeholders
+        return [
+            'https://images.unsplash.com/photo-1593113598332-cd288d649433', // Hands
+            'https://images.unsplash.com/photo-1544027993-37dbfe43562a', // Support
+            'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6'  // Community
+        ];
+    };
+
     const extendedCharity = {
         ...charity,
         website: charity.website_url || charity.website || `https://www.${charity.name?.toLowerCase().replace(/[^a-z0-9]/g, '')}.org.au`,
         supportersList: supportersList,
-        gallery: charity.gallery || [
-            'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=400&h=300&fit=crop',
-            'https://images.unsplash.com/photo-1544027993-37dbfe43562a?w=400&h=300&fit=crop',
-            'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=400&h=300&fit=crop'
-        ]
+        gallery: getGallery()
     };
 
     const modalContent = (
@@ -126,6 +161,8 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
                                     src={extendedCharity.image}
                                     alt={extendedCharity.name}
                                     className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a1610] via-transparent to-transparent" />
 
@@ -220,58 +257,76 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
 
                                     {/* Visit Website */}
                                     <div className="p-4 rounded-xl bg-white/5 ring-1 ring-inset ring-white/10">
-                                        <p className="text-sm text-neutral-400 mb-3">Want to learn more about this charity?</p>
-                                        <a
-                                            href={extendedCharity.website}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#c9a227] text-[#0a2818] font-medium text-sm hover:bg-[#d4b342] transition-colors"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                            </svg>
-                                            Visit Official Website
-                                        </a>
+                                        <p className="text-sm text-neutral-400 mb-3 font-medium">Want to support this charity?</p>
+                                        <div className="flex flex-wrap gap-3">
+                                            <a
+                                                href={extendedCharity.website}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 text-white font-bold text-sm hover:bg-white/20 transition-colors shadow-lg border border-white/10"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                                Visit Official Website
+                                            </a>
+                                            {onSelect && (
+                                                <Button
+                                                    variant="primary"
+                                                    onClick={() => onSelect(charity)}
+                                                    className="shadow-xl"
+                                                >
+                                                    Select this Charity
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Supporters */}
-                                    <div>
+                                    <div className="pt-2">
                                         <h3 className="text-lg font-bold text-[#f9f5e3] mb-3 flex items-center gap-2">
-                                            <UsersIcon size={18} className="text-[#4ade80]" /> Recent Supporters
+                                            <UsersIcon size={18} className="text-[#4ade80]" strokeWidth={2} /> Recent Supporters
                                         </h3>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className="flex flex-wrap gap-2 min-h-[32px]">
                                             {loadingSupporters ? (
-                                                <span className="px-2.5 py-1 rounded-lg bg-white/5 text-xs text-neutral-400">
-                                                    Loading supporters...
-                                                </span>
+                                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 animate-pulse">
+                                                    <div className="w-2 h-2 rounded-full bg-[#4ade80]/50" />
+                                                    <span className="text-xs text-neutral-400 font-medium">Fetching active community...</span>
+                                                </div>
                                             ) : extendedCharity.supportersList.length > 0 ? (
                                                 <>
                                                     {extendedCharity.supportersList.map((name, i) => (
-                                                        <span key={i} className="px-2.5 py-1 rounded-lg bg-white/5 text-xs text-neutral-300">
+                                                        <span key={i} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 text-xs text-neutral-300 font-medium hover:bg-white/10 transition-colors">
                                                             {name}
                                                         </span>
                                                     ))}
                                                     {(extendedCharity.supporters || 0) > extendedCharity.supportersList.length && (
-                                                        <span className="px-2.5 py-1 rounded-lg ring-1 ring-inset ring-dashed ring-white/10 text-xs text-neutral-500">
+                                                        <span className="px-3 py-1.5 rounded-lg border border-dashed border-white/10 text-xs text-neutral-500 font-medium">
                                                             +{(extendedCharity.supporters || 0) - extendedCharity.supportersList.length} more
                                                         </span>
                                                     )}
                                                 </>
                                             ) : (
-                                                <span className="px-2.5 py-1 rounded-lg bg-white/5 text-xs text-neutral-400">
-                                                    Be the first to support this charity!
-                                                </span>
+                                                <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/5 text-xs text-neutral-400 italic">
+                                                    Become the very first supporter to see your name here!
+                                                </div>
                                             )}
                                         </div>
                                     </div>
 
                                     {/* Gallery */}
-                                    <div>
-                                        <h3 className="text-lg font-bold text-[#f9f5e3] mb-3">Gallery</h3>
-                                        <div className="grid grid-cols-3 gap-2">
+                                    <div className="pb-12 pt-2">
+                                        <h3 className="text-lg font-bold text-[#f9f5e3] mb-4">Gallery</h3>
+                                        <div className="grid grid-cols-3 gap-4">
                                             {extendedCharity.gallery.map((img, i) => (
-                                                <div key={i} className="aspect-square rounded-lg overflow-hidden">
-                                                    <img src={img} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover hover:scale-110 transition-transform duration-300" />
+                                                <div key={i} className="aspect-square rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-lg">
+                                                    <img
+                                                        src={img.includes('unsplash') ? img.split('?')[0] + '?ixlib=rb-1.2.1&auto=format&fit=crop&q=80&w=400' : img}
+                                                        alt={`${extendedCharity.name} ${i + 1}`}
+                                                        className="w-full h-full object-cover hover:scale-110 transition-transform duration-700 ease-in-out"
+                                                        referrerPolicy="no-referrer"
+                                                        loading="lazy"
+                                                    />
                                                 </div>
                                             ))}
                                         </div>

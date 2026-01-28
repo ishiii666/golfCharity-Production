@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { getActiveCharities } from '../lib/supabaseRest';
 
 /**
  * useCharities - Hook for fetching and managing charities
@@ -8,10 +8,10 @@ import { useAuth } from '../context/AuthContext';
 
 // Mock charities for development
 const MOCK_CHARITIES = [
-    { id: '1', name: 'Beyond Blue', slug: 'beyond-blue', category: 'Mental Health', total_raised: 45230, supporter_count: 412 },
-    { id: '2', name: 'Cancer Council', slug: 'cancer-council', category: 'Health Research', total_raised: 38750, supporter_count: 356 },
-    { id: '3', name: 'Salvation Army', slug: 'salvation-army', category: 'Community Support', total_raised: 52100, supporter_count: 489 },
-    { id: '4', name: 'Red Cross Australia', slug: 'red-cross', category: 'Humanitarian', total_raised: 61200, supporter_count: 523 }
+    { id: '1', name: 'Beyond Blue', slug: 'beyond-blue', category: 'Mental Health', total_raised: 45230, supporter_count: 412, image: 'https://images.unsplash.com/photo-1527137342181-19aab11a8ee1?w=800' },
+    { id: '2', name: 'Cancer Council', slug: 'cancer-council', category: 'Health Research', total_raised: 38750, supporter_count: 356, image: 'https://images.unsplash.com/photo-1579154235602-3c2c244b748b?w=800' },
+    { id: '3', name: 'Salvation Army', slug: 'salvation-army', category: 'Community Support', total_raised: 52100, supporter_count: 489, image: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800' },
+    { id: '4', name: 'Red Cross Australia', slug: 'red-cross', category: 'Humanitarian', total_raised: 61200, supporter_count: 523, image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800' }
 ];
 
 export function useCharities() {
@@ -20,25 +20,17 @@ export function useCharities() {
     const [error, setError] = useState(null);
 
     const fetchCharities = useCallback(async () => {
-        if (!isSupabaseConfigured()) {
-            setCharities(MOCK_CHARITIES);
-            setIsLoading(false);
-            return;
-        }
-
         setIsLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('charities')
-                .select('*')
-                .eq('status', 'active')
-                .order('name');
-
-            if (error) throw error;
+            const data = await getActiveCharities();
             setCharities(data || []);
         } catch (err) {
             console.error('Fetch charities error:', err);
             setError(err.message);
+            // Fallback to MOCK only if everything fails and we're not configured
+            if (!isSupabaseConfigured()) {
+                setCharities(MOCK_CHARITIES);
+            }
         } finally {
             setIsLoading(false);
         }

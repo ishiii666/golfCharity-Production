@@ -72,17 +72,19 @@ export function AuthProvider({ children }) {
                     console.log('✅ Session found:', session.user.email);
                     setUser(session.user);
                     setSession(session); // Cache the session
+
+                    // Fetch profile and subscription BEFORE ending initial load
+                    // This ensures isAdmin check is accurate on first render
+                    try {
+                        await Promise.all([
+                            fetchProfile(session.user.id, session.user.email, session.access_token),
+                            fetchSubscription(session.user.id, session.access_token)
+                        ]);
+                    } catch (err) {
+                        console.warn('Initial profile/subscription fetch error:', err.message);
+                    }
+
                     setIsLoading(false);
-
-                    // Fetch profile in background (non-blocking) - pass token directly
-                    fetchProfile(session.user.id, session.user.email, session.access_token).catch(err => {
-                        console.warn('Profile fetch failed (non-blocking):', err.message);
-                    });
-
-                    // Fetch subscription status
-                    fetchSubscription(session.user.id, session.access_token).catch(err => {
-                        console.warn('Subscription fetch failed (non-blocking):', err.message);
-                    });
                 } else {
                     console.log('ℹ️ No active session');
                     setIsLoading(false);
@@ -104,7 +106,7 @@ export function AuthProvider({ children }) {
         initSession();
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 console.log('Auth event:', event);
 
@@ -112,8 +114,11 @@ export function AuthProvider({ children }) {
                     setUser(session.user);
                     setSession(session); // Cache the session
                     try {
-                        await fetchProfile(session.user.id, session.user.email, session.access_token);
-                        await fetchSubscription(session.user.id, session.access_token);
+                        // Wait for profile data on login/change so UI doesn't flash unauthorized
+                        await Promise.all([
+                            fetchProfile(session.user.id, session.user.email, session.access_token),
+                            fetchSubscription(session.user.id, session.access_token)
+                        ]);
                     } catch (e) {
                         console.warn('Profile/subscription fetch on auth change failed:', e);
                     }
@@ -128,7 +133,7 @@ export function AuthProvider({ children }) {
 
         return () => {
             clearTimeout(timeoutId);
-            subscription.unsubscribe();
+            authListener.unsubscribe();
         };
     }, []);
 
@@ -273,11 +278,11 @@ export function AuthProvider({ children }) {
     };
 
     // Sign up with email/password
-    const signup = async (email, password, fullName) => {
+    const signup = async (email, password, fullName, selectedCharityId = null) => {
         if (!isSupabaseConfigured()) {
             // Mock signup
-            setUser({ ...MOCK_USER, email, fullName });
-            setProfile({ ...MOCK_USER, email, full_name: fullName });
+            setUser({ ...MOCK_USER, email, fullName, selectedCharityId });
+            setProfile({ ...MOCK_USER, email, full_name: fullName, selected_charity_id: selectedCharityId });
             return { success: true };
         }
 
@@ -289,7 +294,13 @@ export function AuthProvider({ children }) {
                 email,
                 password,
                 options: {
-                    data: { full_name: fullName }
+                    data: {
+                        full_name: fullName,
+                        selected_charity_id: selectedCharityId
+                    },
+                    emailRedirectTo: import.meta.env.PROD
+                        ? 'https://golfcharity.vercel.app/'
+                        : window.location.origin
                 }
             });
 
@@ -335,19 +346,36 @@ export function AuthProvider({ children }) {
 
     // Sign out
     const logout = async () => {
+        console.log('🚪 Logging out...');
         // Always clear local state first
         setUser(null);
         setProfile(null);
+        setSession(null);
+        setSubscription(null);
 
         if (!isSupabaseConfigured()) {
             return;
         }
 
         try {
+            // Force clear storage even if server call fails
+            const sessionId = session?.user?.id;
             await supabase.auth.signOut();
+            console.log('🚪 Logout: SignOut called for', sessionId);
         } catch (err) {
             console.error('Logout error:', err);
             // State is already cleared, so user is logged out locally
+            // We can also manually clear localStorage as a last resort
+            try {
+                const keys = Object.keys(localStorage);
+                keys.forEach(key => {
+                    if (key.includes('supabase.auth.token')) {
+                        localStorage.removeItem(key);
+                    }
+                });
+            } catch (e) {
+                console.error('Manual storage clear failed:', e);
+            }
         }
     };
 
@@ -520,56 +548,120 @@ export function AuthProvider({ children }) {
         }
 
         try {
-            // Step 1: Cancel Stripe subscription first (no refund)
-            console.log('[DELETE] Step 1: Cancelling Stripe subscription...');
-            const cancelResult = await cancelSubscription();
-            console.log('[DELETE] Stripe cancel result:', cancelResult);
-            if (!cancelResult.success) {
-                console.warn('[DELETE] Stripe cancellation warning:', cancelResult.error);
+            console.log('[DELETE] 🚀 Starting account deletion process');
+
+            // Step 1: Force a hard refresh of the session to get a guaranteed fresh JWT
+            console.log('[DELETE] 1. Requesting session refresh from Supabase...');
+            const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+
+            if (refreshError) {
+                console.warn('[DELETE] Session refresh returned an error:', refreshError.message);
+                // Continue anyway, maybe the existing session is still okay
             }
 
-            // Step 2: Get session for auth header
-            console.log('[DELETE] Step 2: Getting session...');
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                console.error('[DELETE] No session found!');
-                return { success: false, error: 'Not authenticated' };
-            }
-            console.log('[DELETE] Session found for user:', session.user?.email);
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
 
-            // Step 3: Call edge function to completely delete user
-            console.log('[DELETE] Step 3: Calling delete-account edge function...');
+            if (!currentSession?.access_token) {
+                console.error('[DELETE] Critical: No access token found after refresh attempt');
+                return { success: false, error: 'Your session has expired. Please log out and back in to delete your account.' };
+            }
+
+            const token = currentSession.access_token;
+            const userId = currentSession.user?.id;
+            console.log('[DELETE] 2. Verified session for user:', currentSession.user?.email, '(ID:', userId?.substring(0, 8) + '...)');
+
+            // Step 2: Verify the JWT against project auth to be 100% sure it's valid for this project
+            console.log('[DELETE] 3. Verifying JWT validity with Auth server...');
+            const { data: { user: verifiedUser }, error: verifyError } = await supabase.auth.getUser(token);
+
+            if (verifyError || !verifiedUser) {
+                console.error('[DELETE] JWT verification failed:', verifyError?.message);
+                return {
+                    success: false,
+                    error: `Authentication verification failed: ${verifyError?.message || 'Unknown error'}. Please try logging out and back in.`
+                };
+            }
+            console.log('[DELETE] 4. JWT verified successfully');
+
+            // Step 3: Call delete-account edge function
+            console.log('[DELETE] 5. Calling delete-account edge function...');
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+            // Log exactly where we are sending the request
+            console.log('[DELETE] Fetching URL:', `${supabaseUrl}/functions/v1/delete-account`);
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 40000);
+
             const response = await fetch(
                 `${supabaseUrl}/functions/v1/delete-account`,
                 {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${session.access_token}`,
-                        'Content-Type': 'application/json'
-                    }
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'X-Client-Info': 'golf-charity-frontend'
+                    },
+                    signal: controller.signal
                 }
             );
 
-            console.log('[DELETE] Edge function response status:', response.status);
-            const result = await response.json();
-            console.log('[DELETE] Edge function result:', result);
+            clearTimeout(timeoutId);
+            console.log('[DELETE] 6. Response status:', response.status);
 
-            if (result.error) {
-                console.error('[DELETE] Edge function returned error:', result.error);
-                throw new Error(result.error);
+            if (!response.ok) {
+                const errorBody = await response.text();
+                let errorMessage = 'Account deletion failed';
+
+                try {
+                    const json = JSON.parse(errorBody);
+                    errorMessage = json.message || json.error || errorMessage;
+                } catch (e) {
+                    errorMessage = errorBody || errorMessage;
+                }
+
+                console.error('[DELETE] Edge function error details:', {
+                    status: response.status,
+                    body: errorMessage
+                });
+
+                if (response.status === 401) {
+                    return {
+                        success: false,
+                        error: 'Authorization error (401). This usually means your session is stale. Please log out, log back in, and try again immediately.'
+                    };
+                }
+
+                throw new Error(errorMessage);
             }
 
-            // Clear local state
-            console.log('[DELETE] Clearing local state...');
+            const result = await response.json();
+            console.log('[DELETE] 7. Result received:', result);
+
+            // Step 4: Clear local state completely
+            console.log('[DELETE] 8. Success! Wiping local state and storage...');
             setUser(null);
             setProfile(null);
+            setSession(null);
+            setSubscription(null);
 
-            console.log('[DELETE] Account deletion complete!');
+            // Clear ALL local storage starting with supabase or sb-
+            try {
+                const keys = Object.keys(localStorage);
+                keys.forEach(key => {
+                    if (key.includes('supabase') || key.includes('sb-')) {
+                        localStorage.removeItem(key);
+                    }
+                });
+                console.log('[DELETE] Storage wiped.');
+            } catch (e) {
+                console.warn('[DELETE] Storage wipe failed:', e);
+            }
+
             return { success: true };
         } catch (err) {
-            console.error('[DELETE] Account deletion error:', err);
-            return { success: false, error: err.message };
+            console.error('[DELETE] ❌ Deletion process failed:', err);
+            return { success: false, error: err.message || 'An unexpected error occurred during account deletion.' };
         }
     };
 

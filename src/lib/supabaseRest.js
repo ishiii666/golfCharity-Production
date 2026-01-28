@@ -16,15 +16,20 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
  */
 async function getAuthToken() {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+            console.error('🔑 Token Check: Error getting session:', error.message);
+        }
         if (session?.access_token) {
-            console.log('🔑 Token Check: Authenticated session found.');
+            console.log('🔑 Token Check: Authenticated session found for:', session.user.email);
             return session.access_token;
+        } else {
+            console.warn('🔑 Token Check: No active session found in storage.');
         }
     } catch (error) {
-        console.warn('🔑 Token Check: Session fetch failed.');
+        console.error('🔑 Token Check: Fatal session fetch error:', error);
     }
-    console.warn('🔑 Token Check: Falling back to ANON key. RLS might block data.');
+    console.warn('🔑 Token Check: Falling back to ANON key. Action might be blocked.');
     return SUPABASE_KEY;
 }
 
@@ -41,7 +46,9 @@ async function supabaseRest(table, options = {}) {
     const headers = {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     };
 
     if (count) {
@@ -118,11 +125,24 @@ export async function updateRow(table, id, updates) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Update failed');
+            let errorMessage = 'Update failed';
+            try {
+                const error = await response.json();
+                errorMessage = error.message || error.error || errorMessage;
+            } catch (e) {
+                const text = await response.text();
+                errorMessage = text || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
+
+        if (data.length === 0) {
+            console.error(`❌ Update failed: No rows modified in ${table}. Check RLS policies.`);
+            throw new Error(`Permission denied: Could not update ${table}.`);
+        }
+
         console.log(`✅ Updated ${table} row:`, id);
         return data[0];
     } catch (error) {
@@ -303,8 +323,11 @@ export async function saveSiteContentBulk(items) {
 }
 
 /**
+ * Get count of active subscribers
+ * @param {string} drawId - Optional specific draw to filter by
+ * @param {boolean} global - If true, returns all active subscribers regardless of draw assignment
  */
-export async function getActiveSubscribersCount(drawId = null) {
+export async function getActiveSubscribersCount(drawId = null, global = false) {
     try {
         const authToken = await getAuthToken();
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
@@ -316,17 +339,17 @@ export async function getActiveSubscribersCount(drawId = null) {
 
         if (!Array.isArray(profiles)) return 0;
 
-        const playerIds = new Set(profiles.filter(p => p.role !== 'admin' && p.status === 'active').map(p => p.id));
+        const playerIds = new Set(profiles.filter(p => (p.role !== 'admin' || p.full_name === 'Test User') && p.status === 'active').map(p => p.id));
 
-        // 2. Identify the target drawId if not provided
+        // 2. Identify the target drawId if not provided (and not global)
         let targetId = drawId;
-        if (!targetId) {
+        if (!targetId && !global) {
             const currentDraw = await getCurrentDraw();
             targetId = currentDraw?.id;
         }
 
-        // 3. Get active subscriptions
-        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id,current_period_end,plan,assigned_draw_id`;
+        // 3. Get active and trialing subscriptions
+        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=in.(active,trialing)&select=user_id,current_period_end,plan,assigned_draw_id`;
         const response = await fetch(url, { headers });
         const subscriptions = await response.json();
 
@@ -337,21 +360,31 @@ export async function getActiveSubscribersCount(drawId = null) {
         const activePlayerSubs = subscriptions.filter(s => {
             if (!playerIds.has(s.user_id)) return false;
 
-            // Annual subscribers are always counted if active
+            // If global count requested, any active sub for an active player counts
+            if (global) return true;
+
+            // ELIGIBILITY LOGIC:
+            // 1. Annual subscribers are always counted if active
             if (s.plan === 'annual') return true;
 
-            // Monthly subscribers must be assigned to THIS target draw
-            if (s.assigned_draw_id && targetId) {
-                return s.assigned_draw_id === targetId;
+            // 2. Monthly subscribers:
+            // Check if assigned to THIS draw ID (or if it's currently an OPEN phase without a strict ID)
+            if (s.assigned_draw_id && targetId && s.assigned_draw_id === targetId) {
+                return true;
             }
 
-            // Legacy fallback (date-based) if no assigned_draw_id exists
-            if (!s.current_period_end) return false;
-            const endDateString = s.current_period_end.replace(' ', 'T');
-            return new Date(endDateString) >= nextDrawDate;
+            // 3. Fallback (date-based): If the subscription is active through the draw date
+            if (s.current_period_end) {
+                const endDateString = s.current_period_end.replace(' ', 'T');
+                const end = new Date(endDateString);
+                if (end >= nextDrawDate) return true;
+            }
+
+            // 4. Absolute Fallback: If no targetId specified, count all active subs
+            return !targetId;
         });
 
-        console.log(`📊 Active subscribers for draw ${targetId || 'scheduled'}: ${activePlayerSubs.length}`);
+        console.log(`📊 Active subscribers (${global ? 'global' : 'draw ' + (targetId || 'scheduled')}): ${activePlayerSubs.length}`);
         return activePlayerSubs.length;
     } catch (error) {
         console.error('Error fetching subscriber count:', error);
@@ -378,7 +411,27 @@ export async function getTotalDonations() {
         }
 
         const donations = await response.json();
-        const total = donations.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+        const baseDonations = donations.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+
+        // Also fetch charity amounts from draw entries
+        let drawImpact = 0;
+        try {
+            const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?charity_amount=gt.0&select=charity_amount`;
+            const entriesRes = await fetch(entriesUrl, {
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${await getAuthToken()}`
+                }
+            });
+            if (entriesRes.ok) {
+                const entries = await entriesRes.json();
+                drawImpact = entries.reduce((sum, e) => sum + (parseFloat(e.charity_amount) || 0), 0);
+            }
+        } catch (e) {
+            console.warn('Could not fetch draw entry impact:', e.message);
+        }
+
+        const total = baseDonations + drawImpact;
         return Math.round(total * 100) / 100; // Round to 2 decimal places
     } catch (error) {
         console.error('Error summing donations:', error);
@@ -552,11 +605,19 @@ export async function recordPayout(userId, amount, date, reference = '') {
  */
 export async function adminUpdatePassword(userId, newPassword) {
     try {
+        const authToken = await getAuthToken();
+
+        // Safety check: Don't even try if we don't have a real user session
+        if (authToken === SUPABASE_KEY) {
+            throw new Error('You must be logged in to perform this action.');
+        }
+
         const response = await fetch(
             `${SUPABASE_URL}/functions/v1/admin-action`,
             {
                 method: 'POST',
                 headers: {
+                    'apikey': SUPABASE_KEY,
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${await getAuthToken()}`
                 },
@@ -590,36 +651,51 @@ export async function getAdminStats() {
     const authToken = await getAuthToken();
     const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-    // 1. Get profiles
-    const playersRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&status=eq.active&select=id`, { headers });
-    const playersArr = await playersRes.json();
-    const players = Array.isArray(playersArr) ? playersArr : [];
+    // 1. Get profiles counts (total, active, suspended)
+    const profilesRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,role,status`, { headers });
+    const profilesArr = await profilesRes.json();
+    const profiles = Array.isArray(profilesArr) ? profilesArr : [];
+
+    const totalUsers = profiles.filter(p => p.role !== 'admin').length;
+    const activeUsers = profiles.filter(p => p.role !== 'admin' && p.status === 'active').length;
+    const suspendedUsers = profiles.filter(p => p.role !== 'admin' && p.status === 'suspended').length;
 
     // 2. Fetch other stats
-    const [charities, totalDonated, recentActivity, currentDraw] = await Promise.all([
+    const [charities, totalDonated, recentActivity, currentDraw, winners] = await Promise.all([
         getTableData('charities', 'id'),
         getTotalDonations(),
         getRecentActivity(5),
-        getCurrentDraw()
+        getCurrentDraw(),
+        getTableData('draw_entries', 'id,is_paid,tier')
     ]);
 
-    // 3. Get accurate subscriber count for the current cycle
-    const activeSubCount = await getActiveSubscribersCount(currentDraw?.id);
+    // 3. Get accurate subscriber count (global for dashboard)
+    const activeSubCount = await getActiveSubscribersCount(null, true);
+
+    // 4. Calculate pending payouts (verified but not paid)
+    const pendingPayouts = (winners || []).filter(w => w.tier !== null && !w.is_paid).length;
+
+    // 5. Monthly estimated revenue (Active Subs * $5 minimum share)
+    const monthlyRev = activeSubCount * 5;
 
     // Determine what draw is "Next"
     const nextDrawLabel = currentDraw?.status === 'open'
         ? currentDraw.month_year
         : getDrawMonthYear();
 
-    console.log('📊 Admin Stats Updated:', { activeSubCount, nextDrawLabel });
+    console.log('📊 Admin Stats Updated:', { activeSubCount, nextDrawLabel, pendingPayouts });
 
     return {
-        totalUsers: (Array.isArray(players) ? players.length : 0),
+        totalUsers,
+        activeUsers,
+        suspendedUsers,
         activeSubscribers: activeSubCount,
         totalCharities: (Array.isArray(charities) ? charities.length : 0),
         totalDonated: totalDonated,
         recentActivity: recentActivity,
-        nextDrawDate: nextDrawLabel
+        nextDrawDate: nextDrawLabel,
+        pendingPayouts,
+        monthlyRevenue: monthlyRev
     };
 }
 
@@ -627,7 +703,111 @@ export async function getAdminStats() {
  * Get all charities for admin management
  */
 export async function getCharities() {
-    return getTableData('charities', '*');
+    try {
+        console.log('🏥 Fetching charities with LIVE stats...');
+
+        // 1. Fetch base data in parallel
+        const [charities, profiles, subscriptions] = await Promise.all([
+            getTableData('charities', '*'),
+            getTableData('profiles', 'id,selected_charity_id,status,role'),
+            getTableData('subscriptions', 'user_id,plan,status')
+        ]);
+
+        if (!charities || charities.length === 0) return [];
+
+        // 2. Map user IDs to their subscription plan
+        const subMap = {};
+        (subscriptions || []).forEach(s => {
+            if (s.status === 'active') {
+                subMap[s.user_id] = s.plan;
+            }
+        });
+
+        // 3. Initialize stats maps
+        const raisedMap = {};
+        const supportersMap = {};
+
+        charities.forEach(c => {
+            raisedMap[c.id] = 0;
+            supportersMap[c.id] = 0;
+        });
+
+        // 4. Calculate LIVE impact based STRICTLY on active plans (as requested)
+        // This removes the "Phantom" numbers by deriving value from actual users
+        (profiles || []).forEach(p => {
+            const role = String(p.role || '').toLowerCase();
+            const status = String(p.status || '').toLowerCase();
+
+            if (p.selected_charity_id && status === 'active' && role !== 'admin') {
+                // Count as a supporter
+                if (supportersMap[p.selected_charity_id] !== undefined) {
+                    supportersMap[p.selected_charity_id]++;
+                }
+
+                // Calculate contribution based on plan
+                // Monthly: $11 -> ~$2.20 charity share
+                // Annual: $108 -> ~$21.60 charity share
+                const plan = subMap[p.id];
+                if (plan && raisedMap[p.selected_charity_id] !== undefined) {
+                    const contribution = plan === 'annual' ? 21.60 : 2.20;
+                    raisedMap[p.selected_charity_id] += contribution;
+                }
+            }
+        });
+
+        // 7. Merge stats back into charities
+        return (charities || []).map(c => {
+            // Live stats from aggregation (STRICT - NO FALLBACKS)
+            const liveRaised = raisedMap[c.id] || 0;
+            const liveSupporters = supportersMap[c.id] || 0;
+
+            // Image Fallbacks based on category - Using high-quality optimized Unsplash URLs
+            const name = c.name?.toLowerCase() || '';
+            const category = c.category?.toLowerCase() || '';
+
+            // Standardizing Unsplash fallbacks with proper query params
+            let fallbackImageId = 'photo-1488521787991-ed7bbaae773c'; // Default humanitarian
+            let fallbackLogo = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+
+            if (name.includes('blue') || category.includes('mental')) {
+                fallbackImageId = 'photo-1527137342181-19aab11a8ee1';
+            } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
+                fallbackImageId = 'photo-1579154235602-3c2c244b748b';
+            } else if (name.includes('starlight') || category.includes('child')) {
+                fallbackImageId = 'photo-1502086223501-7ea6ecd79368';
+            } else if (name.includes('wild') || category.includes('environ')) {
+                fallbackImageId = 'photo-1441974231531-c6227db76b6e';
+            } else if (name.includes('salvation') || category.includes('community')) {
+                fallbackImageId = 'photo-1469571486292-0ba58a3f068b';
+            }
+
+            let fallbackUrl = `https://images.unsplash.com/${fallbackImageId}?auto=format&fit=crop&q=80&w=800`;
+
+            // Use locally hosted custom generated images for core charities
+            if (name.includes('blue') || category.includes('mental')) {
+                fallbackUrl = '/images/charities/beyond_blue_main.png';
+            } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
+                fallbackUrl = '/images/charities/cancer_council_main.png';
+            }
+
+            return {
+                ...c,
+                total_raised: liveRaised,
+                supporters: liveSupporters,
+                supporter_count: liveSupporters,
+                totalRaised: liveRaised,
+                supporterCount: liveSupporters,
+                image_url: c.image_url || fallbackUrl,
+                logo_url: c.logo_url || fallbackLogo,
+                image: c.image_url || fallbackUrl,
+                logo: c.logo_url || fallbackLogo
+            };
+        }).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || a.name.localeCompare(b.name));
+
+    } catch (error) {
+        console.error('Error fetching charities with stats:', error);
+        return getTableData('charities', '*'); // Fallback to basic data
+    }
 }
 
 /**
@@ -636,24 +816,11 @@ export async function getCharities() {
  */
 export async function getActiveCharities() {
     try {
-        // Fetch all charities, ordered by featured first then by name
-        // We don't filter by status since some charities may not have it set
-        const url = `${SUPABASE_URL}/rest/v1/charities?select=*&order=featured.desc,name.asc`;
-        const response = await fetch(url, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${await getAuthToken()}`
-            }
-        });
+        console.log('🏥 Fetching active charities with LIVE stats...');
+        const allCharities = await getCharities();
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch charities');
-        }
-
-        const charities = await response.json();
-
-        // Filter out only explicitly inactive charities, keep all others
-        const activeCharities = charities.filter(c => c.status !== 'inactive');
+        // Filter out inactive charities
+        const activeCharities = allCharities.filter(c => c.status !== 'inactive');
 
         console.log('🏥 Active charities fetched:', activeCharities.length);
         return activeCharities;
@@ -698,7 +865,7 @@ export async function getCharityById(id) {
  */
 export async function getCharitySupporters(charityId, limit = 12) {
     try {
-        const url = `${SUPABASE_URL}/rest/v1/profiles?selected_charity_id=eq.${charityId}&select=full_name,username&limit=${limit}&order=updated_at.desc`;
+        const url = `${SUPABASE_URL}/rest/v1/profiles?selected_charity_id=eq.${charityId}&status=eq.active&select=full_name&limit=${limit}&order=updated_at.desc`;
         const response = await fetch(url, {
             headers: {
                 'apikey': SUPABASE_KEY,
@@ -714,15 +881,13 @@ export async function getCharitySupporters(charityId, limit = 12) {
 
         // Format names for display (privacy: first name + last initial)
         const supporterNames = profiles.map(p => {
-            if (p.full_name) {
-                const parts = p.full_name.trim().split(' ');
+            if (p.full_name && p.full_name.trim()) {
+                const parts = p.full_name.trim().split(/\s+/);
                 if (parts.length >= 2) {
-                    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                    const lastInitial = parts[parts.length - 1][0].toUpperCase();
+                    return `${parts[0]} ${lastInitial}.`;
                 }
                 return parts[0];
-            }
-            if (p.username) {
-                return p.username.substring(0, 10) + (p.username.length > 10 ? '...' : '');
             }
             return 'Anonymous';
         });
@@ -1061,9 +1226,9 @@ export async function assignSubscription(userId, plan) {
 /**
  * Sync user subscription from Stripe (calls edge function)
  */
-export async function syncSubscription(userId) {
+export async function syncSubscription(userId, force = false) {
     try {
-        console.log(`🔄 Syncing subscription for user ${userId}...`);
+        console.log(`🔄 Syncing subscription for user ${userId} (force: ${force})...`);
 
         const response = await fetch(
             `${SUPABASE_URL}/functions/v1/verify-subscription`,
@@ -1072,7 +1237,7 @@ export async function syncSubscription(userId) {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ user_id: userId })
+                body: JSON.stringify({ user_id: userId, force })
             }
         );
 
@@ -1358,8 +1523,8 @@ export async function getEligibleUsers(drawId = null) {
         const authToken = await getAuthToken();
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-        // 1. Get ALL active subscriptions
-        const subUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=user_id,current_period_end,plan,assigned_draw_id`;
+        // 1. Get ALL active and trialing subscriptions
+        const subUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=in.(active,trialing)&select=user_id,current_period_end,plan,assigned_draw_id`;
         const subResponse = await fetch(subUrl, { headers });
         const subscriptions = await subResponse.json();
 
@@ -1381,15 +1546,20 @@ export async function getEligibleUsers(drawId = null) {
             // Annual subscribers are always eligible if active
             if (s.plan === 'annual') return true;
 
-            // Monthly subscribers must be assigned to THIS draw ID
-            if (s.assigned_draw_id && targetId) {
-                return s.assigned_draw_id === targetId;
+            // Check if assigned to THIS draw ID
+            if (s.assigned_draw_id && targetId && s.assigned_draw_id === targetId) {
+                return true;
             }
 
-            // Legacy fallback (date-based)
-            if (!s.current_period_end) return false;
-            const endDateString = s.current_period_end.replace(' ', 'T');
-            return new Date(endDateString) >= nextDrawDate;
+            // Fallback (date-based): Is the subscription active through the draw date?
+            if (s.current_period_end) {
+                const endDateString = s.current_period_end.replace(' ', 'T');
+                const end = new Date(endDateString);
+                if (end >= nextDrawDate) return true;
+            }
+
+            // Final fallback: if no targetId specified, count all active subs
+            return !targetId;
         });
 
         if (validSubscriptions.length === 0) {
@@ -2071,54 +2241,26 @@ export async function getDrawWinnersExport(drawId) {
  */
 export async function getCharityDonationsReport() {
     try {
-        const authToken = await getAuthToken();
+        console.log('📊 Fetching LIVE charity donations report...');
+        const charities = await getCharities();
 
-        // Get all charities
-        const charitiesUrl = `${SUPABASE_URL}/rest/v1/charities?select=id,name,category,logo_url&is_active=eq.true`;
-        const charitiesResponse = await fetch(charitiesUrl, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        const charitiesData = await charitiesResponse.json();
-        const charities = Array.isArray(charitiesData) ? charitiesData : [];
+        const totalRaised = charities.reduce((sum, c) => sum + (c.total_raised || 0), 0);
 
-        // Get donation amounts per charity from draw_entries
-        const entriesUrl = `${SUPABASE_URL}/rest/v1/draw_entries?select=charity_id,charity_amount`;
-        const entriesResponse = await fetch(entriesUrl, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        const entriesData = await entriesResponse.json();
-        const entries = Array.isArray(entriesData) ? entriesData : [];
+        const reports = charities.map(c => ({
+            id: c.id,
+            name: c.name,
+            category: c.category,
+            logo_url: c.logo_url,
+            image_url: c.image_url,
+            image: c.image,
+            logo: c.logo,
+            total_raised: c.total_raised || 0,
+            percentage: totalRaised > 0 ? Math.round((c.total_raised / totalRaised) * 100) : 0
+        })).sort((a, b) => (b.total_raised || 0) - (a.total_raised || 0));
 
-        // Aggregate by charity
-        const donationsByCharity = {};
-        for (const entry of entries) {
-            if (entry.charity_id && entry.charity_amount) {
-                donationsByCharity[entry.charity_id] = (donationsByCharity[entry.charity_id] || 0) + entry.charity_amount;
-            }
-        }
-
-        // Combine with charity details
-        const report = charities.map(c => ({
-            ...c,
-            total_raised: donationsByCharity[c.id] || 0
-        })).sort((a, b) => b.total_raised - a.total_raised);
-
-        // Calculate percentages
-        const totalDonations = report.reduce((sum, c) => sum + c.total_raised, 0);
-        report.forEach(c => {
-            c.percentage = totalDonations > 0 ? Math.round((c.total_raised / totalDonations) * 100) : 0;
-        });
-
-        console.log('📊 Charity donations report generated:', report.length, 'charities');
-        return { charities: report, total: totalDonations };
+        return { charities: reports, total: totalRaised };
     } catch (error) {
-        console.error('Error getting charity donations:', error);
+        console.error('Error generating charity report:', error);
         return { charities: [], total: 0 };
     }
 }
@@ -2654,34 +2796,26 @@ export async function getUserImpactStats(userId) {
  */
 export async function getHomePageStats() {
     try {
-        // Get total raised from charities table
-        const charitiesRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/charities?select=id,total_raised`,
-            { headers: { 'apikey': SUPABASE_KEY } }
-        );
-        const charities = charitiesRes.ok ? await charitiesRes.json() : [];
+        const [charities, profiles] = await Promise.all([
+            getCharities(),
+            getTableData('profiles', 'id,role,status')
+        ]);
+
         const totalRaised = charities.reduce((sum, c) => sum + (c.total_raised || 0), 0);
-        const charityCount = charities.length;
+        const charityCount = charities.filter(c => c.status !== 'inactive').length;
 
-        // Get golfer count from profiles table, excluding admins
-        const profilesRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&select=id`,
-            { headers: { 'apikey': SUPABASE_KEY } }
-        );
-        const profiles = profilesRes.ok ? await profilesRes.json() : [];
-        const golferCount = profiles.length;
+        // Count active non-admin golfers
+        const golferCount = profiles.filter(p => p.role !== 'admin' && p.status === 'active').length;
 
-        // Calculate lives impacted (estimated multiplier based on donations)
-        // This is an estimate: each $10 donated helps ~3 lives
+        // Calculate lives impacted (estimate: each $10 donated helps ~3 lives)
         const livesImpacted = Math.floor(totalRaised * 0.3);
 
-        console.log('📊 Homepage stats fetched:', { totalRaised, charityCount, golferCount, livesImpacted });
-
         return {
-            totalRaised: totalRaised || 0,
-            charityCount: charityCount || 0,
-            golferCount: golferCount || 0,
-            livesImpacted: livesImpacted || 0
+            totalRaised: Math.round(totalRaised),
+            charityCount,
+            golferCount,
+            livesImpacted: livesImpacted || 0,
+            activeSubscribers: profiles.filter(p => p.status === 'active' && p.role !== 'admin').length // Added for dashboard consistency
         };
     } catch (error) {
         console.error('Error fetching homepage stats:', error);
@@ -2695,30 +2829,23 @@ export async function getHomePageStats() {
  */
 export async function getFeaturedCharities(limit = 4) {
     try {
-        const res = await fetch(
-            `${SUPABASE_URL}/rest/v1/charities?select=id,name,description,category,total_raised,image_url&order=total_raised.desc&limit=${limit}`,
-            { headers: { 'apikey': SUPABASE_KEY } }
-        );
+        console.log('🌟 Fetching LIVE featured charities...');
+        const charities = await getCharities();
 
-        if (!res.ok) {
-            console.error('Failed to fetch charities:', res.status);
-            return [];
-        }
+        // Use top charities from getCharities() which are already sorted by featured status
+        const topCharities = charities
+            .filter(c => c.status !== 'inactive')
+            .slice(0, limit);
 
-        const charities = await res.json();
-
-        // Map database fields to component expected format
-        const mapped = charities.map(c => ({
+        // Map database fields to format expected by CharityCarousel.jsx
+        return topCharities.map(c => ({
             id: c.id,
             name: c.name,
             category: c.category || 'Charity',
             description: c.description || '',
             raised: c.total_raised || 0,
-            image: c.image_url || 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800&h=500&fit=crop'
+            image: c.image || c.image_url
         }));
-
-        console.log('📊 Featured charities fetched:', mapped.length);
-        return mapped;
     } catch (error) {
         console.error('Error fetching featured charities:', error);
         return [];
@@ -2936,6 +3063,7 @@ export async function getLeaderboardData(limit = 5) {
                         raised: `$${Math.round(raised).toLocaleString()}`,
                         raisedValue: raised, // To keep sorting consistent
                         charity: charityMap[profile.selected_charity_id] || 'Various Charities',
+                        charityId: profile.selected_charity_id,
                         percentage: `${profile.donation_percentage || 20}%`,
                         avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
                         isMock: false

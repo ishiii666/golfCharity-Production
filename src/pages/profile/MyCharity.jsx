@@ -9,6 +9,7 @@ import { fadeUp, staggerContainer, staggerItem } from '../../utils/animations';
 import { ArrowRightIcon, HeartIcon, GolfFlagIcon, CalendarIcon, TrophyIcon } from '../../components/ui/Icons';
 import CharityDetailsModal from '../../components/ui/CharityDetailsModal';
 import { getActiveCharities, getUserImpactStats } from '../../lib/supabaseRest';
+import { useToast } from '../../components/ui/Toast';
 
 export default function MyCharity() {
     const { user, isAdmin, updateProfile } = useAuth();
@@ -26,8 +27,8 @@ export default function MyCharity() {
     const [selectedCharity, setSelectedCharity] = useState(null);
     const [donationPercentage, setDonationPercentage] = useState(20);
     const [isSaving, setIsSaving] = useState(false);
-    const [successMessage, setSuccessMessage] = useState('');
     const [viewingCharity, setViewingCharity] = useState(null);
+    const { addToast } = useToast();
     const [isInitialized, setIsInitialized] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -133,15 +134,14 @@ export default function MyCharity() {
         setIsSaving(false);
 
         if (result.success) {
-            setSuccessMessage('Charity preferences saved!');
+            addToast('success', 'Charity preferences saved!');
             // Update original values to match saved values
             setOriginalCharity(selectedCharity);
             setOriginalPercentage(donationPercentage);
             setHasUnsavedChanges(false);
         } else {
-            setSuccessMessage('Error: ' + (result.error || 'Failed to save'));
+            addToast('error', 'Error: ' + (result.error || 'Failed to save'));
         }
-        setTimeout(() => setSuccessMessage(''), 3000);
     };
 
     return (
@@ -163,23 +163,6 @@ export default function MyCharity() {
                                 Choose where your contributions go and track your impact
                             </p>
                         </motion.div>
-
-                        {/* Success Message */}
-                        {successMessage && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mb-6 p-4 rounded-xl"
-                                style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)' }}
-                            >
-                                <p className="text-green-400 flex items-center gap-2">
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    {successMessage}
-                                </p>
-                            </motion.div>
-                        )}
 
                         <motion.div
                             variants={staggerContainer}
@@ -432,8 +415,7 @@ export default function MyCharity() {
                 onSelect={(charity) => {
                     setSelectedCharity(charity.id);
                     setViewingCharity(null);
-                    setSuccessMessage(`You selected ${charity.name}!`);
-                    setTimeout(() => setSuccessMessage(''), 3000);
+                    addToast('success', `You selected ${charity.name}! Remember to save your preferences.`);
                 }}
             />
         </>

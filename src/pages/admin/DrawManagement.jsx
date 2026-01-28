@@ -155,7 +155,7 @@ export default function DrawManagement() {
     const fetchStatsUpdate = async () => {
         try {
             const [subCount, currentJackpot] = await Promise.all([
-                getActiveSubscribersCount(),
+                getActiveSubscribersCount(null, true),
                 getJackpot()
             ]);
             setLiveSubCount(subCount || 0);
@@ -183,7 +183,7 @@ export default function DrawManagement() {
             const currentSettings = await getDrawSettings();
             if (currentSettings) setSettings(currentSettings);
 
-            const subCount = await getActiveSubscribersCount();
+            const subCount = await getActiveSubscribersCount(null, true);
             setLiveSubCount(subCount || 0);
         } catch (error) {
             console.error('Error fetching draw data:', error);

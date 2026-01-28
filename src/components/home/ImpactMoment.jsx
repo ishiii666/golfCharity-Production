@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import { cn } from "../../utils/cn";
 import { Zap } from "lucide-react";
+import { getSiteContent } from "../../lib/supabaseRest";
 
 // Valid video source
 const VIDEO_SRC = "https://assets.mixkit.co/videos/preview/mixkit-tree-branches-in-the-breeze-1198-large.mp4";
@@ -35,7 +36,7 @@ export default function ImpactMoment() {
     }, [isInView]);
 
     return (
-        <section ref={containerRef} className="pt-4 pb-12 lg:pt-6 lg:pb-16 relative bg-zinc-950 overflow-hidden min-h-[600px]">
+        <section ref={containerRef} className="pt-4 pb-12 lg:pt-6 lg:pb-16 relative bg-zinc-950 overflow-hidden min-h-[500px] md:min-h-[600px]">
             {/* Background */}
             <div
                 className="absolute inset-0"
@@ -66,7 +67,9 @@ export default function ImpactMoment() {
                         transition={{ delay: 0.2, duration: 0.8 }}
                         className="inline-block px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 mb-6"
                     >
-                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500">The Ultimate Payoff</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500">
+                            The Ultimate Payoff
+                        </span>
                     </motion.div>
 
                     <h2
@@ -74,7 +77,7 @@ export default function ImpactMoment() {
                         style={{ fontFamily: 'var(--font-display)' }}
                     >
                         THE MOMENT OF <br />
-                        <span className="text-gradient-emerald italic">IMPACT</span>
+                        <span className="text-gradient-emerald italic uppercase pr-2 inline-block">IMPACT</span>
                     </h2>
                     <motion.div
                         initial={{ width: 0 }}
@@ -119,20 +122,20 @@ export default function ImpactMoment() {
                         exit={{ opacity: 0, scale: 1.2, filter: "blur(20px)" }}
                         transition={{ duration: 1, ease: "easeOut", delay: 0.5 }}
                     >
-                        <div className="bg-zinc-950/80 backdrop-blur-2xl p-10 md:p-16 rounded-[3rem] border border-emerald-500/30 text-center max-w-3xl shadow-[0_0_100px_rgba(16,185,129,0.2)]">
+                        <div className="bg-zinc-950/90 backdrop-blur-2xl px-6 py-10 md:p-16 rounded-[2rem] md:rounded-[3rem] border border-emerald-500/20 text-center max-w-[calc(100vw-2rem)] md:max-w-3xl shadow-[0_0_50px_rgba(16,185,129,0.2)]">
                             <motion.span
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 1.2 }}
-                                className="text-emerald-500 font-black text-xs uppercase tracking-[0.5em] mb-6 block"
+                                className="text-emerald-500 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.5em] mb-4 md:mb-6 block"
                             >
                                 Breakthrough Achieved
                             </motion.span>
-                            <h2 className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tighter uppercase italic leading-[0.9]">
+                            <h2 className="text-3xl sm:text-4xl md:text-7xl font-black text-white mb-6 tracking-tighter uppercase italic leading-[0.9] break-words">
                                 WINNER & <br /><span className="text-emerald-500">BENEFACTOR</span>
                             </h2>
-                            <div className="h-px w-24 bg-emerald-500/50 mx-auto mb-8" />
-                            <p className="text-zinc-400 text-lg md:text-2xl font-medium leading-relaxed">
+                            <div className="h-px w-16 md:w-24 bg-emerald-500/50 mx-auto mb-6 md:mb-8" />
+                            <p className="text-zinc-400 text-sm md:text-2xl font-medium leading-relaxed">
                                 Your round just unlocked <span className="text-white font-bold">14 days</span> of medical support for families in rural Australia.
                             </p>
                         </div>

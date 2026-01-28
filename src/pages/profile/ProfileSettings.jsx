@@ -59,8 +59,8 @@ export default function ProfileSettings() {
                 homeClub: user.homeClub || '',
                 state: user.state || 'VIC',
                 bankName: user.bankName || '',
-                bsbNumber: user.bsbNumber || '',
-                accountNumber: user.accountNumber || '',
+                bsbNumber: user.bsbNumber ? String(user.bsbNumber).replace(/\D/g, '') : '',
+                accountNumber: user.accountNumber ? String(user.accountNumber).replace(/\D/g, '') : '',
                 notifications: user.notificationSettings || {
                     email: true,
                     drawResults: true,
@@ -161,24 +161,49 @@ export default function ProfileSettings() {
         }
 
         setIsDeleting(true);
+        setError('');
 
         try {
+            console.log('🚮 Starting account deletion process...');
             const result = await deleteAccount();
 
             if (!result.success) {
-                throw new Error(result.error);
+                throw new Error(result.error || 'Failed to delete account');
             }
 
-            // Logout and redirect to home page
-            await logout();
-            window.location.href = '/';
+            console.log('✅ Account deleted from database, performing final logout...');
+
+            // Logout and redirect to home page with a query param to show we're done
+            try {
+                await logout();
+            } catch (logoutErr) {
+                console.warn('Logout after deletion failed (expected if user is gone):', logoutErr);
+            }
+
+            // Critical: Use a clean redirect
+            window.location.href = '/?account_deleted=true';
         } catch (err) {
-            setError(err.message);
+            console.error('❌ Deletion failed:', err);
+            setError(err.message || 'An unexpected error occurred during account deletion. Please try again or contact support.');
             setIsDeleting(false);
         }
     };
 
     const states = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'NT', 'ACT'];
+
+    // Masking helpers for banking details
+    const maskBSB = (bsb) => {
+        if (!bsb) return 'xxx-xxx';
+        return 'xxx-xxx';
+    };
+
+    const maskAccountNumber = (acc) => {
+        if (!acc) return 'xxxxxx';
+        const str = String(acc).replace(/\D/g, ''); // Only consider numeric digits
+        if (str.length <= 2) return 'xxxx' + str;
+        return 'xxxx' + str.slice(-2);
+    };
+
 
     return (
         <PageTransition>
@@ -414,7 +439,8 @@ export default function ProfileSettings() {
                                             </label>
                                             <Input
                                                 name="bsbNumber"
-                                                value={formData.bsbNumber}
+                                                type={isEditing ? "number" : "text"}
+                                                value={isEditing ? formData.bsbNumber : maskBSB(formData.bsbNumber)}
                                                 onChange={handleInputChange}
                                                 disabled={!isEditing}
                                                 placeholder="000-000"
@@ -426,7 +452,8 @@ export default function ProfileSettings() {
                                             </label>
                                             <Input
                                                 name="accountNumber"
-                                                value={formData.accountNumber}
+                                                type={isEditing ? "number" : "text"}
+                                                value={isEditing ? formData.accountNumber : maskAccountNumber(formData.accountNumber)}
                                                 onChange={handleInputChange}
                                                 disabled={!isEditing}
                                                 placeholder="12345678"
@@ -457,16 +484,17 @@ export default function ProfileSettings() {
                                             { key: 'charityUpdates', label: 'Charity Updates', desc: 'Updates from your chosen charity' }
                                         ].map(item => (
                                             <div key={item.key} className="flex items-center justify-between p-4 rounded-xl" style={{ background: 'rgba(26, 77, 46, 0.2)' }}>
-                                                <div>
+                                                <div className="flex-1 pr-4">
                                                     <p className="font-medium" style={{ color: 'var(--color-cream-200)' }}>{item.label}</p>
                                                     <p className="text-sm" style={{ color: 'var(--color-neutral-500)' }}>{item.desc}</p>
                                                 </div>
                                                 <button
                                                     onClick={() => handleNotificationChange(item.key)}
-                                                    className={`w-12 h-6 rounded-full transition-colors relative ${formData.notifications[item.key] ? 'bg-green-500' : 'bg-slate-600'}`}
+                                                    className={`relative inline-flex h-6 w-11 no-touch-target flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${formData.notifications[item.key] ? 'bg-emerald-500' : 'bg-zinc-600'}`}
+                                                    aria-label={`Toggle ${item.label}`}
                                                 >
-                                                    <div
-                                                        className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-[left] duration-200 ${formData.notifications[item.key] ? 'left-7' : 'left-1'}`}
+                                                    <span
+                                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${formData.notifications[item.key] ? 'translate-x-5' : 'translate-x-0'}`}
                                                     />
                                                 </button>
                                             </div>

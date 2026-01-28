@@ -154,14 +154,24 @@ export default function UserManagement() {
     const handleSyncUser = async (user) => {
         try {
             // Optimistic loading state could be added here if needed
-            const result = await syncSubscription(user.id);
+            const result = await syncSubscription(user.id, true); // Force deep sync with Stripe
             if (result.success) {
+                // Align with real-time logic used in getUsers()
+                const sub = result.subscription;
+                const status = sub?.status?.toLowerCase();
+                const isActive = status === 'active' || status === 'trialing';
+                const newPlan = isActive ? (sub?.plan || 'active') : 'none';
+
                 // Update local status
-                const newPlan = result.subscription?.plan || result.subscription?.status || 'none';
                 setUsers(prev => prev.map(u =>
                     u.id === user.id ? { ...u, subscription: newPlan } : u
                 ));
-                addToast('success', `Subscription synced for ${user.fullName}`);
+
+                if (isActive) {
+                    addToast('success', `Subscription verified: ${newPlan} for ${user.fullName}`);
+                } else {
+                    addToast('info', `No active subscription found for ${user.fullName}`);
+                }
             } else {
                 addToast('error', `Sync failed for ${user.fullName}`);
             }

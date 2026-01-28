@@ -10,6 +10,8 @@ import CharityDetailsModal from '../components/ui/CharityDetailsModal';
 import { useAuth } from '../context/AuthContext';
 import { getActiveCharities } from '../lib/supabaseRest';
 import { createDonationSession, isStripeConfigured } from '../lib/stripe';
+import { useToast } from '../components/ui/Toast';
+import { CheckIcon } from '../components/ui/Icons';
 
 // Sort options
 const sortOptions = [
@@ -39,7 +41,7 @@ export default function Charities() {
     const [expandedCategories, setExpandedCategories] = useState(false);
     const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
     const [selectedCharity, setSelectedCharity] = useState(null);
-    const [successMessage, setSuccessMessage] = useState('');
+    const { addToast } = useToast();
 
     // Donation modal state
     const [donateCharity, setDonateCharity] = useState(null);
@@ -80,6 +82,25 @@ export default function Charities() {
         }
     };
 
+    // Handle success/cancel redirection from Stripe
+    useEffect(() => {
+        const queryParams = new URLSearchParams(window.location.search);
+        const donationStatus = queryParams.get('donation');
+        const charityName = queryParams.get('charity');
+
+        if (donationStatus === 'success') {
+            addToast('success', `Thank you! Your donation to ${charityName || 'charity'} was successful.`);
+            // Clean URL
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+        } else if (donationStatus === 'canceled') {
+            addToast('error', 'Donation was canceled.');
+            // Clean URL
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+        }
+    }, [addToast]);
+
     // Fetch charities from database
     const fetchCharities = async () => {
         try {
@@ -90,7 +111,8 @@ export default function Charities() {
                 category: charity.category || 'Uncategorized',
                 description: charity.description || '',
                 long_description: charity.long_description || '',
-                image: charity.image_url || 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=400&h=300&fit=crop',
+                image: charity.image || charity.image_url,
+                logo: charity.logo || charity.logo_url,
                 totalRaised: charity.total_raised || 0,
                 goalAmount: charity.goal_amount || 10000,
                 supporters: charity.supporter_count || 0,
@@ -170,8 +192,7 @@ export default function Charities() {
             });
             setSelectedCharity(null);
             if (result && result.success) {
-                setSuccessMessage(`You selected ${charity.name}! Go to My Charity to set your donation percentage.`);
-                setTimeout(() => setSuccessMessage(''), 5000);
+                addToast('success', `You selected ${charity.name}! Go to My Charity to set your donation percentage.`);
             }
         } catch (error) {
             console.error('Error selecting charity:', error);
@@ -246,22 +267,6 @@ export default function Charities() {
             <PageTransition>
                 <div className="pt-24 pb-12 lg:py-16">
                     <div className="container-app">
-                        {/* Success Message */}
-                        {successMessage && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mb-6 p-4 rounded-xl max-w-2xl mx-auto"
-                                style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)' }}
-                            >
-                                <p className="text-green-400 flex items-center gap-2 justify-center">
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    {successMessage}
-                                </p>
-                            </motion.div>
-                        )}
 
                         {/* Header */}
                         <div className="text-center mb-12">
@@ -385,9 +390,11 @@ export default function Charities() {
                                     <Card key={charity.id} className="overflow-hidden hover:scale-[1.02] transition-transform">
                                         <div className="relative">
                                             <img
-                                                src={charity.image}
+                                                src={charity.image && charity.image.includes('unsplash') ? charity.image.split('?')[0] + '?ixlib=rb-1.2.1&auto=format&fit=crop&q=80&w=600' : charity.image}
                                                 alt={charity.name}
                                                 className="w-full h-48 object-cover"
+                                                referrerPolicy="no-referrer"
+                                                loading="lazy"
                                             />
                                             {charity.featured && (
                                                 <span className="absolute top-3 left-3 px-2 py-1 bg-emerald-500 text-white text-xs rounded-full">

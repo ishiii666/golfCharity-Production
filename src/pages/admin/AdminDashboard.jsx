@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardContent } from '../../components/ui/Card';
+import Button from '../../components/ui/Button';
 import BackButton from '../../components/ui/BackButton';
 import { CountUp } from '../../components/ui/AnimatedNumber';
 import { staggerContainer, staggerItem, fadeUp } from '../../utils/animations';
@@ -59,16 +60,17 @@ export default function AdminDashboard() {
 
     // Dynamic quick stats based on real data
     const quickStats = [
-        { label: 'Total Registered', value: stats.totalUsers, color: 'text-teal-400', icon: '👥' },
-        { label: 'Active Subscribers', value: stats.activeSubscribers, color: 'text-emerald-400', icon: '⭐' },
-        { label: 'Partner Charities', value: stats.totalCharities, color: 'text-amber-400', icon: '💚' },
-        { label: 'Total Donated', prefix: '$', value: stats.totalDonated, color: 'text-rose-400', icon: '💰' }
+        { label: 'Total Users', value: stats.totalUsers, color: 'text-teal-400', icon: '👥' },
+        { label: 'Active Subs', value: stats.activeSubscribers, color: 'text-emerald-400', icon: '⭐' },
+        { label: 'Total Donated', prefix: '$', value: stats.totalDonated, color: 'text-rose-400', icon: '💰' },
+        { label: 'Est. Revenue', prefix: '$', value: stats.monthlyRevenue || 0, color: 'text-amber-400', icon: '📈' },
+        { label: 'Suspended', value: stats.suspendedUsers || 0, color: 'text-zinc-500', icon: '🚫' }
     ];
 
     // Admin navigation cards
     const adminCards = [
         {
-            title: 'Draw Control',
+            title: 'Draw Control Center',
             description: 'Run pre-draw analysis and publish monthly results',
             icon: (
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -79,6 +81,19 @@ export default function AdminDashboard() {
             color: 'from-orange-500 to-amber-500',
             stat: 'Next draw',
             statValue: stats.loading ? '...' : (stats.nextDrawDate || formatDrawDateShort(getNextDrawDate()))
+        },
+        {
+            title: 'Draw Management',
+            description: 'Verify winners, process payouts, and view past draws',
+            icon: (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+            ),
+            to: '/admin/draws',
+            color: 'from-emerald-500 to-green-500',
+            stat: 'Due Payouts',
+            statValue: stats.loading ? '...' : (stats.pendingPayouts || 0)
         },
         {
             title: 'User Management',
@@ -103,21 +118,8 @@ export default function AdminDashboard() {
             ),
             to: '/admin/charities',
             color: 'from-rose-500 to-pink-500',
-            stat: 'Charities',
+            stat: 'Partners',
             statValue: stats.loading ? '...' : stats.totalCharities
-        },
-        {
-            title: 'Draw Management',
-            description: 'Run draws and verify winners',
-            icon: (
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-            ),
-            to: '/admin/draws',
-            color: 'from-emerald-500 to-green-500',
-            stat: 'Status',
-            statValue: 'Ready'
         },
         {
             title: 'Content Editor',
@@ -129,8 +131,8 @@ export default function AdminDashboard() {
             ),
             to: '/admin/content',
             color: 'from-cyan-500 to-teal-500',
-            stat: 'Sections',
-            statValue: '4'
+            stat: 'Site Status',
+            statValue: 'Live'
         },
         {
             title: 'Reports',
@@ -141,9 +143,9 @@ export default function AdminDashboard() {
                 </svg>
             ),
             to: '/admin/reports',
-            color: 'from-lime-500 to-green-500',
-            stat: 'Available',
-            statValue: '3'
+            color: 'from-indigo-500 to-blue-500',
+            stat: 'Last Update',
+            statValue: 'Today'
         }
     ];
 
@@ -152,28 +154,30 @@ export default function AdminDashboard() {
             <div className="py-8 lg:py-12">
                 <div className="container-app">
                     {/* Header */}
-                    <BackButton to="/dashboard" label="Exit Admin" className="mb-6" />
+                    <BackButton to="/" label="Exit Admin" className="mb-6" />
                     <motion.div
                         variants={fadeUp}
                         initial="initial"
                         animate="animate"
-                        className="mb-8"
+                        className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8"
                     >
-                        <span
-                            className="inline-block px-3 py-1 rounded-full text-xs font-medium mb-4"
-                            style={{ background: 'rgba(201, 162, 39, 0.2)', color: '#c9a227' }}
-                        >
-                            Admin Panel
-                        </span>
-                        <h1
-                            className="text-3xl lg:text-4xl font-bold mb-2"
-                            style={{ fontFamily: 'var(--font-display)', color: '#f9f5e3' }}
-                        >
-                            Dashboard
-                        </h1>
-                        <p style={{ color: 'var(--color-neutral-400)' }}>
-                            Manage GOLFCHARITY platform operations
-                        </p>
+                        <div>
+                            <span
+                                className="inline-block px-3 py-1 rounded-full text-xs font-medium mb-4"
+                                style={{ background: 'rgba(201, 162, 39, 0.2)', color: '#c9a227' }}
+                            >
+                                Admin Panel
+                            </span>
+                            <h1
+                                className="text-3xl lg:text-4xl font-bold mb-2"
+                                style={{ fontFamily: 'var(--font-display)', color: '#f9f5e3' }}
+                            >
+                                Dashboard
+                            </h1>
+                            <p style={{ color: 'var(--color-neutral-400)' }}>
+                                Manage GOLFCHARITY platform operations
+                            </p>
+                        </div>
                     </motion.div>
 
                     {/* Quick Stats */}

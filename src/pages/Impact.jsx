@@ -26,7 +26,7 @@ export default function Impact() {
                 ]);
 
                 setStats(statsData);
-                setCharityDonations(donationsData || []);
+                setCharityDonations(Array.isArray(donationsData) ? donationsData : (donationsData?.charities || []));
             } catch (error) {
                 console.error('Error fetching impact data:', error);
             } finally {
@@ -180,9 +180,11 @@ export default function Impact() {
                                     >
                                         {charity.image_url && (
                                             <img
-                                                src={charity.image_url}
+                                                src={charity.image_url && charity.image_url.includes('unsplash') ? charity.image_url.split('?')[0] + '?ixlib=rb-1.2.1&auto=format&fit=crop&q=80&w=100' : charity.image_url}
                                                 alt={charity.name}
                                                 className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                                referrerPolicy="no-referrer"
+                                                loading="lazy"
                                             />
                                         )}
                                         <div className="flex-1 min-w-0">

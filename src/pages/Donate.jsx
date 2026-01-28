@@ -140,29 +140,35 @@ export default function Donate() {
                         >
                             <h2 className="text-xl font-bold text-white mb-4">1. Choose a Charity</h2>
 
-                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                            <div
+                                className="space-y-3 max-h-[480px] overflow-y-auto pr-2 custom-scrollbar"
+                                data-lenis-prevent
+                            >
                                 {charities.map((charity) => (
                                     <button
                                         key={charity.id}
                                         onClick={() => setSelectedCharity(charity)}
-                                        className={`w-full p-4 rounded-xl text-left transition-all flex items-center gap-4 ${selectedCharity?.id === charity.id
-                                            ? 'ring-2 ring-emerald-500'
-                                            : 'hover:bg-white/5'
+                                        className={`w-full p-4 rounded-xl text-left transition-all flex items-center gap-4 border-2 ${selectedCharity?.id === charity.id
+                                            ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                                            : 'border-white/5 hover:border-white/10 hover:bg-white/5 bg-white/[0.02]'
                                             }`}
                                         style={{
                                             background: selectedCharity?.id === charity.id
-                                                ? 'rgba(16, 185, 129, 0.1)'
+                                                ? 'rgba(16, 185, 129, 0.15)'
                                                 : 'rgba(255, 255, 255, 0.02)',
-                                            border: '1px solid rgba(255, 255, 255, 0.05)'
+                                            boxShadow: selectedCharity?.id === charity.id
+                                                ? '0 0 20px rgba(16, 185, 129, 0.1)'
+                                                : 'none'
                                         }}
                                     >
-                                        {charity.image_url && (
-                                            <img
-                                                src={charity.image_url}
-                                                alt={charity.name}
-                                                className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
-                                            />
-                                        )}
+                                        <img
+                                            src={charity.image_url || 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=100&h=100&fit=crop'}
+                                            alt={charity.name}
+                                            className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-white/10"
+                                            onError={(e) => {
+                                                e.target.src = 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=100&h=100&fit=crop';
+                                            }}
+                                        />
                                         <div className="flex-1 min-w-0">
                                             <div className="font-medium text-white truncate">{charity.name}</div>
                                             <div className="text-sm text-zinc-400 truncate">{charity.category}</div>
@@ -186,12 +192,13 @@ export default function Donate() {
                             <h2 className="text-xl font-bold text-white mb-4">2. Select Amount</h2>
 
                             <div
-                                className="p-6 rounded-xl"
+                                className="p-6 rounded-2xl relative overflow-hidden group"
                                 style={{
-                                    background: 'rgba(255, 255, 255, 0.02)',
-                                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)'
                                 }}
                             >
+                                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                 {/* Preset Amounts */}
                                 <div className="grid grid-cols-5 gap-2 mb-4">
                                     {presetAmounts.map((amount) => (
@@ -229,16 +236,22 @@ export default function Donate() {
 
                                 {/* Summary */}
                                 {selectedCharity && (
-                                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-6">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-zinc-400">Charity</span>
-                                            <span className="text-white font-medium">{selectedCharity.name}</span>
+                                    <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 mb-6 backdrop-blur-md">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-zinc-500 text-sm uppercase tracking-wider font-bold">Target</span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                <span className="text-white font-bold">{selectedCharity.name}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-zinc-400">Amount</span>
-                                            <span className="text-2xl font-bold text-emerald-400">
-                                                ${customAmount || donationAmount}
-                                            </span>
+                                        <div className="flex justify-between items-end">
+                                            <span className="text-zinc-500 text-sm uppercase tracking-wider font-bold">Contribution</span>
+                                            <div className="text-right">
+                                                <span className="text-3xl font-black text-emerald-400">
+                                                    ${customAmount || donationAmount}
+                                                </span>
+                                                <span className="text-zinc-500 text-xs block -mt-1 selection:bg-emerald-500">AUD</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
