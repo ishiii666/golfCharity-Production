@@ -684,6 +684,7 @@ export function AuthProvider({ children }) {
         bankName: profile?.bank_name,
         bsbNumber: profile?.bsb_number,
         accountNumber: profile?.account_number,
+        accountBalance: profile?.account_balance || 0,
         notificationSettings: profile?.notification_settings || {
             email: true,
             drawResults: true,

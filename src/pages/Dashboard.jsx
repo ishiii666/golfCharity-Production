@@ -7,7 +7,7 @@ import Button from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
 import { useScores } from '../hooks/useScores';
 import { useSubscription } from '../hooks/useSubscription';
-import { useCharities } from '../hooks/useData';
+import { useCharities, useUserEntries } from '../hooks/useData';
 import { fadeUp, staggerContainer, staggerItem } from '../utils/animations';
 import { getTimeUntilDraw, getNextDrawDateFormatted, DRAW_SCHEDULE_SHORT } from '../utils/drawSchedule';
 
@@ -16,6 +16,7 @@ export default function Dashboard() {
     const { scores, scoreValues, hasEnoughScores, averageScore, isLoading: scoresLoading } = useScores();
     const { subscription, isActive, daysRemaining, eligibilityInfo, planLabel, isLoading: subLoading } = useSubscription();
     const { getCharityById, isLoading: charitiesLoading } = useCharities();
+    const { latestResult, isLoading: entriesLoading } = useUserEntries();
 
     // Redirect admins to admin dashboard - admins cannot participate in games
     if (isAdmin) {
@@ -27,8 +28,9 @@ export default function Dashboard() {
     const nextDrawFormatted = getNextDrawDateFormatted();
 
     const selectedCharity = user?.selectedCharityId ? getCharityById(user.selectedCharityId) : null;
+    const hasLatestResult = latestResult && latestResult.draws;
 
-    if (scoresLoading || subLoading || charitiesLoading) {
+    if (scoresLoading || subLoading || charitiesLoading || entriesLoading) {
         return (
             <PageTransition>
                 <div className="min-h-screen flex items-center justify-center">
@@ -314,6 +316,85 @@ export default function Dashboard() {
                             </div>
                         </Card>
                     </motion.div>
+
+                    {/* Draw Results Block */}
+                    {hasLatestResult && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.5 }}
+                            className="mt-8"
+                        >
+                            <Card variant="glow" className="overflow-hidden border-emerald-500/20">
+                                <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-start">
+                                    {/* Result Info */}
+                                    <div className="flex-1 w-full">
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <div
+                                                className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                                                style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.2)' }}
+                                            >
+                                                <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
+                                                    Latest Draw Result
+                                                </h3>
+                                                <p className="text-zinc-400 text-sm">
+                                                    {latestResult.draws.month_year} Result • {latestResult.matches} Match{latestResult.matches !== 1 ? 'es' : ''}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
+                                            <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Total Won</p>
+                                                <p className="text-2xl font-bold text-emerald-400">${latestResult.gross_prize || 0}</p>
+                                            </div>
+                                            <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Charity Donation</p>
+                                                <p className="text-2xl font-bold text-amber-400">${latestResult.charity_amount || 0}</p>
+                                            </div>
+                                            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                                                <p className="text-[10px] text-emerald-500 uppercase tracking-widest mb-1 font-bold">Net Winnings</p>
+                                                <p className="text-2xl font-bold text-white">${latestResult.net_payout || 0}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Number Matching Visual */}
+                                    <div className="w-full lg:w-auto flex-shrink-0 lg:border-l lg:border-white/10 lg:pl-8 flex flex-col items-center">
+                                        <p className="text-xs text-zinc-500 uppercase tracking-widest mb-4 font-bold">Matching Numbers</p>
+                                        <div className="flex gap-2 justify-center flex-wrap max-w-xs transition-all duration-300">
+                                            {latestResult.scores.map((num, i) => {
+                                                const isMatch = latestResult.draws.winning_numbers?.includes(Number(num));
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg transition-all duration-500 ${isMatch
+                                                            ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-110'
+                                                            : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50'
+                                                            }`}
+                                                    >
+                                                        {num}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {latestResult.gross_prize > 0 ? (
+                                            <div className="mt-4 px-3 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full">
+                                                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Winning Entry!</p>
+                                            </div>
+                                        ) : (
+                                            <p className="mt-4 text-[10px] text-zinc-500 uppercase tracking-widest">Better luck next time</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </Card>
+                        </motion.div>
+                    )}
                 </div>
             </div>
         </PageTransition>

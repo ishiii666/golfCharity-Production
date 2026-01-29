@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { getActiveCharities } from '../lib/supabaseRest';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * useCharities - Hook for fetching and managing charities
@@ -113,6 +114,54 @@ export function useDraws() {
         isLoading,
         error,
         refresh: fetchDraws
+    };
+}
+
+/**
+ * useUserEntries - Hook for fetching current user's draw entries and results
+ */
+export function useUserEntries() {
+    const { user } = useAuth();
+    const [entries, setEntries] = useState([]);
+    const [latestResult, setLatestResult] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const fetchEntries = useCallback(async () => {
+        if (!user || !isSupabaseConfigured()) {
+            setIsLoading(false);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('draw_entries')
+                .select('*, draws(*), charities(*)')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setEntries(data || []);
+
+            // Get the latest entry associated with a published draw
+            const result = data?.find(e => e.draws && e.draws.status === 'published');
+            setLatestResult(result || null);
+        } catch (err) {
+            console.error('Fetch user entries error:', err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user]);
+
+    useEffect(() => {
+        fetchEntries();
+    }, [fetchEntries]);
+
+    return {
+        entries,
+        latestResult,
+        isLoading,
+        refresh: fetchEntries
     };
 }
 

@@ -21,10 +21,10 @@ export default function Home() {
 
     useEffect(() => {
         if (!isReady) {
-            // Wait for EntryAnimation (3.05s total + 0.5s fade-out)
+            // Wait for EntryAnimation (3.05s total + 0.5s fade-out + 0.05s buffer)
             const timer = setTimeout(() => {
                 setIsReady(true);
-            }, 3200);
+            }, 3600);
             return () => clearTimeout(timer);
         }
     }, [isReady]);

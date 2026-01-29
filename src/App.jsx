@@ -28,6 +28,7 @@ import ContentManagement from './pages/admin/ContentManagement';
 import AdminReports from './pages/admin/AdminReports';
 import ProfileSettings from './pages/profile/ProfileSettings';
 import MyCharity from './pages/profile/MyCharity';
+import MyWinnings from './pages/profile/MyWinnings';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import Pricing from './pages/Pricing';
@@ -270,6 +271,11 @@ function AppRoutes() {
             <MyCharity />
           </ProtectedRoute>
         } />
+        <Route path="profile/winnings" element={
+          <ProtectedRoute>
+            <MyWinnings />
+          </ProtectedRoute>
+        } />
         {/* Redirect old subscription route to pricing */}
         <Route path="profile/subscription" element={<Navigate to="/pricing" replace />} />
 
@@ -330,15 +336,35 @@ function AppRoutes() {
 function App() {
   // Show entry animation only once per session
   const [showEntryAnimation, setShowEntryAnimation] = useState(() => {
-    // Check if animation has already played in this session
-    const played = sessionStorage.getItem('entryAnimationPlayed');
-    // Also check if we are on a login or join page - we might skip animation there
+    // 1. Get navigation type - helps distinguish fresh loads vs reloads
+    const navType = typeof window !== 'undefined' && window.performance
+      ? window.performance.getEntriesByType('navigation')[0]?.type
+      : 'navigate';
+
+    // 2. Check if animation has already played in this session (tab)
+    let played = sessionStorage.getItem('entryAnimationPlayed');
+
+    // 🚀 LOGIC FIX: If it's a 'navigate' but played exists, it means we cloned a tab.
+    // The user wants fresh tabs to play the animation once.
+    if (navType === 'navigate' && (played === 'true' || played === 'pending')) {
+      console.log('🔄 App: Fresh navigation in new tab (likely cloned). Re-enabling animation.');
+      sessionStorage.removeItem('entryAnimationPlayed');
+      played = null;
+    }
+
+    // Default to false if already played (or started) to fulfill "no replay on reload" rule
+    if (played === 'true' || played === 'pending') {
+      // Ensure it's marked as 'true' so Home.jsx skips its internal timer
+      if (played === 'pending') sessionStorage.setItem('entryAnimationPlayed', 'true');
+      return false;
+    }
+
+    // Also check if we are on a login or join page - we skip animation there
     const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
+    if (isAuthPage) return false;
 
-    // Default to false if already played
-    if (played === 'true') return false;
-
-    // If not played, return true
+    // If we've decided to show it, set the flag immediately to prevent re-play on accidental reload
+    sessionStorage.setItem('entryAnimationPlayed', 'pending');
     return true;
   });
 

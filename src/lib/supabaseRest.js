@@ -2854,9 +2854,9 @@ export async function getFeaturedCharities(limit = 4) {
 
 /**
  * Get leaderboard data for the homepage
- * Returns top 5 players by total amount raised
+ * Supports 'impact' (default) or 'winners' mode
  */
-export async function getLeaderboardData(limit = 5) {
+export async function getLeaderboardData(limit = 5, type = 'impact') {
     try {
         // We use ONLY the apikey for public data to ensure EVERYONE sees the same leaderboard
         // Session-based Authorization often restricts views based on RLS (Row Level Security)
@@ -2865,92 +2865,6 @@ export async function getLeaderboardData(limit = 5) {
             'Content-Type': 'application/json'
         };
 
-        console.log('🏆 getLeaderboardData: Fetching public community impact data...');
-
-        // 1. Get ONLY sources of 'Winner' impact: 'donations' table
-        // We exclude 'draw_entries' for simple users to ensure only winners/donors show up.
-        let allDonations = [];
-
-        try {
-            // Fetch direct donations (Public view)
-            // This includes both direct benevolence and the charity portion from WINNERS
-            const donationsRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
-                { headers: publicHeaders }
-            );
-            if (donationsRes.ok) {
-                allDonations = await donationsRes.json();
-            }
-        } catch (e) {
-            console.warn('Leaderboard: Public data fetch failed', e.message);
-        }
-
-        // Aggregate impact totals by user
-        const userTotals = {};
-
-        // Sum from donations
-        allDonations.forEach(d => {
-            if (d.user_id) {
-                userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
-            }
-        });
-
-        // 2. Sort real users by combined impact
-        const sortedRealUserIds = Object.entries(userTotals)
-            .filter(([_, amount]) => amount > 0) // Only users with actual charity contribution
-            .sort((a, b) => b[1] - a[1])
-            .map(([id]) => id);
-
-        // 3. Define the "Placeholder Champions" (Mock data for backfilling)
-        const MOCK_PLAYERS = [
-            {
-                name: "James Mitchell",
-                initials: "JM",
-                scores: [34, 31, 38, 29, 35],
-                raised: 2450,
-                charity: "Red Cross",
-                donation_percentage: 10,
-                avg: 33
-            },
-            {
-                name: "Sarah Chen",
-                initials: "SC",
-                scores: [32, 28, 41, 30, 36],
-                raised: 1890,
-                charity: "Beyond Blue",
-                donation_percentage: 10,
-                avg: 33
-            },
-            {
-                name: "Michael O'Brien",
-                initials: "MO",
-                scores: [35, 33, 30, 37, 32],
-                raised: 1650,
-                charity: "Smith Family",
-                donation_percentage: 10,
-                avg: 33
-            },
-            {
-                name: "Emma Williams",
-                initials: "EW",
-                scores: [31, 36, 29, 34, 33],
-                raised: 1420,
-                charity: "OzHarvest",
-                donation_percentage: 10,
-                avg: 32
-            },
-            {
-                name: "David Kim",
-                initials: "DK",
-                scores: [28, 30, 32, 29, 31],
-                raised: 980,
-                charity: "RSPCA Australia",
-                donation_percentage: 10,
-                avg: 30
-            }
-        ];
-
-        // Style presets for the ranks
         const ACCENTS = [
             { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
             { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
@@ -2959,20 +2873,131 @@ export async function getLeaderboardData(limit = 5) {
             { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
         ];
 
+        console.log('🏆 getLeaderboardData: Fetching public community impact data...');
+
+        // 1. Fetch data based on type
+        let allDonations = [];
+        let recentWinners = [];
+
+        if (type === 'winners') {
+            try {
+                // Fetch recent winning entries
+                const winnersRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/draw_entries?select=id,user_id,gross_prize,matches,scores,charity_id,draw_id,draws(month_year,winning_numbers)&gross_prize=gt.0&order=created_at.desc&limit=${limit}`,
+                    { headers: publicHeaders }
+                );
+                if (winnersRes.ok) {
+                    recentWinners = await winnersRes.json();
+                }
+            } catch (e) {
+                console.warn('Leaderboard: Winners fetch failed', e.message);
+            }
+        }
+
+        try {
+            // Fetch direct donations (Public view) for impact mode or fallback impact data
+            const donationsRes = await fetch(
+                `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
+                { headers: publicHeaders }
+            );
+            if (donationsRes.ok) {
+                allDonations = await donationsRes.json();
+            }
+        } catch (e) {
+            console.warn('Leaderboard: Public donations fetch failed', e.message);
+        }
+
+        // Aggregate impact totals by user for impact mode
+        const userTotals = {};
+        allDonations.forEach(d => {
+            if (d.user_id) {
+                userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
+            }
+        });
+
+        // Sorted IDs for impact mode
+        const sortedImpactUserIds = Object.entries(userTotals)
+            .filter(([_, amount]) => amount > 0)
+            .sort((a, b) => b[1] - a[1])
+            .map(([id]) => id);
+
+        // 2. Define the "Placeholder Champions" (Mock data for backfilling)
+        const MOCK_PLAYERS = [
+            { name: "Avery Thompson", initials: "AT", scores: [28, 32, 25, 30, 29], raised: 850, charity: "Cancer Council", donation_percentage: 10, avg: 29 },
+            { name: "James Mitchell", initials: "JM", scores: [34, 31, 38, 29, 35], raised: 2450, charity: "Red Cross", donation_percentage: 10, avg: 33 },
+            { name: "Sarah Chen", initials: "SC", scores: [32, 28, 41, 30, 36], raised: 1890, charity: "Beyond Blue", donation_percentage: 10, avg: 33 },
+            { name: "Michael O'Brien", initials: "MO", scores: [35, 33, 30, 37, 32], raised: 1650, charity: "Smith Family", donation_percentage: 10, avg: 33 },
+            { name: "Emma Williams", initials: "EW", scores: [31, 36, 29, 34, 33], raised: 1420, charity: "OzHarvest", donation_percentage: 10, avg: 32 }
+        ];
+
+        // 3. Profiles and final data mapping
         let finalLeaderboard = [];
 
-        // 4. Fetch profiles and scores for real users
-        // We ONLY fetch profiles for users who have a record in sortedRealUserIds (Winners/Donors)
-        if (sortedRealUserIds.length > 0) {
-            try {
-                let profilesUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,full_name,selected_charity_id,donation_percentage`;
-                profilesUrl += `&id=in.(${sortedRealUserIds.slice(0, limit).join(',')})`;
+        if (type === 'winners' && recentWinners.length > 0) {
+            console.log(`🏆 Mapping ${recentWinners.length} real winners for Hall of Fame...`);
 
-                const profilesRes = await fetch(profilesUrl, { headers: publicHeaders });
+            // Get profiles for winners
+            const winnerUserIds = recentWinners.map(w => w.user_id).filter(Boolean);
+            let profiles = [];
+            if (winnerUserIds.length > 0) {
+                const profilesRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/profiles?id=in.(${winnerUserIds.join(',')})&select=id,full_name,selected_charity_id,donation_percentage`,
+                    { headers: publicHeaders }
+                );
+                profiles = profilesRes.ok ? await profilesRes.json() : [];
+            }
+
+            // Get charities
+            const charityIds = recentWinners.map(w => w.charity_id).filter(Boolean);
+            let charityMap = {};
+            if (charityIds.length > 0) {
+                const charitiesRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
+                    { headers: publicHeaders }
+                );
+                if (charitiesRes.ok) {
+                    const charities = await charitiesRes.json();
+                    charities.forEach(c => charityMap[c.id] = c.name);
+                }
+            }
+
+            recentWinners.forEach(w => {
+                const profile = profiles.find(p => p.id === w.user_id);
+                const draw = w.draws || {};
+                finalLeaderboard.push({
+                    id: w.id,
+                    user_id: w.user_id,
+                    name: profile?.full_name || 'Premium Player',
+                    initials: (profile?.full_name || '??').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
+                    scores: w.scores || [],
+                    raised: `$${Number(w.gross_prize).toFixed(2)}`,
+                    raisedValue: Number(w.gross_prize),
+                    charity: charityMap[w.charity_id] || 'Selected Charity',
+                    percentage: `${profile?.donation_percentage || 10}%`,
+                    avg: Math.round((w.scores || []).reduce((a, b) => a + Number(b), 0) / (w.scores?.length || 1)),
+                    winnerTier: `${w.matches} DRAW POOL WINNER`,
+                    winningNumbers: draw.winning_numbers || [],
+                    drawMonth: draw.month_year,
+                    isMock: false
+                });
+            });
+        }
+
+        // 4. Default Impact Leaderboard Logic (if type=impact or no winners found)
+        if (finalLeaderboard.length < limit && sortedImpactUserIds.length > 0) {
+            try {
+                const remainingLimit = limit - finalLeaderboard.length;
+                const impactIds = sortedImpactUserIds.slice(0, remainingLimit);
+
+                const profilesRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/profiles?id=in.(${impactIds.join(',')})&select=id,full_name,selected_charity_id,donation_percentage`,
+                    { headers: publicHeaders }
+                );
                 const profiles = profilesRes.ok ? await profilesRes.json() : [];
 
+
                 if (profiles && profiles.length > 0) {
-                    console.log(`🏆 Found ${profiles.length} real winners to display`);
+                    console.log(`🏆 Found ${profiles.length} real impact leaders to display`);
 
                     // Get charity names
                     const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];

@@ -8,7 +8,11 @@ import { cn } from "../../utils/cn";
 import { getLeaderboardData, getJackpot } from "../../lib/supabaseRest";
 import { getTimeUntilDraw } from "../../utils/drawSchedule";
 
+// --- CONFIGURATION ---
+const LEADERBOARD_MODE = 'winners'; // Change to 'impact' to show top donors instead of winners
+
 export default function LeaderboardSection() {
+    const [mode, setMode] = useState('winners'); // 'winners' or 'impact'
     const [players, setPlayers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedId, setSelectedId] = useState(null);
@@ -21,7 +25,7 @@ export default function LeaderboardSection() {
             try {
                 setLoading(true);
                 const [leaderboardData, jackpotData] = await Promise.all([
-                    getLeaderboardData(5),
+                    getLeaderboardData(5, mode),
                     getJackpot()
                 ]);
                 console.log("🏆 Leaderboard data fetched:", leaderboardData);
@@ -37,7 +41,7 @@ export default function LeaderboardSection() {
             }
         }
         fetchData();
-    }, []);
+    }, [mode]);
 
     if (loading) {
         return (
@@ -93,9 +97,37 @@ export default function LeaderboardSection() {
                             The Leaderboard <br /> <span className="text-emerald-500">Of Impact</span>
                         </h2>
                     </div>
-                    <div>
-                        <p className="text-zinc-500 text-lg max-w-sm font-medium leading-relaxed">
-                            Tracking the precision of every swing and the weight of every donation. Real golfers, real change.
+                    <div className="flex flex-col gap-4">
+                        {/* Interactive Mode Toggle */}
+                        <div className="inline-flex p-1 bg-zinc-900 border border-white/5 rounded-2xl self-start md:self-end">
+                            <button
+                                onClick={() => setMode('winners')}
+                                className={cn(
+                                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                    mode === 'winners'
+                                        ? "bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/20"
+                                        : "text-zinc-500 hover:text-white"
+                                )}
+                            >
+                                Winners
+                            </button>
+                            <button
+                                onClick={() => setMode('impact')}
+                                className={cn(
+                                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                    mode === 'impact'
+                                        ? "bg-emerald-500 text-zinc-950 shadow-lg shadow-emerald-500/20"
+                                        : "text-zinc-500 hover:text-white"
+                                )}
+                            >
+                                Impact
+                            </button>
+                        </div>
+                        <p className="text-zinc-500 text-sm md:text-right max-w-sm font-medium leading-relaxed">
+                            {mode === 'winners'
+                                ? "Celebrating the precision and charity of our latest draw champions."
+                                : "Honoring the community members making the largest philanthropic impact."
+                            }
                         </p>
                     </div>
                 </div>
@@ -135,7 +167,14 @@ export default function LeaderboardSection() {
                                         </div>
                                         <div>
                                             <h3 className="text-2xl font-black text-white tracking-tighter">{selectedPlayer.name}</h3>
-                                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-widest rounded border border-emerald-500/20">Rank #{selectedPlayer.rank}</span>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-widest rounded border border-emerald-500/20">Rank #{selectedPlayer.rank}</span>
+                                                {selectedPlayer.winnerTier && (
+                                                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest rounded border border-amber-500/30 animate-pulse">
+                                                        {selectedPlayer.winnerTier}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
@@ -152,19 +191,33 @@ export default function LeaderboardSection() {
 
                                     <div className="space-y-3">
                                         <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                                            <span>Consistency Chart</span>
+                                            <span>{selectedPlayer.winnerTier ? "Winning Scorecard" : "Consistency Chart"}</span>
                                             <span className="text-white font-mono">Avg Score: {selectedPlayer.avg}</span>
                                         </div>
                                         <div className="flex items-end gap-1.5 h-16">
-                                            {selectedPlayer.scores.map((s, i) => (
-                                                <motion.div
-                                                    key={i}
-                                                    initial={{ height: 0 }}
-                                                    animate={{ height: s > 0 ? `${(s / 45) * 100}%` : '5%' }}
-                                                    transition={{ delay: i * 0.05, duration: 0.8 }}
-                                                    className="flex-1 rounded-sm bg-emerald-500/20 hover:bg-emerald-500/60 transition-colors border-t border-emerald-500/50"
-                                                />
-                                            ))}
+                                            {selectedPlayer.scores.map((s, i) => {
+                                                const isMatch = selectedPlayer.winningNumbers?.includes(Number(s));
+                                                return (
+                                                    <motion.div
+                                                        key={i}
+                                                        initial={{ height: 0 }}
+                                                        animate={{ height: s > 0 ? `${(s / 45) * 100}%` : '5%' }}
+                                                        transition={{ delay: i * 0.05, duration: 0.8 }}
+                                                        className={cn(
+                                                            "flex-1 rounded-sm transition-all duration-500 border-t",
+                                                            isMatch
+                                                                ? "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] border-emerald-400"
+                                                                : "bg-emerald-500/10 border-emerald-500/30 grayscale opacity-50"
+                                                        )}
+                                                    >
+                                                        {isMatch && (
+                                                            <div className="flex justify-center -mt-4">
+                                                                <Star className="w-2 h-2 text-white fill-white" />
+                                                            </div>
+                                                        )}
+                                                    </motion.div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 

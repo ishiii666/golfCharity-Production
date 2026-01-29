@@ -97,6 +97,9 @@ export default function DrawControl() {
         jackpot_cap: 250000
     });
     const [isEditingSettings, setIsEditingSettings] = useState(false);
+    const [isWinnersModalOpen, setIsWinnersModalOpen] = useState(false);
+    const [selectedTierWinners, setSelectedTierWinners] = useState([]);
+    const [viewingTier, setViewingTier] = useState(null);
 
     // Fetch real data on mount
     useEffect(() => {
@@ -128,6 +131,7 @@ export default function DrawControl() {
             clearInterval(pollInterval);
         };
     }, []);
+
 
     const fetchData = async (silent = false) => {
         if (!silent) setLoading(true);
@@ -200,6 +204,16 @@ export default function DrawControl() {
             setRangeMin(found.min);
             setRangeMax(found.max);
         }
+    };
+
+    const handleShowWinners = (tier) => {
+        if (!analysisResults || !analysisResults.entries) return;
+        const winners = analysisResults.entries.filter(e => e.tier === tier);
+        if (winners.length === 0) return;
+
+        setSelectedTierWinners(winners);
+        setViewingTier(tier);
+        setIsWinnersModalOpen(true);
     };
 
     const runAnalysis = async () => {
@@ -387,15 +401,22 @@ export default function DrawControl() {
                                             label="Min Score"
                                             type="number"
                                             value={rangeMin}
-                                            onChange={(e) => setRangeMin(parseInt(e.target.value) || 1)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setRangeMin(val === '' ? '' : parseInt(val));
+                                            }}
                                         />
                                         <Input
                                             label="Max Score"
                                             type="number"
                                             value={rangeMax}
-                                            onChange={(e) => setRangeMax(parseInt(e.target.value) || 45)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setRangeMax(val === '' ? '' : parseInt(val));
+                                            }}
                                         />
                                     </div>
+
                                     <Button onClick={runAnalysis} fullWidth disabled={isAnalyzing || isFutureDraw}>
                                         <div className="flex items-center justify-center gap-2">
                                             {isAnalyzing ? (
@@ -523,7 +544,12 @@ export default function DrawControl() {
                                                     <div className="space-y-3 pt-6 border-t border-white/5">
                                                         <div className="flex justify-between items-center text-xs">
                                                             <span className="text-slate-400 font-bold uppercase tracking-wider">Winners</span>
-                                                            <span className="text-white font-black text-lg">{analysisResults.tier1.count}</span>
+                                                            <span
+                                                                className={`font-black text-lg transition-all duration-200 ${analysisResults.tier1.count > 0 ? 'text-white cursor-pointer hover:text-amber-400 hover:scale-110' : 'text-slate-600'}`}
+                                                                onClick={() => handleShowWinners(1)}
+                                                            >
+                                                                {analysisResults.tier1.count}
+                                                            </span>
                                                         </div>
                                                         <div className="flex justify-between items-center p-3 rounded-xl bg-black/20 border border-white/5">
                                                             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Payout</span>
@@ -561,7 +587,12 @@ export default function DrawControl() {
                                                     <div className="space-y-3 pt-6 border-t border-white/5">
                                                         <div className="flex justify-between items-center text-xs">
                                                             <span className="text-slate-400 font-bold uppercase tracking-wider">Winners</span>
-                                                            <span className="text-white font-black text-lg">{analysisResults.tier2.count}</span>
+                                                            <span
+                                                                className={`font-black text-lg transition-all duration-200 ${analysisResults.tier2.count > 0 ? 'text-white cursor-pointer hover:text-violet-400 hover:scale-110' : 'text-slate-600'}`}
+                                                                onClick={() => handleShowWinners(2)}
+                                                            >
+                                                                {analysisResults.tier2.count}
+                                                            </span>
                                                         </div>
                                                         <div className="flex justify-between items-center p-3 rounded-xl bg-black/20 border border-white/5">
                                                             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Payout</span>
@@ -599,7 +630,12 @@ export default function DrawControl() {
                                                     <div className="space-y-3 pt-6 border-t border-white/5">
                                                         <div className="flex justify-between items-center text-xs">
                                                             <span className="text-slate-400 font-bold uppercase tracking-wider">Winners</span>
-                                                            <span className="text-white font-black text-lg">{analysisResults.tier3.count}</span>
+                                                            <span
+                                                                className={`font-black text-lg transition-all duration-200 ${analysisResults.tier3.count > 0 ? 'text-white cursor-pointer hover:text-teal-400 hover:scale-110' : 'text-slate-600'}`}
+                                                                onClick={() => handleShowWinners(3)}
+                                                            >
+                                                                {analysisResults.tier3.count}
+                                                            </span>
                                                         </div>
                                                         <div className="flex justify-between items-center p-3 rounded-xl bg-black/20 border border-white/5">
                                                             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Payout</span>
@@ -749,6 +785,56 @@ export default function DrawControl() {
                                 disabled={(settings.tier1_percent + settings.tier2_percent + settings.tier3_percent) !== 100}
                             >
                                 Save Configuration
+                            </Button>
+                        </div>
+                    </Modal>
+
+                    {/* Winners Preview Modal */}
+                    <Modal
+                        isOpen={isWinnersModalOpen}
+                        onClose={() => setIsWinnersModalOpen(false)}
+                        title={`Tier ${viewingTier} Winners Preview`}
+                        size="lg"
+                    >
+                        <div className="space-y-4">
+                            <div className="p-4 rounded-2xl bg-slate-950/50 border border-slate-800">
+                                <div className="space-y-3">
+                                    {selectedTierWinners.map((winner, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors border border-transparent hover:border-white/10">
+                                            <div className="flex flex-col">
+                                                <span className="text-white font-bold">{winner.name}</span>
+                                                <div className="flex gap-2 mt-1">
+                                                    {winner.scores.map((score, sIdx) => {
+                                                        const isMatch = analysisResults.winningNumbers.includes(score);
+                                                        return (
+                                                            <span
+                                                                key={sIdx}
+                                                                className={`text-[10px] font-black w-6 h-6 rounded-md flex items-center justify-center ${isMatch
+                                                                        ? viewingTier === 1 ? 'bg-amber-500 text-white' : viewingTier === 2 ? 'bg-violet-500 text-white' : 'bg-teal-500 text-white'
+                                                                        : 'bg-slate-800 text-slate-500'
+                                                                    }`}
+                                                            >
+                                                                {score}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Matches</span>
+                                                <span className="text-white font-black">{winner.matches} / 5</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <Button
+                                onClick={() => setIsWinnersModalOpen(false)}
+                                fullWidth
+                                variant="ghost"
+                                className="h-12 text-xs font-black uppercase tracking-widest"
+                            >
+                                Close Preview
                             </Button>
                         </div>
                     </Modal>
