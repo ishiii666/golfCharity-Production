@@ -25,7 +25,7 @@ export default function MyCharity() {
 
     // User preferences
     const [selectedCharity, setSelectedCharity] = useState(null);
-    const [donationPercentage, setDonationPercentage] = useState(20);
+    const [donationPercentage, setDonationPercentage] = useState(10);
     const [isSaving, setIsSaving] = useState(false);
     const [viewingCharity, setViewingCharity] = useState(null);
     const { addToast } = useToast();
@@ -34,7 +34,7 @@ export default function MyCharity() {
 
     // Track original values to detect changes
     const [originalCharity, setOriginalCharity] = useState(null);
-    const [originalPercentage, setOriginalPercentage] = useState(20);
+    const [originalPercentage, setOriginalPercentage] = useState(10);
 
     // Real impact stats from database
     const [impactStats, setImpactStats] = useState({
@@ -81,8 +81,8 @@ export default function MyCharity() {
             setSelectedCharity(charityId);
             setOriginalCharity(charityId);
 
-            // Set donation percentage from user profile, default to 20, minimum 10
-            const percentage = user.donationPercentage || 20;
+            // Set donation percentage from user profile, default to 10, minimum 10
+            const percentage = user.donationPercentage || 10;
             const finalPercentage = Math.max(10, percentage);
             setDonationPercentage(finalPercentage);
             setOriginalPercentage(finalPercentage);

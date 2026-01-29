@@ -2867,27 +2867,19 @@ export async function getLeaderboardData(limit = 5) {
 
         console.log('🏆 getLeaderboardData: Fetching public community impact data...');
 
-        // 1. Get ALL sources of impact: 'donations' table AND 'draw_entries' table
+        // 1. Get ONLY sources of 'Winner' impact: 'donations' table
+        // We exclude 'draw_entries' for simple users to ensure only winners/donors show up.
         let allDonations = [];
-        let allDrawEntries = [];
 
         try {
             // Fetch direct donations (Public view)
+            // This includes both direct benevolence and the charity portion from WINNERS
             const donationsRes = await fetch(
                 `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
                 { headers: publicHeaders }
             );
             if (donationsRes.ok) {
                 allDonations = await donationsRes.json();
-            }
-
-            // Fetch charity amounts from draw entries (Public view)
-            const entriesRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/draw_entries?charity_amount=gt.0&select=user_id,charity_amount`,
-                { headers: publicHeaders }
-            );
-            if (entriesRes.ok) {
-                allDrawEntries = await entriesRes.json();
             }
         } catch (e) {
             console.warn('Leaderboard: Public data fetch failed', e.message);
@@ -2903,15 +2895,9 @@ export async function getLeaderboardData(limit = 5) {
             }
         });
 
-        // Sum from draw entries
-        allDrawEntries.forEach(e => {
-            if (e.user_id) {
-                userTotals[e.user_id] = (userTotals[e.user_id] || 0) + (parseFloat(e.charity_amount) || 0);
-            }
-        });
-
         // 2. Sort real users by combined impact
         const sortedRealUserIds = Object.entries(userTotals)
+            .filter(([_, amount]) => amount > 0) // Only users with actual charity contribution
             .sort((a, b) => b[1] - a[1])
             .map(([id]) => id);
 
@@ -2923,44 +2909,44 @@ export async function getLeaderboardData(limit = 5) {
                 scores: [34, 31, 38, 29, 35],
                 raised: 2450,
                 charity: "Red Cross",
-                donation_percentage: 60,
-                avg: 32
+                donation_percentage: 10,
+                avg: 33
             },
             {
                 name: "Sarah Chen",
                 initials: "SC",
-                scores: [32, 36, 33, 30, 34],
+                scores: [32, 28, 41, 30, 36],
                 raised: 1890,
                 charity: "Beyond Blue",
-                donation_percentage: 45,
+                donation_percentage: 10,
                 avg: 33
             },
             {
                 name: "Michael O'Brien",
                 initials: "MO",
-                scores: [35, 29, 37, 32, 31],
+                scores: [35, 33, 30, 37, 32],
                 raised: 1650,
                 charity: "Smith Family",
-                donation_percentage: 50,
+                donation_percentage: 10,
                 avg: 33
             },
             {
                 name: "Emma Williams",
                 initials: "EW",
-                scores: [30, 33, 35, 28, 36],
+                scores: [31, 36, 29, 34, 33],
                 raised: 1420,
                 charity: "OzHarvest",
-                donation_percentage: 40,
+                donation_percentage: 10,
                 avg: 32
             },
             {
                 name: "David Kim",
                 initials: "DK",
-                scores: [33, 31, 34, 37, 29],
+                scores: [28, 30, 32, 29, 31],
                 raised: 980,
                 charity: "RSPCA Australia",
-                donation_percentage: 35,
-                avg: 33
+                donation_percentage: 10,
+                avg: 30
             }
         ];
 
@@ -2976,113 +2962,98 @@ export async function getLeaderboardData(limit = 5) {
         let finalLeaderboard = [];
 
         // 4. Fetch profiles and scores for real users
-        // Create a set of IDs to fetch profiles for
-        // We include specifically found winners + a general search for any active impact
-        let targetUserIds = [...sortedRealUserIds];
+        // We ONLY fetch profiles for users who have a record in sortedRealUserIds (Winners/Donors)
+        if (sortedRealUserIds.length > 0) {
+            try {
+                let profilesUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,full_name,selected_charity_id,donation_percentage`;
+                profilesUrl += `&id=in.(${sortedRealUserIds.slice(0, limit).join(',')})`;
 
-        // Final attempt to get real users to show something real
-        if (targetUserIds.length === 0) {
-            console.log('🏆 No winners found in direct fetch, searching for active profiles...');
-        }
+                const profilesRes = await fetch(profilesUrl, { headers: publicHeaders });
+                const profiles = profilesRes.ok ? await profilesRes.json() : [];
 
-        try {
-            // Updated query: fetches specific winners OR any users with recorded community impact OR specific testers
-            // Using a broad search to ensure we find 'Test User' even if the win record is private
-            let profilesUrl = `${SUPABASE_URL}/rest/v1/profiles?select=id,full_name,selected_charity_id,donation_percentage`;
+                if (profiles && profiles.length > 0) {
+                    console.log(`🏆 Found ${profiles.length} real winners to display`);
 
-            // Build filter: specific winners OR top general profiles OR anyone named 'Test User'
-            const orFilters = [
-                'role.eq.player',
-                'role.eq.user',
-                'full_name.ilike.*Test*'
-            ];
-
-            if (sortedRealUserIds.length > 0) {
-                orFilters.push(`id.in.(${sortedRealUserIds.slice(0, 20).join(',')})`);
-            }
-
-            profilesUrl += `&or=(${orFilters.join(',')})&limit=15`;
-
-            const profilesRes = await fetch(profilesUrl, { headers: publicHeaders });
-            const profiles = profilesRes.ok ? await profilesRes.json() : [];
-
-            if (profiles && profiles.length > 0) {
-                console.log(`🏆 Found ${profiles.length} real profiles to display`);
-
-                // Get charity names
-                const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
-                let charityMap = {};
-                if (charityIds.length > 0) {
-                    const charitiesRes = await fetch(
-                        `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
-                        { headers: publicHeaders }
-                    );
-                    if (charitiesRes.ok) {
-                        const charities = await charitiesRes.json();
-                        charities.forEach(c => {
-                            charityMap[c.id] = c.name;
-                        });
+                    // Get charity names
+                    const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
+                    let charityMap = {};
+                    if (charityIds.length > 0) {
+                        const charitiesRes = await fetch(
+                            `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
+                            { headers: publicHeaders }
+                        );
+                        if (charitiesRes.ok) {
+                            const charities = await charitiesRes.json();
+                            charities.forEach(c => {
+                                charityMap[c.id] = c.name;
+                            });
+                        }
                     }
-                }
 
-                // Get scores
-                let userScoresMap = {};
-                const profileIds = profiles.map(p => p.id);
-                if (profileIds.length > 0) {
-                    const scoresRes = await fetch(
-                        `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${profileIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
-                        { headers: publicHeaders }
-                    );
-                    if (scoresRes.ok) {
-                        const data = await scoresRes.json();
-                        data.forEach(s => {
-                            if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = [];
-                            if (userScoresMap[s.user_id].length < 5) userScoresMap[s.user_id].push(s.score);
-                        });
+                    // Get scores
+                    let userScoresMap = {};
+                    const profileIds = profiles.map(p => p.id);
+                    if (profileIds.length > 0) {
+                        const scoresRes = await fetch(
+                            `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${profileIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
+                            { headers: publicHeaders }
+                        );
+                        if (scoresRes.ok) {
+                            const data = await scoresRes.json();
+                            data.forEach(s => {
+                                if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = [];
+                                if (userScoresMap[s.user_id].length < 5) userScoresMap[s.user_id].push(s.score);
+                            });
+                        }
                     }
-                }
 
-                // Map real users to final format
-                // Map real users to final format
-                profiles.forEach(profile => {
-                    // Skip the generic system Admin account but allow 'Test User' or other admins
-                    if (profile.full_name === 'Admin') return;
+                    // Map real users to final format
+                    profiles.forEach(profile => {
+                        const name = (profile.full_name || '').toLowerCase();
+                        // Skip generic Admin account and legacy test names that were interfering with the clean mock view
+                        if (name === 'admin' || name === 'saurabh singh' || name === 'asmit') return;
 
-                    // Use the aggregated impact found from donations/draws
-                    const raised = userTotals[profile.id] || 0;
+                        // 🛠️ SPECIAL BOOST: If this is an 'Example' user, give them the mock impact baseline
+                        const mockExample = MOCK_PLAYERS.find(m => m.name.toLowerCase() === (profile.full_name || '').toLowerCase());
+                        let raised = userTotals[profile.id] || 0;
 
-                    const scores = userScoresMap[profile.id] || [];
-                    const initials = (profile.full_name || 'Anonymous').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                        if (mockExample && raised < mockExample.raised) {
+                            raised = mockExample.raised;
+                            console.log(`🚀 Boosting Example User ${profile.full_name} to mock baseline: $${raised}`);
+                        }
 
-                    finalLeaderboard.push({
-                        id: profile.id,
-                        rank: 0, // Will set later
-                        name: profile.full_name || 'Anonymous player',
-                        initials,
-                        scores: scores.length < 5 ? [...scores, ...Array(5 - scores.length).fill(0)] : scores,
-                        raised: `$${Math.round(raised).toLocaleString()}`,
-                        raisedValue: raised, // To keep sorting consistent
-                        charity: charityMap[profile.selected_charity_id] || 'Various Charities',
-                        charityId: profile.selected_charity_id,
-                        percentage: `${profile.donation_percentage || 20}%`,
-                        avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
-                        isMock: false
+                        const scores = userScoresMap[profile.id] || [];
+                        const initials = (profile.full_name || 'Anonymous').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+
+                        finalLeaderboard.push({
+                            id: profile.id,
+                            rank: 0, // Will set later
+                            name: profile.full_name || 'Anonymous player',
+                            initials,
+                            // If mock example, use their scores if user has none
+                            scores: scores.length >= 5 ? scores : (mockExample ? mockExample.scores : [...scores, ...Array(5 - scores.length).fill(0)]),
+                            raised: `$${Math.round(raised).toLocaleString()}`,
+                            raisedValue: raised, // To keep sorting consistent
+                            charity: charityMap[profile.selected_charity_id] || (mockExample ? mockExample.charity : 'Various Charities'),
+                            charityId: profile.selected_charity_id,
+                            // FORCE 10% if null
+                            percentage: `${profile.donation_percentage || 10}%`,
+                            avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : (mockExample ? mockExample.avg : 0),
+                            isMock: false
+                        });
                     });
-                });
+                }
+            } catch (err) {
+                console.error('Error fetching real golfer details:', err);
             }
-        } catch (err) {
-            console.error('Error fetching real golfer details:', err);
         }
 
-        // 5. Backfill with mock data until limit is reached
-        // We already have real users in finalLeaderboard from the profiles loop
-        let mockIndex = 0;
-        while (finalLeaderboard.length < limit && mockIndex < MOCK_PLAYERS.length) {
-            const mock = MOCK_PLAYERS[mockIndex];
+        // 5. Backfill with remaining mock data until limit is reached
+        // We only add mock players whose names don't already exist as REAL profiles
+        for (const mock of MOCK_PLAYERS) {
+            if (finalLeaderboard.length >= limit) break;
 
-            // Check if mock user name is already in the list (prevents duplicates during tests)
-            const isAlreadyPresent = finalLeaderboard.some(p => p.name === mock.name);
-
+            const isAlreadyPresent = finalLeaderboard.some(p => p.name.toLowerCase() === mock.name.toLowerCase());
             if (!isAlreadyPresent) {
                 finalLeaderboard.push({
                     ...mock,
@@ -3092,7 +3063,6 @@ export async function getLeaderboardData(limit = 5) {
                     isMock: true
                 });
             }
-            mockIndex++;
         }
 
         // 6. FINAL SORT: Prioritize Real Players over Mock Data

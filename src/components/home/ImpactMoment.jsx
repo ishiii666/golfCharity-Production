@@ -27,8 +27,8 @@ export default function ImpactMoment() {
     useEffect(() => {
         if (isInView) {
             setAnimationState("IDLE");
-            const matchTimer = setTimeout(() => setAnimationState("MATCH"), 1000);
-            const revealTimer = setTimeout(() => setAnimationState("REVEAL"), 2500);
+            const matchTimer = setTimeout(() => setAnimationState("MATCH"), 6000);
+            const revealTimer = setTimeout(() => setAnimationState("REVEAL"), 8500);
             return () => { clearTimeout(matchTimer); clearTimeout(revealTimer); };
         } else {
             setAnimationState("IDLE");

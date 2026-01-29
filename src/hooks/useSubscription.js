@@ -192,7 +192,7 @@ export function useSubscription() {
             ? `Assigned to ${subscription.assigned_draw_month || 'current cycle'}`
             : (isActive ? 'Entered in next draw' : 'No active draw entry');
 
-    const planLabel = subscription?.plan === 'annual' ? 'Annual Plan - $108/year' : 'Monthly Plan - $9/month';
+    const planLabel = subscription?.plan === 'annual' ? 'Annual Plan - $108/year' : 'Monthly Plan - $11/month';
 
     return {
         subscription,

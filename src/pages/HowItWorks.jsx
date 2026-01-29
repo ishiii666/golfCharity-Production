@@ -33,13 +33,13 @@ const STEPS = [
     {
         id: "02",
         title: "Play Your Golf Rounds",
-        desc: "Head to the course and play! Log your last 5 official Stableford scores from any registered golf club.",
+        desc: "Head to the course and play! Log your last 5 official unique Stableford scores from any registered golf club.",
         icon: Flag,
         color: "text-emerald-500",
         items: [
             "Submit verified Stableford scores (1-45 points)",
             "Scores must be from official club rounds",
-            "Your 5 scores become your unique draw numbers"
+            "Your 5 unique scores become your draw numbers"
         ]
     },
     {
@@ -61,9 +61,9 @@ const STEPS = [
         icon: Trophy,
         color: "text-emerald-500",
         items: [
-            "Match 3 numbers = 25% of prize pool",
-            "Match 4 numbers = 35% of prize pool",
-            "Match 5 numbers = 40% of prize pool (Jackpot!)"
+            "Match 3 numbers = 25% of pool",
+            "Match 4 numbers = 35% of pool",
+            "Match 5 numbers = 40% of pool (Jackpot if no winner)"
         ]
     },
     {
@@ -146,9 +146,30 @@ export default function HowItWorks() {
 
                         <div className="grid md:grid-cols-3 gap-8 mb-16">
                             {[
-                                { percent: "40%", label: "Jackpot", desc: "Match 5 Numbers", glow: "border-emerald-500/30 bg-[#0a0a0a]", highlight: "shadow-[0_0_50px_rgba(16,185,129,0.1)] border-emerald-500/40 scale-105 z-10" },
-                                { percent: "35%", label: "Second Tier", desc: "Match 4 Numbers", glow: "border-white/5 bg-[#0a0a0a]", highlight: "hover:border-emerald-500/20" },
-                                { percent: "25%", label: "Third Tier", desc: "Match 3 Numbers", glow: "border-white/5 bg-[#0a0a0a]", highlight: "hover:border-emerald-500/20" }
+                                {
+                                    percent: "40%",
+                                    label: "Tier 1",
+                                    lines: ["40% of the pool", "Jackpot if no winner"],
+                                    matchDesc: "Match 5 Numbers",
+                                    glow: "border-emerald-500/30 bg-[#0a0a0a]",
+                                    highlight: "shadow-[0_0_50px_rgba(16,185,129,0.1)] border-emerald-500/40 scale-105 z-10"
+                                },
+                                {
+                                    percent: "35%",
+                                    label: "Tier 2",
+                                    lines: ["35% of the pool"],
+                                    matchDesc: "Match 4 Numbers",
+                                    glow: "border-white/5 bg-[#0a0a0a]",
+                                    highlight: "hover:border-emerald-500/20"
+                                },
+                                {
+                                    percent: "25%",
+                                    label: "Tier 3",
+                                    lines: ["25% of the pool"],
+                                    matchDesc: "Match 3 Numbers",
+                                    glow: "border-white/5 bg-[#0a0a0a]",
+                                    highlight: "hover:border-emerald-500/20"
+                                }
                             ].map((tier, i) => (
                                 <motion.div
                                     key={i}
@@ -163,7 +184,12 @@ export default function HowItWorks() {
                                 >
                                     <span className="text-5xl md:text-6xl font-bold text-white group-hover:text-emerald-400 mb-6 block tracking-tighter transition-all duration-500" style={{ fontFamily: 'var(--font-display)' }}>{tier.percent}</span>
                                     <h4 className="text-lg md:text-xl font-bold text-white mb-2 tracking-tight">{tier.label}</h4>
-                                    <p className="text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-bold">{tier.desc}</p>
+                                    <div className="space-y-1">
+                                        {tier.lines.map((line, idx) => (
+                                            <p key={idx} className="text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-bold">{line}</p>
+                                        ))}
+                                        <p className="text-zinc-200 text-xs md:text-sm font-black uppercase tracking-[0.1em] pt-2">{tier.matchDesc}</p>
+                                    </div>
                                 </motion.div>
                             ))}
                         </div>
@@ -194,6 +220,8 @@ export default function HowItWorks() {
                             className="text-zinc-500 max-w-3xl mx-auto text-lg leading-relaxed mb-12 font-medium"
                         >
                             Unlike random lotteries, our draw is based on real golf performance. Your authentic Stableford scores from the course become your entry numbers. The more unique your scores, the better your chances!
+                            <br /><br />
+                            <span className="text-emerald-400 font-bold">Enter your 5 most recent unique Stableford scores before each draw. No same scores.</span>
                         </motion.p>
 
                         <motion.div

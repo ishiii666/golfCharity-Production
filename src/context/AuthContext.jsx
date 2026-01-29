@@ -21,7 +21,7 @@ const MOCK_USER = {
     fullName: 'Demo Golfer',
     role: 'user',
     selectedCharityId: '1',
-    donationPercentage: 20,
+    donationPercentage: 10,
     scores: [
         { id: 1, score: 32, played_date: '2025-12-15', course_name: 'Royal Melbourne' },
         { id: 2, score: 28, played_date: '2025-12-22', course_name: 'Kingston Heath' },
@@ -299,8 +299,8 @@ export function AuthProvider({ children }) {
                         selected_charity_id: selectedCharityId
                     },
                     emailRedirectTo: import.meta.env.PROD
-                        ? 'https://golfcharity.vercel.app/'
-                        : window.location.origin
+                        ? 'https://golfcharity.vercel.app/dashboard'
+                        : `${window.location.origin}/dashboard`
                 }
             });
 

@@ -189,8 +189,8 @@ export default function AnimatedLeaderboard({ title = 'Top Players This Month' }
         async function fetchLiveLeaderboard() {
             try {
                 setLoading(true);
-                // Fetch top 5 players (includes 'Test User' via the special recovery logic we added)
-                const liveData = await getLeaderboardData(5);
+                // Fetch top 10 players (includes 'Test User' via the special recovery logic we added)
+                const liveData = await getLeaderboardData(10);
 
                 // Map the shared data structure to the props this component expects
                 const mappedPlayers = liveData.map(p => ({
@@ -200,7 +200,7 @@ export default function AnimatedLeaderboard({ title = 'Top Players This Month' }
                     scores: p.scores || [0, 0, 0, 0, 0],
                     totalRaised: p.raisedValue || 0,
                     charity: p.charity,
-                    donationPct: parseInt(p.percentage) || 20,
+                    donationPct: parseInt(p.percentage) || 10,
                     avatar: p.initials || '??'
                 }));
 
