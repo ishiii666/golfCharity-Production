@@ -408,10 +408,15 @@ export default function DrawManagement() {
                                     <h2 className="text-xl font-bold" style={{ color: 'var(--color-cream-100)' }}>
                                         Current Draw: {getTargetMonth()}
                                     </h2>
-                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${currentDraw?.status === 'published' || !currentDraw ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${currentDraw?.status === 'published' || !currentDraw
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                            : currentDraw?.status === 'open'
+                                                ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                        }`}>
                                         {currentDraw?.status === 'published' || !currentDraw ? 'Next Cycle Ready' :
                                             currentDraw?.status === 'open' ? 'Live Phase (Collecting)' :
-                                                currentDraw?.status === 'completed' ? 'Draw Completed' : 'Active'}
+                                                currentDraw?.status === 'processing' ? 'Processing Results' : 'Active'}
                                     </span>
                                 </div>
                             </CardHeader>

@@ -139,6 +139,20 @@ export default function MyWinnings() {
                                                                 <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Net Payout</p>
                                                                 <p className="font-black text-white text-lg font-display font-black tracking-tight">${Number(entry.net_payout).toFixed(2)}</p>
                                                             </div>
+                                                            <div className="md:mt-1">
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${entry.payout_status === 'paid'
+                                                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                                                        : entry.verification_status === 'verified'
+                                                                            ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                                                            : 'bg-zinc-800 text-zinc-500 border border-white/5'
+                                                                    }`}>
+                                                                    {entry.payout_status === 'paid'
+                                                                        ? 'Paid'
+                                                                        : entry.verification_status === 'verified'
+                                                                            ? 'Processing'
+                                                                            : 'Pending Verification'}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -164,7 +178,7 @@ export default function MyWinnings() {
                     </motion.div>
                 </div>
             </div>
-        </PageTransition>
+        </PageTransition >
     );
 }
 

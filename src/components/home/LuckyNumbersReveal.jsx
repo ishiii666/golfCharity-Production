@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInView } from 'framer-motion';
 import { useRef } from 'react';
+import { useSiteContent } from '../../hooks/useSiteContent';
 
 /**
  * LuckyNumbersReveal - Animated lucky numbers reveal section
@@ -10,18 +11,22 @@ import { useRef } from 'react';
  */
 
 export default function LuckyNumbersReveal() {
+    const { getContent } = useSiteContent();
     const containerRef = useRef(null);
     const isInView = useInView(containerRef, { once: true, margin: '-100px' });
     const [revealedCards, setRevealedCards] = useState([]);
     const [showWinner, setShowWinner] = useState(false);
 
-    // Sample lucky numbers (these would come from DB in production)
-    const luckyNumbers = [36, 42, 38, 42, 39];
+    // Sample lucky numbers (these come from DB)
+    const luckyNumbers = getContent('reveal', 'luckyNumbers', '36, 42, 38, 42, 39')
+        .split(',')
+        .map(n => n.trim())
+        .filter(n => n !== '');
 
-    // Winner info (would come from DB)
+    // Winner info (from DB)
     const winnerInfo = {
-        daysUnlocked: 14,
-        impact: 'medical support for families in rural Australia'
+        daysUnlocked: getContent('reveal', 'impactDays', '14'),
+        impact: getContent('reveal', 'impactDesc', 'medical support for families in rural Australia')
     };
 
     // Reveal cards one by one when in view
@@ -39,7 +44,7 @@ export default function LuckyNumbersReveal() {
         };
 
         revealSequence();
-    }, [isInView]);
+    }, [isInView, luckyNumbers.length]);
 
     return (
         <section ref={containerRef} className="py-20 lg:py-28 relative overflow-hidden">
@@ -63,10 +68,10 @@ export default function LuckyNumbersReveal() {
                         className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 text-white"
                         style={{ fontFamily: 'var(--font-display)' }}
                     >
-                        THE MOMENT OF IMPACT
+                        {getContent('reveal', 'title', 'THE MOMENT OF IMPACT')}
                     </h2>
                     <p className="text-lg text-zinc-400">
-                        Every round has the power to change a story.
+                        {getContent('reveal', 'subtitle', 'Every round has the power to change a story.')}
                     </p>
                 </motion.div>
 
@@ -132,7 +137,7 @@ export default function LuckyNumbersReveal() {
                                 className="text-sm tracking-[0.3em] uppercase mb-4 block"
                                 style={{ color: '#c9a227' }}
                             >
-                                BREAKTHROUGH ACHIEVED
+                                {getContent('reveal', 'impactLabel', 'BREAKTHROUGH ACHIEVED')}
                             </motion.span>
 
                             {/* Winner Title */}
@@ -143,8 +148,9 @@ export default function LuckyNumbersReveal() {
                                 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6"
                                 style={{ fontFamily: 'var(--font-display)' }}
                             >
-                                <span className="text-white">WINNER & </span>
-                                <span className="text-gradient-emerald">BENEFACTOR</span>
+                                <span dangerouslySetInnerHTML={{
+                                    __html: getContent('reveal', 'impactTitle', 'WINNER & <span class="text-gradient-emerald">BENEFACTOR</span>')
+                                }} />
                             </motion.h3>
 
                             {/* Impact Message */}
@@ -154,9 +160,9 @@ export default function LuckyNumbersReveal() {
                                 transition={{ delay: 0.5 }}
                                 className="text-lg text-zinc-400 max-w-xl mx-auto"
                             >
-                                Your round just unlocked{' '}
+                                {getContent('reveal', 'impactPrefix', 'Your round just unlocked')}{' '}
                                 <span className="font-bold text-white">{winnerInfo.daysUnlocked} days</span>
-                                {' '}of {winnerInfo.impact}.
+                                {' '} {getContent('reveal', 'impactInfix', 'of')} {winnerInfo.impact}.
                             </motion.p>
                         </motion.div>
                     )}

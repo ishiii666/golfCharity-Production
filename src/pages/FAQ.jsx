@@ -1,101 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
+import { getFaqs } from '../lib/supabaseRest';
 
 /**
  * FAQ Page - Comprehensive frequently asked questions
  */
 export default function FAQ() {
     const [openIndex, setOpenIndex] = useState(null);
+    const [faqsData, setFaqsData] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const faqs = [
-        {
-            category: 'Getting Started',
-            questions: [
-                {
-                    q: 'How does GolfCharity work?',
-                    a: 'GolfCharity is a unique charity lottery where your golf scores become your lucky numbers! Simply subscribe, enter your last 5 official Stableford scores, and choose a charity to support. Each month, we draw winning numbers - if your scores match, you win prizes and a portion goes directly to your chosen charity.'
-                },
-                {
-                    q: 'What are Stableford scores and why do you use them?',
-                    a: 'Stableford is a scoring system used in golf where you earn points based on your performance relative to par. We use Stableford scores (typically ranging from 0-45 per round) because they create a fair and exciting range of numbers for our charity lottery, making every round of golf you play potentially lucky!'
-                },
-                {
-                    q: 'Do I need to be a professional golfer to participate?',
-                    a: 'Absolutely not! GolfCharity is designed for golfers of all skill levels. Whether you\'re a weekend warrior or a club champion, your scores have an equal chance of matching the winning numbers. The beauty of our system is that lower and higher scores all have the same probability of winning.'
+    useEffect(() => {
+        const fetchFaqs = async () => {
+            try {
+                const data = await getFaqs();
+                if (data.length > 0) {
+                    // Group by category
+                    const grouped = data.reduce((acc, current) => {
+                        const category = current.category || 'General';
+                        if (!acc[category]) acc[category] = [];
+                        acc[category].push({ q: current.question, a: current.answer });
+                        return acc;
+                    }, {});
+
+                    const formatted = Object.keys(grouped).map(cat => ({
+                        category: cat,
+                        questions: grouped[cat]
+                    }));
+                    setFaqsData(formatted);
                 }
-            ]
-        },
-        {
-            category: 'Subscriptions & Payments',
-            questions: [
-                {
-                    q: 'What subscription plans are available?',
-                    a: 'We offer two plans: Monthly at $11/month, perfect for trying us out, and Annual at $9/month ($108 billed yearly) which saves you 18%. Both plans include unlimited score entries, full charity selection, priority support, and entry into all monthly draws.'
-                },
-                {
-                    q: 'Can I cancel my subscription anytime?',
-                    a: 'Yes! You can cancel your subscription at any time from your account settings. You\'ll continue to have access until the end of your current billing period. We believe in earning your loyalty through value, not contracts.'
-                },
-                {
-                    q: 'Are payments secure?',
-                    a: 'Absolutely. All payments are processed through Stripe, a world-leading payment platform trusted by millions of businesses. We never store your credit card details on our servers. Your financial information is encrypted with bank-level security.'
-                }
-            ]
-        },
-        {
-            category: 'The Charity Draw',
-            questions: [
-                {
-                    q: 'How are winners selected each month?',
-                    a: 'Our unique algorithm analyzes all entered scores and selects the least common score combinations as winners. This means rare, unique score patterns have better odds! The draw is conducted transparently on the 9th of each month, and results are published immediately.'
-                },
-                {
-                    q: 'What happens when I win?',
-                    a: 'When you win, you\'ll receive an email notification and see your win in your dashboard. Your prize is automatically split according to your chosen donation percentage - you set this when selecting your charity. For example, if you chose 50%, half goes to your charity and half to you!'
-                },
-                {
-                    q: 'How much can I win?',
-                    a: 'Prize amounts vary based on the monthly pool and the tier you match. Matching all 5 numbers wins the jackpot, while matching 4 or 3 numbers wins smaller prizes. Check the Results page to see recent winning amounts and the current jackpot estimate.'
-                }
-            ]
-        },
-        {
-            category: 'Charities & Impact',
-            questions: [
-                {
-                    q: 'How do I choose which charity receives my donations?',
-                    a: 'After subscribing, visit the "My Charity" section to browse our partner charities. Each charity profile shows their mission, impact, and total raised. Select one that resonates with you and set your donation percentage (10-100% of winnings). You can change your charity anytime.'
-                },
-                {
-                    q: 'How do charities get the donation money?',
-                    a: 'Donations are transferred directly to charities shortly after each monthly draw on the 9th. We maintain complete transparency - you can track your contributions in your dashboard, and charities receive detailed reports. 100% of the donation portion goes to charity; we don\'t take any cut from donations.'
-                },
-                {
-                    q: 'Can my golf club or company become a charity partner?',
-                    a: 'We\'re always looking to expand our charity network! If you know an Australian registered charity that would be a great fit, please contact us through our Contact page. We verify all charities and ensure they meet our partnership criteria.'
-                }
-            ]
-        },
-        {
-            category: 'Account & Scores',
-            questions: [
-                {
-                    q: 'How do I enter my golf scores?',
-                    a: 'Log in to your dashboard and navigate to "My Scores". Enter your 5 most recent official Stableford scores from verified rounds. Include the course name and date played. These scores become your draw numbers for that month\'s lottery.'
-                },
-                {
-                    q: 'Do my scores need to be verified?',
-                    a: 'We trust our community, but we do conduct random audits. Scores should be from official rounds at recognized golf courses. If selected for verification, you may need to provide your golf club handicap record. Falsified scores result in account termination.'
-                },
-                {
-                    q: 'Can I update my scores after entering them?',
-                    a: 'You can update your scores up until the draw deadline (24 hours before the draw on the 9th). After the draw, scores are locked for that month. New scores you enter will apply to the next month\'s draw.'
-                }
-            ]
-        }
-    ];
+            } catch (error) {
+                console.error('Error fetching faqs:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchFaqs();
+    }, []);
 
     const toggleQuestion = (index) => {
         setOpenIndex(openIndex === index ? null : index);
@@ -103,6 +46,22 @@ export default function FAQ() {
 
     // Flatten for index tracking
     let globalIndex = 0;
+
+    if (loading) {
+        return <div className="min-h-screen py-24 text-center text-zinc-500">Loading help articles...</div>;
+    }
+
+    const displayFaqs = faqsData.length > 0 ? faqsData : [
+        {
+            category: 'Getting Started',
+            questions: [
+                {
+                    q: 'How does GolfCharity work?',
+                    a: 'GolfCharity is a unique charity lottery where your golf scores become your lucky numbers! Simply subscribe, enter your last 5 official Stableford scores, and choose a charity to support.'
+                }
+            ]
+        }
+    ];
 
     return (
         <PageTransition>
@@ -126,17 +85,16 @@ export default function FAQ() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 }}
-                            className="text-4xl lg:text-5xl font-bold mb-4"
-                            style={{ color: 'var(--color-cream-100)' }}
+                            className="text-4xl lg:text-7xl font-black mb-4 text-white tracking-tighter"
+                            style={{ fontFamily: 'var(--font-display)' }}
                         >
-                            Frequently Asked{' '}
-                            <span style={{ color: '#10b981' }}>Questions</span>
+                            Frequently Asked <span className="text-emerald-500 italic">Questions</span>
                         </motion.h1>
                     </div>
 
                     {/* FAQ Categories */}
-                    <div className="space-y-8">
-                        {faqs.map((category, catIndex) => (
+                    <div className="space-y-12">
+                        {displayFaqs.map((category, catIndex) => (
                             <motion.div
                                 key={catIndex}
                                 initial={{ opacity: 0, y: 20 }}
@@ -144,17 +102,20 @@ export default function FAQ() {
                                 transition={{ delay: 0.1 * catIndex }}
                             >
                                 {/* Category Header */}
-                                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                                <div className="flex items-center gap-4 mb-8">
                                     <div
-                                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                        className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
                                         style={{
-                                            background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                                         }}
                                     >
-                                        <span className="text-white text-sm font-bold">{catIndex + 1}</span>
+                                        <span className="text-white text-sm font-black">{catIndex + 1}</span>
                                     </div>
-                                    {category.category}
-                                </h2>
+                                    <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+                                        {category.category}
+                                    </h2>
+                                    <div className="h-px flex-grow bg-gradient-to-r from-emerald-500/20 to-transparent" />
+                                </div>
 
                                 {/* Questions */}
                                 <div className="space-y-3">
@@ -174,24 +135,14 @@ export default function FAQ() {
                                                 {/* Question Button */}
                                                 <button
                                                     onClick={() => toggleQuestion(currentIndex)}
-                                                    className="w-full px-6 py-4 flex items-center justify-between text-left transition-colors hover:bg-white/5"
+                                                    className="w-full px-6 py-5 flex items-center justify-between text-left transition-colors hover:bg-white/5"
                                                 >
-                                                    <span className="font-medium text-white pr-4">{faq.q}</span>
-                                                    <motion.div
-                                                        animate={{ rotate: isOpen ? 180 : 0 }}
-                                                        transition={{ duration: 0.2 }}
-                                                        className="flex-shrink-0"
-                                                    >
-                                                        <svg
-                                                            className="w-5 h-5"
-                                                            fill="none"
-                                                            viewBox="0 0 24 24"
-                                                            stroke={isOpen ? '#10b981' : '#71717a'}
-                                                            strokeWidth={2}
-                                                        >
-                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                                    <span className="text-lg font-bold text-white pr-6 leading-tight">{faq.q}</span>
+                                                    <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all duration-300 ${isOpen ? 'bg-emerald-500 border-emerald-500 text-black' : 'border-white/10 text-emerald-500'}`}>
+                                                        <svg className={`w-4 h-4 transition-transform duration-300 ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
                                                         </svg>
-                                                    </motion.div>
+                                                    </div>
                                                 </button>
 
                                                 {/* Answer */}

@@ -26,6 +26,7 @@ import CharityEditor from './pages/admin/CharityEditor';
 import DrawManagement from './pages/admin/DrawManagement';
 import ContentManagement from './pages/admin/ContentManagement';
 import AdminReports from './pages/admin/AdminReports';
+import FinancePayouts from './pages/admin/FinancePayouts';
 import ProfileSettings from './pages/profile/ProfileSettings';
 import MyCharity from './pages/profile/MyCharity';
 import MyWinnings from './pages/profile/MyWinnings';
@@ -323,6 +324,11 @@ function AppRoutes() {
         <Route path="admin/reports" element={
           <AdminProtectedRoute>
             <AdminReports />
+          </AdminProtectedRoute>
+        } />
+        <Route path="admin/finance" element={
+          <AdminProtectedRoute>
+            <FinancePayouts />
           </AdminProtectedRoute>
         } />
 

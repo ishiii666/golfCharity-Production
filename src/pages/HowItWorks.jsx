@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Heart,
@@ -16,95 +16,96 @@ import {
 import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import { cn } from '../utils/cn';
-
-const STEPS = [
-    {
-        id: "01",
-        title: "Sign Up & Subscribe",
-        desc: "Create your account and choose a monthly subscription plan. Select which Australian charity you want to support.",
-        icon: UserPlus,
-        color: "text-emerald-500",
-        items: [
-            "Choose from $10, $25, or $50 monthly plans",
-            "Select your charity percentage (10% - 100%)",
-            "Pick from 24+ verified partner charities"
-        ]
-    },
-    {
-        id: "02",
-        title: "Play Your Golf Rounds",
-        desc: "Head to the course and play! Log your last 5 official unique Stableford scores from any registered golf club.",
-        icon: Flag,
-        color: "text-emerald-500",
-        items: [
-            "Submit verified Stableford scores (1-45 points)",
-            "Scores must be from official club rounds",
-            "Your 5 unique scores become your draw numbers"
-        ]
-    },
-    {
-        id: "03",
-        title: "Enter the Monthly Draw",
-        desc: "Each month, we analyze all player scores to create a unique 5-number combination for the draw.",
-        icon: Target,
-        color: "text-emerald-500",
-        items: [
-            "We find the 3 LEAST common scores",
-            "We find the 2 MOST common scores",
-            "These 5 numbers form the winning combination"
-        ]
-    },
-    {
-        id: "04",
-        title: "Match Numbers & Win",
-        desc: "If your scores match the winning numbers, you win a share of the prize pool!",
-        icon: Trophy,
-        color: "text-emerald-500",
-        items: [
-            "Match 3 numbers = 25% of pool",
-            "Match 4 numbers = 35% of pool",
-            "Match 5 numbers = 40% of pool (Jackpot if no winner)"
-        ]
-    },
-    {
-        id: "05",
-        title: "Give Back to Charity",
-        desc: "Your chosen charity percentage is automatically donated. Win or not, your subscription always supports your charity.",
-        icon: Heart,
-        color: "text-rose-500",
-        items: [
-            "Winners donate their pledged percentage",
-            "Monthly subscription fee supports operations",
-            "100% of charity pledges go directly to partners"
-        ]
-    }
-];
-
-const FAQS = [
-    {
-        question: "What is Stableford scoring?",
-        answer: "Stableford is a golf scoring system where points are awarded based on your score at each hole relative to par. Most amateur golfers score between 20-40 points per round."
-    },
-    {
-        question: "How are winners selected?",
-        answer: "We analyze all submitted scores to find statistical outliers - the 3 least common and 2 most common scores across all players. These form the winning 5-number combination."
-    },
-    {
-        question: "What happens if no one matches 5 numbers?",
-        answer: "The jackpot (40% tier) rolls over to the next month, growing the prize pool until someone wins!"
-    },
-    {
-        question: "Can I change my charity?",
-        answer: "Yes! You can change your selected charity at any time from your dashboard. The change takes effect from your next subscription cycle."
-    },
-    {
-        question: "How do I verify my scores?",
-        answer: "Scores must be from official club rounds registered with your golf club. We may request verification from your club for large wins."
-    }
-];
+import { useSiteContent } from '../hooks/useSiteContent';
+import { getFaqs } from '../lib/supabaseRest';
 
 export default function HowItWorks() {
+    const { getContent, loading: contentLoading } = useSiteContent();
     const [openFaq, setOpenFaq] = useState(null);
+    const [faqs, setFaqs] = useState([]);
+    const [faqsLoading, setFaqsLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchFaqs() {
+            try {
+                const data = await getFaqs();
+                setFaqs(data);
+            } catch (error) {
+                console.error('Error fetching FAQs:', error);
+            } finally {
+                setFaqsLoading(false);
+            }
+        }
+        fetchFaqs();
+    }, []);
+
+    const STEPS = [
+        // ... (lines 26-85 remain same, I will just use the same variable names)
+        {
+            id: "01",
+            title: getContent('howItWorks', 'step1Title', "Sign Up & Subscribe"),
+            desc: getContent('howItWorks', 'step1Desc', "Create your account and choose a monthly subscription plan. Select which Australian charity you want to support."),
+            icon: UserPlus,
+            color: "text-emerald-500",
+            items: [
+                "Choose from $10, $25, or $50 monthly plans",
+                "Select your charity percentage (10% - 100%)",
+                "Pick from 24+ verified partner charities"
+            ]
+        },
+        {
+            id: "02",
+            title: getContent('howItWorks', 'step2Title', "Play Your Golf Rounds"),
+            desc: getContent('howItWorks', 'step2Desc', "Head to the course and play! Log your last 5 official unique Stableford scores from any registered golf club."),
+            icon: Flag,
+            color: "text-emerald-500",
+            items: [
+                "Submit verified Stableford scores (1-45 points)",
+                "Scores must be from official club rounds",
+                "Your 5 unique scores become your draw numbers"
+            ]
+        },
+        {
+            id: "03",
+            title: getContent('howItWorks', 'step3Title', "Enter the Monthly Draw"),
+            desc: getContent('howItWorks', 'step3Desc', "Each month, we analyze all player scores to create a unique 5-number combination for the draw."),
+            icon: Target,
+            color: "text-emerald-500",
+            items: [
+                "We find the 3 LEAST common scores",
+                "We find the 2 MOST common scores",
+                "These 5 numbers form the winning combination"
+            ]
+        },
+        {
+            id: "04",
+            title: getContent('howItWorks', 'step4Title', "Match Numbers & Win"),
+            desc: getContent('howItWorks', 'step4Desc', "If your scores match the winning numbers, you win a share of the prize pool!"),
+            icon: Trophy,
+            color: "text-emerald-500",
+            items: [
+                "Match 3 numbers = 25% of pool",
+                "Match 4 numbers = 35% of pool",
+                "Match 5 numbers = 40% of pool (Jackpot if no winner)"
+            ]
+        },
+        {
+            id: "05",
+            title: getContent('howItWorks', 'step5Title', "Give Back to Charity"),
+            desc: getContent('howItWorks', 'step5Desc', "Your chosen charity percentage is automatically donated. Win or not, your subscription always supports your charity."),
+            icon: Heart,
+            color: "text-rose-500",
+            items: [
+                "Winners donate their pledged percentage",
+                "Monthly subscription fee supports operations",
+                "100% of charity pledges go directly to partners"
+            ]
+        }
+    ];
+
+    if (contentLoading || faqsLoading) {
+        return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500">Loading system setup...</div>;
+    }
 
     return (
         <PageTransition>
@@ -211,15 +212,16 @@ export default function HowItWorks() {
                             whileInView={{ opacity: 1, y: 0 }}
                             className="text-3xl md:text-5xl font-bold text-white mb-8 tracking-tight"
                             style={{ fontFamily: 'var(--font-display)' }}
-                        >
-                            Your Scores, Your <span className="text-emerald-500">Lucky Numbers</span>
-                        </motion.h2>
+                            dangerouslySetInnerHTML={{
+                                __html: getContent('concept', 'title', 'Your Scores, Your <span class="text-emerald-500">Lucky Numbers</span>')
+                            }}
+                        />
                         <motion.p
                             initial={{ opacity: 0 }}
                             whileInView={{ opacity: 1 }}
                             className="text-zinc-500 max-w-3xl mx-auto text-lg leading-relaxed mb-12 font-medium"
                         >
-                            Unlike random lotteries, our draw is based on real golf performance. Your authentic Stableford scores from the course become your entry numbers. The more unique your scores, the better your chances!
+                            {getContent('concept', 'subtitle', 'Unlike random lotteries, our draw is based on real golf performance. Your authentic Stableford scores from the course become your entry numbers. The more unique your scores, the better your chances!')}
                             <br /><br />
                             <span className="text-emerald-400 font-bold">Enter your 5 most recent unique Stableford scores before each draw. No same scores.</span>
                         </motion.p>
@@ -234,13 +236,15 @@ export default function HowItWorks() {
 
                             <div className="grid md:grid-cols-2 gap-12 relative z-10 items-center">
                                 <div>
-                                    <h3 className="text-2xl font-bold text-white mb-8 tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>How the Draw Works</h3>
+                                    <h3 className="text-2xl font-bold text-white mb-8 tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
+                                        {getContent('concept', 'drawHeadline', 'How the Draw Works')}
+                                    </h3>
                                     <div className="space-y-5">
                                         {[
-                                            { text: "All player scores are analyzed on the 9th of each month", icon: <CheckCircle className="w-5 h-5 text-emerald-500" /> },
-                                            { text: "We find statistical outliers in the data", icon: <Target className="w-5 h-5 text-emerald-500" /> },
-                                            { text: "3 rarest + 2 most common = winning combo", icon: <Coins className="w-5 h-5 text-emerald-500" /> },
-                                            { text: "Match your scores to win & give!", icon: <Trophy className="w-5 h-5 text-emerald-500" /> }
+                                            { text: getContent('concept', 'drawPoint1', "All player scores are analyzed on the 9th of each month"), icon: <CheckCircle className="w-5 h-5 text-emerald-500" /> },
+                                            { text: getContent('concept', 'drawPoint2', "We find statistical outliers in the data"), icon: <Target className="w-5 h-5 text-emerald-500" /> },
+                                            { text: getContent('concept', 'drawPoint3', "3 rarest + 2 most common = winning combo"), icon: <Coins className="w-5 h-5 text-emerald-500" /> },
+                                            { text: getContent('concept', 'drawPoint4', "Match your scores to win & give!"), icon: <Trophy className="w-5 h-5 text-emerald-500" /> }
                                         ].map((item, i) => (
                                             <motion.div
                                                 key={i}
@@ -258,19 +262,25 @@ export default function HowItWorks() {
 
                                 <div className="flex flex-col items-center">
                                     <div className="flex flex-wrap justify-center gap-3 mb-6">
-                                        {[32, 18, 41, 27, 35].map((num, i) => (
-                                            <motion.div
-                                                key={i}
-                                                initial={{ scale: 0, rotate: -20 }}
-                                                whileInView={{ scale: 1, rotate: 0 }}
-                                                transition={{ type: "spring", stiffness: 200, delay: i * 0.1 }}
-                                                className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.1)] hover:bg-emerald-500/20 transition-colors"
-                                            >
-                                                <span className="text-white font-black text-lg">{num}</span>
-                                            </motion.div>
-                                        ))}
+                                        {getContent('concept', 'exampleNumbers', '32, 18, 41, 27, 35')
+                                            .split(',')
+                                            .map(n => n.trim())
+                                            .filter(n => n !== '')
+                                            .map((num, i) => (
+                                                <motion.div
+                                                    key={i}
+                                                    initial={{ scale: 0, rotate: -20 }}
+                                                    whileInView={{ scale: 1, rotate: 0 }}
+                                                    transition={{ type: "spring", stiffness: 200, delay: i * 0.1 }}
+                                                    className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.1)] hover:bg-emerald-500/20 transition-colors"
+                                                >
+                                                    <span className="text-white font-black text-lg">{num}</span>
+                                                </motion.div>
+                                            ))}
                                     </div>
-                                    <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] opacity-60">Example winning combination</span>
+                                    <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] opacity-60">
+                                        {getContent('concept', 'exampleLabel', 'Example winning combination')}
+                                    </span>
                                 </div>
                             </div>
                         </motion.div>
@@ -299,9 +309,9 @@ export default function HowItWorks() {
                         </div>
 
                         <div className="space-y-4">
-                            {FAQS.map((faq, i) => (
+                            {faqs.map((faq, i) => (
                                 <motion.div
-                                    key={i}
+                                    key={faq.id || i}
                                     initial={{ opacity: 0, x: i % 2 === 0 ? -20 : 20 }}
                                     whileInView={{ opacity: 1, x: 0 }}
                                     transition={{ delay: i * 0.05 }}
@@ -311,10 +321,12 @@ export default function HowItWorks() {
                                         onClick={() => setOpenFaq(openFaq === i ? null : i)}
                                         className="w-full flex items-center justify-between p-7 text-left transition-colors"
                                     >
-                                        <span className="text-base md:text-lg font-bold text-white group-hover:text-emerald-400 transition-colors tracking-tight">{faq.question}</span>
+                                        <span className="text-base md:text-lg font-bold text-white group-hover:text-emerald-400 transition-colors tracking-tight">
+                                            {faq.question}
+                                        </span>
                                         <div className={cn(
                                             "w-8 h-8 rounded-full flex items-center justify-center border transition-all duration-300",
-                                            openFaq === i ? "border-emerald-500 bg-emerald-500 text-black rotate-180" : "border-white/10 text-white"
+                                            openFaq === i ? "border-emerald-500 bg-emerald-500 text-black" : "border-white/10 text-white"
                                         )}>
                                             <ChevronRight className={cn("w-4 h-4 transition-transform", openFaq === i ? "rotate-90" : "")} />
                                         </div>

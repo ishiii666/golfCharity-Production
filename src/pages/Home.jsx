@@ -4,16 +4,19 @@ import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import ImpactMoment from '../components/home/ImpactMoment';
 import TheConcept from '../components/home/TheConcept';
+import LuckyNumbersReveal from '../components/home/LuckyNumbersReveal';
 import HowGivesBackHero from '../components/home/HowGivesBackHero';
 import LeaderboardSection from '../components/home/LeaderboardSection';
 import HowItWorks from '../components/home/HowItWorks';
 import Button from '../components/ui/Button';
 import { GolferIcon, HeartIcon } from '../components/ui/Icons';
+import { useSiteContent } from '../hooks/useSiteContent';
 
 // Note: Other components like ScrollytellingHero, CharityImpactSection, etc. 
 // are kept in the project but removed from the Home page layout as requested.
 
 export default function Home() {
+    const { getContent, loading } = useSiteContent();
     const [isReady, setIsReady] = useState(() => {
         // Correct check for sessionStorage
         return sessionStorage.getItem('entryAnimationPlayed') === 'true';
@@ -29,8 +32,10 @@ export default function Home() {
         }
     }, [isReady]);
 
-    if (!isReady) {
-        return <div className="min-h-screen bg-[#020202]" />;
+    if (!isReady || loading) {
+        return <div className="min-h-screen bg-[#020202] flex items-center justify-center">
+            {!loading && <div className="text-zinc-800 animate-pulse font-bold tracking-widest text-xs">INITIALIZING...</div>}
+        </div>;
     }
 
     return (
@@ -38,17 +43,17 @@ export default function Home() {
             {/* 1. Impact Moment - Visual Breakthrough */}
             <ImpactMoment />
 
-            {/* 2. The Concept - How the Draw Works (from How It Works page) */}
+            {/* 2. The Concept - How the Draw Works */}
             <TheConcept />
 
-            {/* 3. How Golf Gives Back Hero (from How It Works page) */}
+            {/* 3. The Reveal - Animated Lucky Numbers & Impact */}
+            <LuckyNumbersReveal />
+
+            {/* 4. How Golf Gives Back Hero */}
             <HowGivesBackHero />
 
-            {/* 4. Leaderboard Of Impact - Show real player rankings */}
+            {/* 5. Leaderboard Of Impact - Show real player rankings */}
             <LeaderboardSection />
-
-            {/* 5. How You Make a Difference (Home component with stats) */}
-            <HowItWorks />
 
             {/* 6. Final CTA Section - Charity focused */}
             <section className="py-24 lg:py-32 relative overflow-hidden">
@@ -93,7 +98,7 @@ export default function Home() {
                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             <Link to="/signup">
                                 <Button size="lg" variant="accent" className="magnetic">
-                                    Start Giving Today
+                                    {getContent('hero', 'ctaText', 'Start Giving Today')}
                                 </Button>
                             </Link>
                             <Link to="/charities">

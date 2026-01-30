@@ -2,19 +2,25 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import { cn } from "../../utils/cn";
 import { Zap } from "lucide-react";
-import { getSiteContent } from "../../lib/supabaseRest";
+import { useSiteContent } from "../../hooks/useSiteContent";
 
 // Valid video source
 const VIDEO_SRC = "https://assets.mixkit.co/videos/preview/mixkit-tree-branches-in-the-breeze-1198-large.mp4";
 
 export default function ImpactMoment() {
+    const { getContent, loading } = useSiteContent();
     const containerRef = useRef(null);
     const isInView = useInView(containerRef, { once: false, amount: 0.5 });
     const [animationState, setAnimationState] = useState("IDLE");
     const [isMobile, setIsMobile] = useState(false);
 
-    // Scores for the 5 slabs
-    const SCORES = [36, 42, 38, 42, 39];
+    // Scores for the 5 slabs (from DB)
+    const SCORES = getContent('reveal', 'luckyNumbers', '36, 42, 38, 42, 39')
+        .split(',')
+        .map(n => n.trim())
+        .filter(n => n !== '')
+        .map(n => parseInt(n) || 0);
+
     const WINNING_INDICES = [0, 2, 4];
 
     useEffect(() => {
@@ -34,6 +40,13 @@ export default function ImpactMoment() {
             setAnimationState("IDLE");
         }
     }, [isInView]);
+
+    const title = getContent('reveal', 'title', 'THE MOMENT OF IMPACT');
+    const subtitle = getContent('reveal', 'subtitle', 'Where every swing ripples beyond the fairway. Join the community turning passion into progress.');
+    const winnerInfo = {
+        daysUnlocked: getContent('reveal', 'impactDays', '14'),
+        impact: getContent('reveal', 'impactDesc', 'medical support for families in rural Australia')
+    };
 
     return (
         <section ref={containerRef} className="pt-4 pb-12 lg:pt-6 lg:pb-16 relative bg-zinc-950 overflow-hidden min-h-[500px] md:min-h-[600px]">
@@ -68,16 +81,20 @@ export default function ImpactMoment() {
                         className="inline-block px-4 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 mb-6"
                     >
                         <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500">
-                            The Ultimate Payoff
+                            {getContent('reveal', 'badgeText', 'The Ultimate Payoff')}
                         </span>
                     </motion.div>
 
                     <h2
-                        className="text-4xl sm:text-5xl lg:text-7xl font-black mb-4 text-white leading-[0.9] tracking-tighter"
+                        className="text-4xl sm:text-5xl lg:text-7xl font-black mb-4 text-white leading-[0.9] tracking-tighter uppercase"
                         style={{ fontFamily: 'var(--font-display)' }}
                     >
-                        THE MOMENT OF <br />
-                        <span className="text-gradient-emerald italic uppercase pr-2 inline-block">IMPACT</span>
+                        <span dangerouslySetInnerHTML={{
+                            __html: title.split(' ').map((word, i) => {
+                                const isImpact = word.toLowerCase().includes('impact');
+                                return `<span class="${isImpact ? "text-gradient-emerald italic pr-2" : ""}">${word} </span>${i === 2 ? '<br />' : ''}`;
+                            }).join('')
+                        }} />
                     </h2>
                     <motion.div
                         initial={{ width: 0 }}
@@ -86,8 +103,7 @@ export default function ImpactMoment() {
                         className="h-1 bg-gradient-to-r from-emerald-500 to-transparent mx-auto mb-6"
                     />
                     <p className="text-base md:text-lg text-zinc-400 max-w-2xl mx-auto font-medium leading-relaxed">
-                        Where every swing ripples beyond the fairway.
-                        Join the community turning <span className="text-white italic">passion into progress.</span>
+                        {subtitle}
                     </p>
                 </motion.div>
 
@@ -129,14 +145,16 @@ export default function ImpactMoment() {
                                 transition={{ delay: 1.2 }}
                                 className="text-emerald-500 font-black text-[10px] md:text-xs uppercase tracking-[0.2em] md:tracking-[0.5em] mb-4 md:mb-6 block"
                             >
-                                Breakthrough Achieved
+                                {getContent('reveal', 'impactLabel', 'Breakthrough Achieved')}
                             </motion.span>
                             <h2 className="text-3xl sm:text-4xl md:text-7xl font-black text-white mb-6 tracking-tighter uppercase italic leading-[0.9] break-words">
-                                WINNER & <br /><span className="text-emerald-500">BENEFACTOR</span>
+                                <span dangerouslySetInnerHTML={{
+                                    __html: getContent('reveal', 'impactTitle', 'WINNER & <br /><span class="text-emerald-500">BENEFACTOR</span>')
+                                }} />
                             </h2>
                             <div className="h-px w-16 md:w-24 bg-emerald-500/50 mx-auto mb-6 md:mb-8" />
                             <p className="text-zinc-400 text-sm md:text-2xl font-medium leading-relaxed">
-                                Your round just unlocked <span className="text-white font-bold">14 days</span> of medical support for families in rural Australia.
+                                {getContent('reveal', 'impactPrefix', 'Your round just unlocked')} <span className="text-white font-bold">{winnerInfo.daysUnlocked} days</span> {getContent('reveal', 'impactInfix', 'of')} {winnerInfo.impact}.
                             </p>
                         </div>
                     </motion.div>

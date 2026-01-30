@@ -6,7 +6,7 @@ import Button from '../../components/ui/Button';
 import BackButton from '../../components/ui/BackButton';
 import { useToast } from '../../components/ui/Toast';
 import { fadeUp, staggerContainer, staggerItem } from '../../utils/animations';
-import { getSiteContent, saveSiteContentBulk } from '../../lib/supabaseRest';
+import { getSiteContent, saveSiteContentBulk, getFaqs, saveFaq, deleteFaq } from '../../lib/supabaseRest';
 
 // Content structure - organized by category
 const contentCategories = [
@@ -16,40 +16,85 @@ const contentCategories = [
         icon: '🏠',
         sections: [
             {
-                id: 'stats',
-                title: 'Impact Statistics',
-                description: 'Numbers displayed on homepage',
+                id: 'hero',
+                title: 'Hero Section',
+                description: 'Main landing page content',
                 fields: [
-                    { name: 'totalRaised', label: 'Total Raised ($)', type: 'number', value: '' },
-                    { name: 'activeGolfers', label: 'Active Golfers', type: 'number', value: '' },
-                    { name: 'charities', label: 'Partner Charities', type: 'number', value: '' }
+                    { name: 'title', label: 'Main Title', type: 'text', value: '' },
+                    { name: 'subtitle', label: 'Subtitle/Description', type: 'textarea', value: '' },
+                    { name: 'ctaText', label: 'Primary CTA Button', type: 'text', value: '' }
                 ]
             },
             {
-                id: 'howItWorks',
-                title: 'How It Works',
-                description: 'Step-by-step instructions on the homepage',
+                id: 'concept',
+                title: 'Draw Mechanics (The Concept)',
+                description: 'Section explaining how your scores become lucky numbers',
                 fields: [
-                    { name: 'step1Title', label: 'Step 1 Title', type: 'text', value: '' },
-                    { name: 'step1Desc', label: 'Step 1 Description', type: 'textarea', value: '' },
-                    { name: 'step2Title', label: 'Step 2 Title', type: 'text', value: '' },
-                    { name: 'step2Desc', label: 'Step 2 Description', type: 'textarea', value: '' },
-                    { name: 'step3Title', label: 'Step 3 Title', type: 'text', value: '' },
-                    { name: 'step3Desc', label: 'Step 3 Description', type: 'textarea', value: '' },
-                    { name: 'step4Title', label: 'Step 4 Title', type: 'text', value: '' },
-                    { name: 'step4Desc', label: 'Step 4 Description', type: 'textarea', value: '' },
-                    { name: 'step5Title', label: 'Step 5 Title', type: 'text', value: '' },
-                    { name: 'step5Desc', label: 'Step 5 Description', type: 'textarea', value: '' }
+                    { name: 'title', label: 'Section Title', type: 'text', value: '' },
+                    { name: 'subtitle', label: 'Section Subtitle', type: 'textarea', value: '' },
+                    { name: 'drawHeadline', label: 'Box Title', type: 'text', value: '' },
+                    { name: 'drawPoint1', label: 'Point 1', type: 'text', value: '' },
+                    { name: 'drawPoint2', label: 'Point 2', type: 'text', value: '' },
+                    { name: 'drawPoint3', label: 'Point 3', type: 'text', value: '' },
+                    { name: 'drawPoint4', label: 'Point 4', type: 'text', value: '' },
+                    { name: 'exampleNumbers', label: 'Example Numbers (comma separated)', type: 'text', value: '' },
+                    { name: 'exampleLabel', label: 'Example Label', type: 'text', value: '' }
                 ]
             },
+            {
+                id: 'reveal',
+                title: 'Impact Reveal (Cards)',
+                description: 'The automated card reveal and winner announcement',
+                fields: [
+                    { name: 'title', label: 'Section Title', type: 'text', value: '' },
+                    { name: 'subtitle', label: 'Section Subtitle', type: 'text', value: '' },
+                    { name: 'badgeText', label: 'Section Badge (The Ultimate Payoff)', type: 'text', value: '' },
+                    { name: 'luckyNumbers', label: 'Winning Numbers (comma separated)', type: 'text', value: '' },
+                    { name: 'impactLabel', label: 'Announcement Badge', type: 'text', value: '' },
+                    { name: 'impactTitle', label: 'Announcement Title', type: 'text', value: '' },
+                    { name: 'impactPrefix', label: 'Impact Prefix (e.g. Your round just unlocked)', type: 'text', value: '' },
+                    { name: 'impactDays', label: 'Impact Value (e.g. 14)', type: 'text', value: '' },
+                    { name: 'impactInfix', label: 'Impact Infix (e.g. of)', type: 'text', value: '' },
+                    { name: 'impactDesc', label: 'Impact Description (e.g. medical support...)', type: 'textarea', value: '' }
+                ]
+            }
+        ]
+    },
+    {
+        id: 'footer',
+        label: 'Footer & Global',
+        icon: '📝',
+        sections: [
             {
                 id: 'footer',
                 title: 'Footer Content',
-                description: 'Footer text and tagline',
+                description: 'Global footer details',
                 fields: [
+                    { name: 'tagline', label: 'Footer Tagline', type: 'textarea', value: '' },
                     { name: 'copyright', label: 'Copyright Text', type: 'text', value: '' },
-                    { name: 'tagline', label: 'Description/Tagline', type: 'textarea', value: '' }
+                    { name: 'contact_email', label: 'Contact Email', type: 'text', value: '' },
+                    { name: 'contact_phone', label: 'Contact Phone', type: 'text', value: '' },
+                    { name: 'address', label: 'Address/Location', type: 'text', value: '' },
+                    { name: 'social_instagram', label: 'Instagram URL', type: 'text', value: '' },
+                    { name: 'social_facebook', label: 'Facebook URL', type: 'text', value: '' },
+                    { name: 'social_linkedin', label: 'LinkedIn URL', type: 'text', value: '' },
+                    { name: 'social_twitter', label: 'Twitter/X URL', type: 'text', value: '' },
+                    { name: 'social_youtube', label: 'YouTube URL', type: 'text', value: '' }
                 ]
+            }
+        ]
+    },
+    {
+        id: 'faqs',
+        label: 'FAQs',
+        icon: '❓',
+        sections: [
+            {
+                id: 'faq_manager',
+                title: 'FAQ Manager',
+                description: 'Manage frequently asked questions',
+                isSpecial: true,
+                fields: []
             }
         ]
     },
@@ -95,6 +140,11 @@ export default function ContentManagement() {
     const [originalValues, setOriginalValues] = useState({});
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+    // FAQ specific state
+    const [faqs, setFaqs] = useState([]);
+    const [editingFaq, setEditingFaq] = useState(null);
+    const [faqForm, setFaqForm] = useState({ category: 'General', question: '', answer: '', display_order: 0 });
+
     // Track changes by comparing current state with original database values
     useEffect(() => {
         const currentValues = {};
@@ -110,7 +160,6 @@ export default function ContentManagement() {
         // Check if any value differs
         let changed = false;
         for (const key in currentValues) {
-            // Compare as strings to avoid type issues (number vs string from input)
             if (String(currentValues[key] || '') !== String(originalValues[key] || '')) {
                 changed = true;
                 break;
@@ -121,16 +170,18 @@ export default function ContentManagement() {
 
     // Fetch content from database on mount
     useEffect(() => {
-        fetchContent();
+        fetchData();
     }, []);
 
-    const fetchContent = async () => {
+    const fetchData = async () => {
         try {
             setLoading(true);
-            const dbContent = await getSiteContent();
+            const [dbContent, dbFaqs] = await Promise.all([
+                getSiteContent(),
+                getFaqs()
+            ]);
 
             if (dbContent.length > 0) {
-                // Merge database values into structure
                 setCategories(prev => prev.map(category => ({
                     ...category,
                     sections: category.sections.map(section => ({
@@ -145,23 +196,21 @@ export default function ContentManagement() {
                     }))
                 })));
 
-                // Store flat values for comparison
                 const values = {};
                 dbContent.forEach(item => {
                     values[`${item.section_id}_${item.field_name}`] = item.field_value || '';
                 });
                 setOriginalValues(values);
             }
-            console.log('📝 Content loaded from database');
+
+            setFaqs(dbFaqs);
         } catch (error) {
-            console.error('Error fetching content:', error);
+            console.error('Error fetching data:', error);
             addToast('error', 'Failed to load content');
         } finally {
             setLoading(false);
         }
     };
-
-
 
     const currentCategory = categories.find(c => c.id === activeCategory);
     const currentSection = currentCategory?.sections.find(s => s.id === activeSection);
@@ -202,19 +251,51 @@ export default function ContentManagement() {
 
             await saveSiteContentBulk(items);
 
-            // Update original values to current state after successful save
             const newOriginals = {};
             items.forEach(item => {
                 newOriginals[`${item.section_id}_${item.field_name}`] = item.field_value;
             });
             setOriginalValues(newOriginals);
 
-            addToast('success', 'All content published successfully!');
+            addToast('success', 'Changes published successfully!');
         } catch (error) {
             console.error('Error saving content:', error);
             addToast('error', 'Failed to save content');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleFaqSave = async () => {
+        try {
+            const result = await saveFaq({
+                ...faqForm,
+                id: editingFaq?.id
+            });
+
+            if (editingFaq) {
+                setFaqs(faqs.map(f => f.id === result.id ? result : f));
+            } else {
+                setFaqs([...faqs, result]);
+            }
+
+            setEditingFaq(null);
+            setFaqForm({ category: 'General', question: '', answer: '', display_order: 0 });
+            setPreviewMode(false); // Close the form after saving
+            addToast('success', 'FAQ saved successfully');
+        } catch (error) {
+            addToast('error', 'Failed to save FAQ');
+        }
+    };
+
+    const handleFaqDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this FAQ?')) return;
+        try {
+            await deleteFaq(id);
+            setFaqs(faqs.filter(f => f.id !== id));
+            addToast('success', 'FAQ deleted');
+        } catch (error) {
+            addToast('error', 'Failed to delete FAQ');
         }
     };
 
@@ -252,7 +333,7 @@ export default function ContentManagement() {
                                 Content Management
                             </h1>
                             <p className="text-zinc-400">
-                                Edit website content, legal pages, and more
+                                Edit website content, FAQs, and legal pages
                             </p>
                         </div>
                         <div className="flex items-center gap-4">
@@ -268,52 +349,48 @@ export default function ContentManagement() {
                                     </motion.span>
                                 )}
                             </AnimatePresence>
-                            <Button
-                                onClick={handleSave}
-                                disabled={isSaving || !hasUnsavedChanges}
-                                className={`relative group overflow-hidden transition-all duration-500 ${hasUnsavedChanges
-                                    ? 'shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)]'
-                                    : ''}`}
-                                style={{
-                                    background: hasUnsavedChanges
-                                        ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                                        : 'rgba(39, 39, 42, 0.5)',
-                                    border: hasUnsavedChanges
-                                        ? '1px solid rgba(255,255,255,0.2)'
-                                        : '1px solid rgba(255,255,255,0.05)',
-                                    color: hasUnsavedChanges ? '#ffffff' : '#71717a',
-                                    minWidth: '180px',
-                                    height: '48px',
-                                    borderRadius: '14px'
-                                }}
-                            >
-                                <div className="flex items-center justify-center gap-2 relative z-10">
-                                    {isSaving ? (
-                                        <>
-                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                            <span className="font-bold">Saving...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className={`w-5 h-5 transition-transform duration-300 ${hasUnsavedChanges ? 'scale-110' : 'opacity-50'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            <span className="font-bold tracking-tight">Publish Changes</span>
-                                        </>
-                                    )}
-                                </div>
-                                {hasUnsavedChanges && (
-                                    <motion.div
-                                        layoutId="glow"
-                                        className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    />
-                                )}
-                            </Button>
+                            {activeCategory !== 'faqs' && (
+                                <Button
+                                    onClick={handleSave}
+                                    disabled={isSaving || !hasUnsavedChanges}
+                                    className={`relative group overflow-hidden transition-all duration-500 ${hasUnsavedChanges
+                                        ? 'shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)]'
+                                        : ''}`}
+                                    style={{
+                                        background: hasUnsavedChanges
+                                            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                                            : 'rgba(39, 39, 42, 0.5)',
+                                        border: hasUnsavedChanges
+                                            ? '1px solid rgba(255,255,255,0.2)'
+                                            : '1px solid rgba(255,255,255,0.05)',
+                                        color: hasUnsavedChanges ? '#ffffff' : '#71717a',
+                                        minWidth: '180px',
+                                        height: '48px',
+                                        borderRadius: '14px'
+                                    }}
+                                >
+                                    <div className="flex items-center justify-center gap-2 relative z-10">
+                                        {isSaving ? (
+                                            <>
+                                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                <span className="font-bold">Saving...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className={`w-5 h-5 transition-transform duration-300 ${hasUnsavedChanges ? 'scale-110' : 'opacity-50'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <span className="font-bold tracking-tight">Publish Changes</span>
+                                            </>
+                                        )}
+                                    </div>
+                                </Button>
+                            )}
                         </div>
                     </motion.div>
 
                     {/* Category Tabs */}
-                    <div className="flex gap-2 mb-6">
+                    <div className="flex flex-wrap gap-2 mb-6">
                         {categories.map(category => (
                             <button
                                 key={category.id}
@@ -353,25 +430,114 @@ export default function ContentManagement() {
                                 >
                                     <div className="flex items-center gap-3">
                                         <span className="text-lg">
-                                            {section.id === 'terms' ? '📜' :
-                                                section.id === 'privacy' ? '🔒' :
-                                                    section.id === 'hero' ? '🏠' :
-                                                        section.id === 'stats' ? '📊' :
-                                                            section.id === 'howItWorks' ? '📖' :
-                                                                section.id === 'footer' ? '📝' : '📄'}
+                                            {section.id.includes('home') ? '🏠' :
+                                                section.id.includes('faq') ? '❓' :
+                                                    section.id.includes('footer') ? '📝' : '📄'}
                                         </span>
                                         <div>
                                             <p className="font-medium text-white">{section.title}</p>
-                                            <p className="text-xs text-zinc-500">{section.fields.length} fields</p>
+                                            <p className="text-xs text-zinc-500">
+                                                {section.isSpecial ? 'Manager' : `${section.fields.length} fields`}
+                                            </p>
                                         </div>
                                     </div>
                                 </motion.button>
                             ))}
                         </motion.div>
 
-                        {/* Content Editor */}
+                        {/* Content Editor / Managers */}
                         <div className="lg:col-span-3">
-                            {currentSection && (
+                            {activeCategory === 'faqs' ? (
+                                <div className="space-y-6">
+                                    <Card variant="glass">
+                                        <CardHeader>
+                                            <div className="flex items-center justify-between">
+                                                <h2 className="text-xl font-bold text-white">FAQ Manager</h2>
+                                                <Button size="sm" onClick={() => {
+                                                    setEditingFaq(null);
+                                                    setFaqForm({ category: 'General', question: '', answer: '', display_order: faqs.length });
+                                                    setPreviewMode(true); // Reuse previewMode as 'showForm'
+                                                }}>Add New FAQ</Button>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {previewMode && (
+                                                <div className="mb-8 p-6 bg-zinc-800/50 border border-emerald-500/30 rounded-2xl space-y-4">
+                                                    <h3 className="font-bold text-white">{editingFaq ? 'Edit FAQ' : 'New FAQ'}</h3>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs uppercase tracking-widest text-zinc-500 mb-2">Category</label>
+                                                            <input
+                                                                className="w-full bg-black/40 border border-zinc-700 rounded-lg p-2 text-white"
+                                                                value={faqForm.category}
+                                                                onChange={e => setFaqForm({ ...faqForm, category: e.target.value })}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs uppercase tracking-widest text-zinc-500 mb-2">Order</label>
+                                                            <input
+                                                                type="number"
+                                                                className="w-full bg-black/40 border border-zinc-700 rounded-lg p-2 text-white"
+                                                                value={faqForm.display_order}
+                                                                onChange={e => setFaqForm({ ...faqForm, display_order: parseInt(e.target.value) })}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs uppercase tracking-widest text-zinc-500 mb-2">Question</label>
+                                                        <input
+                                                            className="w-full bg-black/40 border border-zinc-700 rounded-lg p-2 text-white"
+                                                            value={faqForm.question}
+                                                            onChange={e => setFaqForm({ ...faqForm, question: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs uppercase tracking-widest text-zinc-500 mb-2">Answer</label>
+                                                        <textarea
+                                                            className="w-full bg-black/40 border border-zinc-700 rounded-lg p-2 text-white h-24"
+                                                            value={faqForm.answer}
+                                                            onChange={e => setFaqForm({ ...faqForm, answer: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button variant="outline" size="sm" onClick={() => setPreviewMode(false)}>Cancel</Button>
+                                                        <Button size="sm" onClick={handleFaqSave}>Save FAQ</Button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="space-y-2">
+                                                {faqs.map(faq => (
+                                                    <div key={faq.id} className="flex items-center justify-between p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl hover:border-zinc-700 transition-all">
+                                                        <div>
+                                                            <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full uppercase font-bold mr-3">{faq.category}</span>
+                                                            <span className="text-white font-medium">{faq.question}</span>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingFaq(faq);
+                                                                    setFaqForm(faq);
+                                                                    setPreviewMode(true);
+                                                                }}
+                                                                className="p-2 text-zinc-400 hover:text-white transition-colors"
+                                                            >
+                                                                ✏️
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleFaqDelete(faq.id)}
+                                                                className="p-2 text-zinc-400 hover:text-red-400 transition-colors"
+                                                            >
+                                                                🗑️
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            ) : currentSection && (
                                 <Card variant="glass">
                                     <CardHeader>
                                         <div className="flex items-center justify-between">
@@ -404,7 +570,6 @@ export default function ContentManagement() {
                                                         {field.label}
                                                     </label>
 
-                                                    {/* Rich text / Legal content */}
                                                     {field.type === 'richtext' ? (
                                                         previewMode ? (
                                                             <div
@@ -422,18 +587,7 @@ export default function ContentManagement() {
                                                             <textarea
                                                                 value={field.value}
                                                                 onChange={(e) => handleFieldChange(currentSection.id, field.name, e.target.value)}
-                                                                onInput={(e) => {
-                                                                    e.target.style.height = 'auto';
-                                                                    e.target.style.height = e.target.scrollHeight + 'px';
-                                                                }}
-                                                                ref={(el) => {
-                                                                    if (el) {
-                                                                        el.style.height = 'auto';
-                                                                        el.style.height = el.scrollHeight + 'px';
-                                                                    }
-                                                                }}
-                                                                className="w-full px-4 py-3 rounded-xl font-mono text-sm bg-zinc-800/50 border border-zinc-700 text-zinc-200 focus:border-emerald-500 focus:outline-none resize-none"
-                                                                style={{ minHeight: '200px' }}
+                                                                className="w-full px-4 py-3 rounded-xl font-mono text-sm bg-zinc-800/50 border border-zinc-700 text-zinc-200 focus:border-emerald-500 focus:outline-none resize-none min-h-[200px]"
                                                                 placeholder="Enter content in Markdown format..."
                                                             />
                                                         )
@@ -441,25 +595,7 @@ export default function ContentManagement() {
                                                         <textarea
                                                             value={field.value}
                                                             onChange={(e) => handleFieldChange(currentSection.id, field.name, e.target.value)}
-                                                            onInput={(e) => {
-                                                                e.target.style.height = 'auto';
-                                                                e.target.style.height = e.target.scrollHeight + 'px';
-                                                            }}
-                                                            ref={(el) => {
-                                                                if (el) {
-                                                                    el.style.height = 'auto';
-                                                                    el.style.height = el.scrollHeight + 'px';
-                                                                }
-                                                            }}
-                                                            className="w-full px-4 py-3 rounded-xl resize-none bg-zinc-800/50 border border-zinc-700 text-white focus:border-emerald-500 focus:outline-none"
-                                                            style={{ minHeight: '80px' }}
-                                                        />
-                                                    ) : field.type === 'date' ? (
-                                                        <input
-                                                            type="date"
-                                                            value={field.value}
-                                                            onChange={(e) => handleFieldChange(currentSection.id, field.name, e.target.value)}
-                                                            className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white focus:border-emerald-500 focus:outline-none"
+                                                            className="w-full px-4 py-3 rounded-xl resize-none bg-zinc-800/50 border border-zinc-700 text-white focus:border-emerald-500 focus:outline-none min-h-[80px]"
                                                         />
                                                     ) : (
                                                         <input

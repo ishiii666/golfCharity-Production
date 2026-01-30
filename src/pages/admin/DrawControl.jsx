@@ -58,6 +58,46 @@ const isFutureCycle = (monthYearStr) => {
     }
 };
 
+const PhaseStepper = ({ status }) => {
+    const phases = [
+        { id: 'open', label: 'Analysis', icon: '🔍', desc: 'Configure & Simulate' },
+        { id: 'processing', label: 'Processing', icon: '⚙️', desc: 'Calculate Results' },
+        { id: 'published', label: 'Fulfillment', icon: '💰', desc: 'Payouts & Reports' }
+    ];
+
+    const currentPhaseIndex = phases.findIndex(p => p.id === status);
+    const activeIndex = currentPhaseIndex === -1 ? 0 : currentPhaseIndex;
+
+    return (
+        <div className="flex items-center justify-between mb-8 max-w-2xl mx-auto px-4">
+            {phases.map((phase, idx) => {
+                const isActive = idx === activeIndex;
+                const isPast = idx < activeIndex;
+                return (
+                    <div key={phase.id} className="flex flex-col items-center relative flex-1">
+                        {/* Line connector */}
+                        {idx < phases.length - 1 && (
+                            <div className={`absolute top-5 left-[50%] w-full h-0.5 ${idx < activeIndex ? 'bg-emerald-500' : 'bg-slate-800'}`} />
+                        )}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 border-2 mb-2 transition-all duration-500 ${isActive ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.4)] scale-110' :
+                            isPast ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' :
+                                'bg-slate-900 border-slate-800 text-slate-600'
+                            }`}>
+                            {isPast ? '✓' : phase.icon}
+                        </div>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-emerald-400' : 'text-slate-500'}`}>
+                            {phase.label}
+                        </span>
+                        <span className="text-[9px] text-slate-600 hidden md:block">
+                            {phase.desc}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 // Score range presets
 const SCORE_RANGE_PRESETS = [
     { label: 'Full Range (1-45)', min: 1, max: 45 },
@@ -354,14 +394,15 @@ export default function DrawControl() {
             <div className="py-8 lg:py-12">
                 <div className="container-app max-w-6xl">
                     <BackButton to="/admin" label="Admin Dashboard" className="mb-6" />
-                    <motion.div variants={fadeUp} initial="initial" animate="animate" className="mb-8">
-                        <div className="flex items-center gap-3 mb-2">
-                            <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-sm font-medium">Admin Only</span>
+                    <motion.div variants={fadeUp} initial="initial" animate="animate" className="mb-0 text-center">
+                        <div className="flex items-center justify-center gap-3 mb-4">
+                            <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-widest">Admin Control</span>
                         </div>
-                        <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2">Draw Control Center</h1>
-                        <p className="text-slate-400 mb-2">Analyze score ranges and publish draw results</p>
-                        <p className="text-amber-400 font-medium text-sm">📅 {DRAW_SCHEDULE_TEXT}</p>
+                        <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2" style={{ fontFamily: 'var(--font-display)' }}>Draw Lifecycle Management</h1>
+                        <p className="text-slate-400 mb-8 max-w-lg mx-auto">Manage the end-to-end process of monthly draws from range analysis to global fulfillment.</p>
                     </motion.div>
+
+                    <PhaseStepper status={currentDraw?.status || 'open'} />
 
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                         <Card variant="glass" padding="p-4">
@@ -810,8 +851,8 @@ export default function DrawControl() {
                                                             <span
                                                                 key={sIdx}
                                                                 className={`text-[10px] font-black w-6 h-6 rounded-md flex items-center justify-center ${isMatch
-                                                                        ? viewingTier === 1 ? 'bg-amber-500 text-white' : viewingTier === 2 ? 'bg-violet-500 text-white' : 'bg-teal-500 text-white'
-                                                                        : 'bg-slate-800 text-slate-500'
+                                                                    ? viewingTier === 1 ? 'bg-amber-500 text-white' : viewingTier === 2 ? 'bg-violet-500 text-white' : 'bg-teal-500 text-white'
+                                                                    : 'bg-slate-800 text-slate-500'
                                                                     }`}
                                                             >
                                                                 {score}

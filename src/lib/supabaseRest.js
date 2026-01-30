@@ -234,6 +234,86 @@ export async function getSiteContent() {
     }
 }
 
+// =====================================================
+// FAQ MANAGEMENT API FUNCTIONS
+// =====================================================
+
+/**
+ * Get all FAQs from database
+ */
+export async function getFaqs() {
+    try {
+        const url = `${SUPABASE_URL}/rest/v1/faqs?select=*&order=display_order.asc`;
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${await getAuthToken()}`
+            }
+        });
+
+        if (!response.ok) return [];
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching FAQs:', error);
+        return [];
+    }
+}
+
+/**
+ * Save/Update an FAQ
+ */
+export async function saveFaq(faq) {
+    try {
+        const authToken = await getAuthToken();
+        const url = faq.id
+            ? `${SUPABASE_URL}/rest/v1/faqs?id=eq.${faq.id}`
+            : `${SUPABASE_URL}/rest/v1/faqs`;
+
+        const response = await fetch(url, {
+            method: faq.id ? 'PATCH' : 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(faq)
+        });
+
+        if (!response.ok) throw new Error('Failed to save FAQ');
+        const data = await response.json();
+        return data[0];
+    } catch (error) {
+        console.error('Error saving FAQ:', error);
+        throw error;
+    }
+}
+
+/**
+ * Delete an FAQ
+ */
+export async function deleteFaq(id) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/faqs?id=eq.${id}`;
+
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        if (!response.ok) throw new Error('Failed to delete FAQ');
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting FAQ:', error);
+        throw error;
+    }
+}
+
+
 /**
  * Save site content (upsert)
  */
@@ -661,12 +741,13 @@ export async function getAdminStats() {
     const suspendedUsers = profiles.filter(p => p.role !== 'admin' && p.status === 'suspended').length;
 
     // 2. Fetch other stats
-    const [charities, totalDonated, recentActivity, currentDraw, winners] = await Promise.all([
+    const [charities, totalDonated, recentActivity, currentDraw, winners, charitySummary] = await Promise.all([
         getTableData('charities', 'id'),
         getTotalDonations(),
         getRecentActivity(5),
         getCurrentDraw(),
-        getTableData('draw_entries', 'id,is_paid,tier')
+        getTableData('draw_entries', 'id,is_paid,tier'),
+        getCharityPayoutSummary()
     ]);
 
     // 3. Get accurate subscriber count (global for dashboard)
@@ -677,6 +758,9 @@ export async function getAdminStats() {
 
     // 5. Monthly estimated revenue (Active Subs * $5 minimum share)
     const monthlyRev = activeSubCount * 5;
+
+    // 6. Charities needing payout
+    const charityPayoutCount = (charitySummary || []).length;
 
     // Determine what draw is "Next"
     const nextDrawLabel = currentDraw?.status === 'open'
@@ -695,7 +779,8 @@ export async function getAdminStats() {
         recentActivity: recentActivity,
         nextDrawDate: nextDrawLabel,
         pendingPayouts,
-        monthlyRevenue: monthlyRev
+        monthlyRevenue: monthlyRev,
+        charityPayoutCount
     };
 }
 
@@ -2377,9 +2462,10 @@ export async function markWinnerAsPaid(entryId, reference = '', adminId) {
             },
             body: JSON.stringify({
                 is_paid: true,
+                payout_status: 'paid',
                 paid_at: new Date().toISOString(),
+                payout_ref: reference,
                 payment_reference: reference,
-                verification_status: 'Paid',
                 verified_by: adminId
             })
         });
@@ -2393,6 +2479,218 @@ export async function markWinnerAsPaid(entryId, reference = '', adminId) {
         return { success: true };
     } catch (error) {
         console.error('Error marking as paid:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get all winners that are verified but not paid
+ */
+export async function getUnpaidWinners() {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/draw_entries?select=*,draws(month_year,status),profiles(full_name,bank_name,bsb_number,account_number)&tier=not.is.null&verification_status=eq.verified&payout_status=in.(pending,processing)&order=created_at.desc`;
+
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const data = await (response.ok ? response.json() : []);
+        return Array.isArray(data) ? data : [];
+    } catch (error) {
+        console.error('Error fetching unpaid winners:', error);
+        return [];
+    }
+}
+
+/**
+ * Get a summary of all pending donations for charities (not yet paid out)
+ * Returns BOTH actual donation records AND calculated/projected amounts based on supporters
+ */
+export async function getCharityPayoutSummary() {
+    try {
+        const authToken = await getAuthToken();
+
+        // 1. Fetch data in parallel for efficiency
+        const [donationsRes, charitiesRes, profilesRes, subsRes] = await Promise.all([
+            fetch(`${SUPABASE_URL}/rest/v1/donations?select=*,charities(name,logo_url)&charity_payout_id=is.null`, {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` }
+            }),
+            getCharities(), // Uses the specialized unified logic
+            getTableData('profiles', 'id,selected_charity_id,status,role'),
+            getTableData('subscriptions', 'user_id,status,plan')
+        ]);
+
+        const donations = donationsRes.ok ? await donationsRes.json() : [];
+        const activeCharities = Array.isArray(charitiesRes) ? charitiesRes : [];
+        const profiles = Array.isArray(profilesRes) ? profilesRes : [];
+        const subscriptions = Array.isArray(subsRes) ? subsRes : [];
+
+        // 2. Map subscriptions for contribution calculation
+        const subMap = {};
+        subscriptions.filter(s => s.status === 'active').forEach(s => {
+            subMap[s.user_id] = s.plan;
+        });
+
+        // 3. Calculate LIVE pending supporters and projected amounts
+        const summary = {};
+
+        // Initialize with ALL active charities so none are missing
+        activeCharities.forEach(charity => {
+            summary[charity.id] = {
+                charity_id: charity.id,
+                name: charity.name,
+                logo_url: charity.logo_url,
+                actual_pending: 0,
+                projected_pending: 0,
+                supporter_count: 0,
+                donation_ids: [],
+                total_amount: 0 // This will be the field used by the UI
+            };
+        });
+
+        // 4. Group ACTUAL donation records (from draws or direct gifts)
+        if (Array.isArray(donations)) {
+            donations.forEach(donation => {
+                const id = donation.charity_id;
+                if (summary[id]) {
+                    summary[id].actual_pending += parseFloat(donation.amount || 0);
+                    summary[id].donation_ids.push(donation.id);
+                }
+            });
+        }
+
+        // 5. Calculate PROJECTED contribution from active base
+        profiles.forEach(p => {
+            if (p.selected_charity_id && p.status === 'active' && p.role !== 'admin') {
+                const charity = summary[p.selected_charity_id];
+                if (charity) {
+                    charity.supporter_count++;
+                    const plan = subMap[p.id];
+                    const contrib = plan === 'annual' ? 21.60 : 2.20;
+                    charity.projected_pending += contrib;
+                }
+            }
+        });
+
+        // 6. Finalize: In Finance Hub, we usually payout ACTUAL donations, 
+        // but we'll show both for transparency.
+        return Object.values(summary).map(s => ({
+            ...s,
+            // We'll prioritize actual pending if it exists, otherwise show projected
+            // This ensures "unreal" high numbers from manual test data are visible but 
+            // the logic for "real" users is also present.
+            total_amount: s.actual_pending > 0 ? s.actual_pending : s.projected_pending
+        })).sort((a, b) => b.total_amount - a.total_amount);
+
+    } catch (error) {
+        console.error('Error fetching charity payout summary:', error);
+        return [];
+    }
+}
+
+/**
+ * Get history of charity payouts
+ */
+export async function getCharityPayouts() {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/charity_payouts?select=*,charities(name)&order=created_at.desc`;
+
+        const response = await fetch(url, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        const data = await (response.ok ? response.json() : []);
+        return Array.isArray(data) ? data : [];
+    } catch (error) {
+        console.error('Error fetching charity payouts:', error);
+        return [];
+    }
+}
+
+/**
+ * Create a new charity payout record
+ */
+export async function createCharityPayout(charityId, amount, donationIds) {
+    try {
+        const authToken = await getAuthToken();
+
+        // 1. Create the payout record
+        const payoutUrl = `${SUPABASE_URL}/rest/v1/charity_payouts`;
+        const payoutResponse = await fetch(payoutUrl, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+                charity_id: charityId,
+                amount: amount,
+                status: 'pending'
+            })
+        });
+
+        if (!payoutResponse.ok) throw new Error('Failed to create charity payout record');
+        const payoutData = await payoutResponse.json();
+        const payoutId = payoutData[0].id;
+
+        // 2. Link the donations to this payout
+        const updateUrl = `${SUPABASE_URL}/rest/v1/donations?id=in.(${donationIds.join(',')})`;
+        await fetch(updateUrl, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ charity_payout_id: payoutId })
+        });
+
+        await logActivity('charity_payout_created', `Created payout of ${amount} for charity ${charityId}`);
+        return { success: true, payoutId };
+    } catch (error) {
+        console.error('Error creating charity payout:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Mark a charity payout as paid
+ */
+export async function markCharityPayoutAsPaid(payoutId, reference) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/charity_payouts?id=eq.${payoutId}`;
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                status: 'paid',
+                paid_at: new Date().toISOString(),
+                payout_ref: reference
+            })
+        });
+
+        if (!response.ok) throw new Error('Failed to mark charity payout as paid');
+
+        await logActivity('charity_payout_paid', `Charity payout ${payoutId} marked as paid. Ref: ${reference}`);
+        return { success: true };
+    } catch (error) {
+        console.error('Error marking charity payout as paid:', error);
         return { success: false, error: error.message };
     }
 }
@@ -2613,9 +2911,10 @@ export async function getReportStats() {
 
         // 1. Get current draw to scope subscribers (sync with dashboard)
         const currentDraw = await getCurrentDraw();
-        const activeSubscribers = await getActiveSubscribersCount(currentDraw?.id);
+        // Use global=true for overall stats display consistency
+        const activeSubscribers = await getActiveSubscribersCount(null, true);
 
-        // 2. Calculate Total Revenue from the current pool
+        // 2. Calculate Total Revenue (active subs * 5)
         const totalRevenue = activeSubscribers * 5;
 
         // 3. Get total players
@@ -2796,16 +3095,25 @@ export async function getUserImpactStats(userId) {
  */
 export async function getHomePageStats() {
     try {
-        const [charities, profiles] = await Promise.all([
+        const [charities, profiles, siteContent] = await Promise.all([
             getCharities(),
-            getTableData('profiles', 'id,role,status')
+            getTableData('profiles', 'id,role,status'),
+            getSiteContent()
         ]);
 
-        const totalRaised = charities.reduce((sum, c) => sum + (c.total_raised || 0), 0);
-        const charityCount = charities.filter(c => c.status !== 'inactive').length;
+        // Calculate actual real-time values
+        let totalRaised = charities.reduce((sum, c) => sum + (c.total_raised || 0), 0);
+        let charityCount = charities.filter(c => c.status !== 'inactive').length;
+        let golferCount = profiles.filter(p => p.role !== 'admin' && p.status === 'active').length;
 
-        // Count active non-admin golfers
-        const golferCount = profiles.filter(p => p.role !== 'admin' && p.status === 'active').length;
+        // Apply manual overrides from site_content if they exist
+        siteContent.forEach(item => {
+            if (item.section_id === 'stats') {
+                if (item.field_name === 'totalRaised' && item.field_value) totalRaised = parseFloat(item.field_value);
+                if (item.field_name === 'charities' && item.field_value) charityCount = parseInt(item.field_value);
+                if (item.field_name === 'activeGolfers' && item.field_value) golferCount = parseInt(item.field_value);
+            }
+        });
 
         // Calculate lives impacted (estimate: each $10 donated helps ~3 lives)
         const livesImpacted = Math.floor(totalRaised * 0.3);
@@ -2815,7 +3123,7 @@ export async function getHomePageStats() {
             charityCount,
             golferCount,
             livesImpacted: livesImpacted || 0,
-            activeSubscribers: profiles.filter(p => p.status === 'active' && p.role !== 'admin').length // Added for dashboard consistency
+            activeSubscribers: profiles.filter(p => p.status === 'active' && p.role !== 'admin').length
         };
     } catch (error) {
         console.error('Error fetching homepage stats:', error);
