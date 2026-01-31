@@ -42,7 +42,7 @@ import CompleteSetup from './pages/CompleteSetup';
 
 // Protected Route Component with loading timeout
 function ProtectedRoute({ children, requireAuth = true }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isSuspended, isLoading, logout } = useAuth();
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
 
   // Timeout loading after 3 seconds - prevent infinite loading
@@ -71,6 +71,13 @@ function ProtectedRoute({ children, requireAuth = true }) {
     );
   }
 
+  // Handle suspended users
+  if (isAuthenticated && isSuspended) {
+    console.warn('🚫 Access denied: User is suspended');
+    // The AuthContext will handle the logout, but we should clear the view immediately
+    return <Navigate to="/login" replace />;
+  }
+
   // If requireAuth is false or timed out, don't redirect
   if (requireAuth && !isAuthenticated && !loadingTimedOut) {
     return <Navigate to="/login" replace />;
@@ -81,7 +88,7 @@ function ProtectedRoute({ children, requireAuth = true }) {
 
 // ADMIN PROTECTED ROUTE - Only allows admin users
 function AdminProtectedRoute({ children }) {
-  const { isAuthenticated, isAdmin, isLoading, user } = useAuth();
+  const { isAuthenticated, isSuspended, isAdmin, isLoading, user } = useAuth();
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
 
   // Timeout loading after 4 seconds
@@ -118,12 +125,17 @@ function AdminProtectedRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
 
+  // Handle suspended users
+  if (isAuthenticated && isSuspended) {
+    console.warn('🚫 Access denied: Account is suspended');
+    return <Navigate to="/login" replace />;
+  }
+
   // Not admin - show access denied and redirect
   if (!isAdmin) {
     console.warn('🚫 Admin access denied:', {
       email: user?.email,
-      role: user?.app_metadata?.role || user?.user_metadata?.role || 'none',
-      profileRole: profile?.role || 'none'
+      role: user?.app_metadata?.role || user?.user_metadata?.role || 'none'
     });
 
     return (
@@ -158,7 +170,7 @@ function AdminProtectedRoute({ children }) {
 
 // SUBSCRIBED-ONLY ROUTE - Redirects non-subscribers to pricing
 function SubscribedRoute({ children }) {
-  const { isAuthenticated, isSubscribed, isLoading } = useAuth();
+  const { isAuthenticated, isSuspended, isSubscribed, isLoading } = useAuth();
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
 
   // Timeout loading after 3 seconds
@@ -188,6 +200,12 @@ function SubscribedRoute({ children }) {
 
   // Not authenticated - redirect to login
   if (!isAuthenticated && !loadingTimedOut) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Handle suspended users
+  if (isAuthenticated && isSuspended) {
+    console.warn('🚫 Access denied: Account is suspended');
     return <Navigate to="/login" replace />;
   }
 

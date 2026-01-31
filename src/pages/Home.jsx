@@ -4,10 +4,8 @@ import { Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import ImpactMoment from '../components/home/ImpactMoment';
 import TheConcept from '../components/home/TheConcept';
-import LuckyNumbersReveal from '../components/home/LuckyNumbersReveal';
 import HowGivesBackHero from '../components/home/HowGivesBackHero';
 import LeaderboardSection from '../components/home/LeaderboardSection';
-import HowItWorks from '../components/home/HowItWorks';
 import Button from '../components/ui/Button';
 import { GolferIcon, HeartIcon } from '../components/ui/Icons';
 import { useSiteContent } from '../hooks/useSiteContent';
@@ -46,13 +44,10 @@ export default function Home() {
             {/* 2. The Concept - How the Draw Works */}
             <TheConcept />
 
-            {/* 3. The Reveal - Animated Lucky Numbers & Impact */}
-            <LuckyNumbersReveal />
-
-            {/* 4. How Golf Gives Back Hero */}
+            {/* 3. How Golf Gives Back Hero */}
             <HowGivesBackHero />
 
-            {/* 5. Leaderboard Of Impact - Show real player rankings */}
+            {/* 4. Leaderboard Of Impact - Show real player rankings */}
             <LeaderboardSection />
 
             {/* 6. Final CTA Section - Charity focused */}

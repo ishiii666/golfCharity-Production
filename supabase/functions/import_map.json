@@ -1,0 +1,7 @@
+{
+    "imports": {
+        "std/": "https://deno.land/std@0.192.0/",
+        "stripe": "https://esm.sh/stripe@14.25.0?target=deno",
+        "supabase": "https://esm.sh/@supabase/supabase-js@2.39.3"
+    }
+}

@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno"
+import { serve } from "https://deno.land/std@0.192.0/http/server.ts"
+import Stripe from "https://esm.sh/stripe@14.25.0?target=deno"
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
     apiVersion: '2023-10-16',
@@ -10,7 +10,7 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -58,9 +58,10 @@ serve(async (req) => {
         )
 
     } catch (error) {
-        console.error('Donation session error:', error)
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
+        console.error('Donation session error:', errorMessage)
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({ error: errorMessage }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
     }

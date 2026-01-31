@@ -3166,8 +3166,6 @@ export async function getFeaturedCharities(limit = 4) {
  */
 export async function getLeaderboardData(limit = 5, type = 'impact') {
     try {
-        // We use ONLY the apikey for public data to ensure EVERYONE sees the same leaderboard
-        // Session-based Authorization often restricts views based on RLS (Row Level Security)
         const publicHeaders = {
             'apikey': SUPABASE_KEY,
             'Content-Type': 'application/json'
@@ -3181,249 +3179,181 @@ export async function getLeaderboardData(limit = 5, type = 'impact') {
             { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
         ];
 
-        console.log('🏆 getLeaderboardData: Fetching public community impact data...');
+        // --- MOCK DATA DEFINITIONS ---
+        const MOCK_IMPACT = [
+            { name: "James Mitchell", initials: "JM", scores: [34, 31, 38, 29, 35], raised: 2450, charity: "Red Cross", donation_percentage: 10, avg: 33 },
+            { name: "Sarah Chen", initials: "SC", scores: [32, 28, 41, 30, 36], raised: 1890, charity: "Beyond Blue", donation_percentage: 10, avg: 33 },
+            { name: "Michael O'Brien", initials: "MO", scores: [35, 33, 30, 37, 32], raised: 1650, charity: "Smith Family", donation_percentage: 10, avg: 33 },
+            { name: "Emma Williams", initials: "EW", scores: [31, 36, 29, 34, 33], raised: 1420, charity: "OzHarvest", donation_percentage: 10, avg: 32 },
+            { name: "Avery Thompson", initials: "AT", scores: [28, 32, 25, 30, 29], raised: 850, charity: "Cancer Council", donation_percentage: 10, avg: 29 }
+        ];
 
-        // 1. Fetch data based on type
-        let allDonations = [];
-        let recentWinners = [];
+        const MOCK_WINNERS = [
+            { name: "Lucas Grant", initials: "LG", scores: [42, 38, 44, 36, 40], raised: 5250, charity: "Black Dog Institute", donation_percentage: 10, avg: 40, winnerTier: "5 MATCH JACKPOT WINNER", winningNumbers: [42, 38, 44, 36, 40] },
+            { name: "Sophia Rossi", initials: "SR", scores: [39, 41, 37, 35, 38], raised: 1250, charity: "Rural Aid", donation_percentage: 10, avg: 38, winnerTier: "4 MATCH POOL WINNER", winningNumbers: [39, 41, 37, 35, 20] },
+            { name: "Oliver Bennett", initials: "OB", scores: [36, 34, 32, 38, 35], raised: 750, charity: "Lifeline", donation_percentage: 10, avg: 35, winnerTier: "3 MATCH POOL WINNER", winningNumbers: [36, 34, 32, 10, 15] },
+            { name: "Isabella Wright", initials: "IW", scores: [40, 42, 38, 36, 41], raised: 5250, charity: "Headspace", donation_percentage: 20, avg: 39, winnerTier: "5 MATCH JACKPOT WINNER", winningNumbers: [40, 42, 38, 36, 41] },
+            { name: "Ethan Hunt", initials: "EH", scores: [38, 36, 34, 40, 32], raised: 1250, charity: "Starlight Foundation", donation_percentage: 10, avg: 36, winnerTier: "4 MATCH POOL WINNER", winningNumbers: [38, 36, 34, 40, 10] }
+        ];
+
+        let finalLeaderboard = [];
 
         if (type === 'winners') {
+            // 🏆 HALL OF FAME MODE
+            console.log('🏆 Fetching Hall of Fame Winners...');
             try {
-                // Fetch recent winning entries
                 const winnersRes = await fetch(
                     `${SUPABASE_URL}/rest/v1/draw_entries?select=id,user_id,gross_prize,matches,scores,charity_id,draw_id,draws(month_year,winning_numbers)&gross_prize=gt.0&order=created_at.desc&limit=${limit}`,
                     { headers: publicHeaders }
                 );
                 if (winnersRes.ok) {
-                    recentWinners = await winnersRes.json();
+                    const recentWinners = await winnersRes.json();
+                    if (recentWinners.length > 0) {
+                        // Get profiles and charities for real winners
+                        const userIds = recentWinners.map(w => w.user_id).filter(Boolean);
+                        const charityIds = recentWinners.map(w => w.charity_id).filter(Boolean);
+
+                        const [profilesRes, charitiesRes] = await Promise.all([
+                            fetch(`${SUPABASE_URL}/rest/v1/profiles?id=in.(${userIds.join(',')})&select=id,full_name,donation_percentage`, { headers: publicHeaders }),
+                            fetch(`${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`, { headers: publicHeaders })
+                        ]);
+
+                        const profiles = profilesRes.ok ? await profilesRes.json() : [];
+                        const charities = charitiesRes.ok ? await charitiesRes.json() : [];
+                        const charityMap = Object.fromEntries(charities.map(c => [c.id, c.name]));
+
+                        recentWinners.forEach(w => {
+                            const profile = profiles.find(p => p.id === w.user_id);
+                            const draw = w.draws || {};
+                            finalLeaderboard.push({
+                                id: w.id,
+                                name: profile?.full_name || 'Premium Player',
+                                initials: (profile?.full_name || '??').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
+                                scores: w.scores || [],
+                                raised: `$${Number(w.gross_prize).toLocaleString()}`,
+                                raisedValue: Number(w.gross_prize),
+                                charity: charityMap[w.charity_id] || 'Selected Charity',
+                                percentage: `${profile?.donation_percentage || 10}%`,
+                                avg: Math.round((w.scores || []).reduce((a, b) => a + Number(b), 0) / (w.scores?.length || 1)),
+                                winnerTier: `${w.matches} DRAW POOL WINNER`,
+                                winningNumbers: draw.winning_numbers || [],
+                                isMock: false
+                            });
+                        });
+                    }
                 }
             } catch (e) {
                 console.warn('Leaderboard: Winners fetch failed', e.message);
             }
-        }
 
-        try {
-            // Fetch direct donations (Public view) for impact mode or fallback impact data
-            const donationsRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`,
-                { headers: publicHeaders }
-            );
-            if (donationsRes.ok) {
-                allDonations = await donationsRes.json();
-            }
-        } catch (e) {
-            console.warn('Leaderboard: Public donations fetch failed', e.message);
-        }
-
-        // Aggregate impact totals by user for impact mode
-        const userTotals = {};
-        allDonations.forEach(d => {
-            if (d.user_id) {
-                userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
-            }
-        });
-
-        // Sorted IDs for impact mode
-        const sortedImpactUserIds = Object.entries(userTotals)
-            .filter(([_, amount]) => amount > 0)
-            .sort((a, b) => b[1] - a[1])
-            .map(([id]) => id);
-
-        // 2. Define the "Placeholder Champions" (Mock data for backfilling)
-        const MOCK_PLAYERS = [
-            { name: "Avery Thompson", initials: "AT", scores: [28, 32, 25, 30, 29], raised: 850, charity: "Cancer Council", donation_percentage: 10, avg: 29 },
-            { name: "James Mitchell", initials: "JM", scores: [34, 31, 38, 29, 35], raised: 2450, charity: "Red Cross", donation_percentage: 10, avg: 33 },
-            { name: "Sarah Chen", initials: "SC", scores: [32, 28, 41, 30, 36], raised: 1890, charity: "Beyond Blue", donation_percentage: 10, avg: 33 },
-            { name: "Michael O'Brien", initials: "MO", scores: [35, 33, 30, 37, 32], raised: 1650, charity: "Smith Family", donation_percentage: 10, avg: 33 },
-            { name: "Emma Williams", initials: "EW", scores: [31, 36, 29, 34, 33], raised: 1420, charity: "OzHarvest", donation_percentage: 10, avg: 32 }
-        ];
-
-        // 3. Profiles and final data mapping
-        let finalLeaderboard = [];
-
-        if (type === 'winners' && recentWinners.length > 0) {
-            console.log(`🏆 Mapping ${recentWinners.length} real winners for Hall of Fame...`);
-
-            // Get profiles for winners
-            const winnerUserIds = recentWinners.map(w => w.user_id).filter(Boolean);
-            let profiles = [];
-            if (winnerUserIds.length > 0) {
-                const profilesRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/profiles?id=in.(${winnerUserIds.join(',')})&select=id,full_name,selected_charity_id,donation_percentage`,
-                    { headers: publicHeaders }
-                );
-                profiles = profilesRes.ok ? await profilesRes.json() : [];
-            }
-
-            // Get charities
-            const charityIds = recentWinners.map(w => w.charity_id).filter(Boolean);
-            let charityMap = {};
-            if (charityIds.length > 0) {
-                const charitiesRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
-                    { headers: publicHeaders }
-                );
-                if (charitiesRes.ok) {
-                    const charities = await charitiesRes.json();
-                    charities.forEach(c => charityMap[c.id] = c.name);
+            // Backfill with MOCK_WINNERS
+            for (const mock of MOCK_WINNERS) {
+                if (finalLeaderboard.length >= limit) break;
+                if (!finalLeaderboard.some(p => p.name.toLowerCase() === mock.name.toLowerCase())) {
+                    finalLeaderboard.push({
+                        ...mock,
+                        raised: `$${mock.raised.toLocaleString()}`,
+                        raisedValue: mock.raised,
+                        isMock: true
+                    });
                 }
             }
-
-            recentWinners.forEach(w => {
-                const profile = profiles.find(p => p.id === w.user_id);
-                const draw = w.draws || {};
-                finalLeaderboard.push({
-                    id: w.id,
-                    user_id: w.user_id,
-                    name: profile?.full_name || 'Premium Player',
-                    initials: (profile?.full_name || '??').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
-                    scores: w.scores || [],
-                    raised: `$${Number(w.gross_prize).toFixed(2)}`,
-                    raisedValue: Number(w.gross_prize),
-                    charity: charityMap[w.charity_id] || 'Selected Charity',
-                    percentage: `${profile?.donation_percentage || 10}%`,
-                    avg: Math.round((w.scores || []).reduce((a, b) => a + Number(b), 0) / (w.scores?.length || 1)),
-                    winnerTier: `${w.matches} DRAW POOL WINNER`,
-                    winningNumbers: draw.winning_numbers || [],
-                    drawMonth: draw.month_year,
-                    isMock: false
-                });
-            });
-        }
-
-        // 4. Default Impact Leaderboard Logic (if type=impact or no winners found)
-        if (finalLeaderboard.length < limit && sortedImpactUserIds.length > 0) {
+        } else {
+            // 🌿 COMMUNITY IMPACT MODE
+            console.log('🌿 Fetching Community Impact leaders...');
             try {
-                const remainingLimit = limit - finalLeaderboard.length;
-                const impactIds = sortedImpactUserIds.slice(0, remainingLimit);
+                // Fetch direct donations
+                const donationsRes = await fetch(`${SUPABASE_URL}/rest/v1/donations?select=user_id,amount`, { headers: publicHeaders });
+                const allDonations = donationsRes.ok ? await donationsRes.json() : [];
 
-                const profilesRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/profiles?id=in.(${impactIds.join(',')})&select=id,full_name,selected_charity_id,donation_percentage`,
-                    { headers: publicHeaders }
-                );
-                const profiles = profilesRes.ok ? await profilesRes.json() : [];
+                const userTotals = {};
+                allDonations.forEach(d => {
+                    if (d.user_id) userTotals[d.user_id] = (userTotals[d.user_id] || 0) + (parseFloat(d.amount) || 0);
+                });
 
+                const sortedImpactUserIds = Object.entries(userTotals)
+                    .filter(([_, amount]) => amount > 0)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([id]) => id);
 
-                if (profiles && profiles.length > 0) {
-                    console.log(`🏆 Found ${profiles.length} real impact leaders to display`);
+                if (sortedImpactUserIds.length > 0) {
+                    const topIds = sortedImpactUserIds.slice(0, limit);
+                    const [profilesRes, scoresRes] = await Promise.all([
+                        fetch(`${SUPABASE_URL}/rest/v1/profiles?id=in.(${topIds.join(',')})&select=id,full_name,selected_charity_id,donation_percentage`, { headers: publicHeaders }),
+                        fetch(`${SUPABASE_URL}/rest/v1/scores?user_id=in.(${topIds.join(',')})&select=user_id,score&order=created_at.desc`, { headers: publicHeaders })
+                    ]);
 
-                    // Get charity names
-                    const charityIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
-                    let charityMap = {};
-                    if (charityIds.length > 0) {
-                        const charitiesRes = await fetch(
-                            `${SUPABASE_URL}/rest/v1/charities?id=in.(${charityIds.join(',')})&select=id,name`,
-                            { headers: publicHeaders }
-                        );
-                        if (charitiesRes.ok) {
-                            const charities = await charitiesRes.json();
-                            charities.forEach(c => {
-                                charityMap[c.id] = c.name;
-                            });
-                        }
-                    }
+                    const profiles = profilesRes.ok ? await profilesRes.json() : [];
+                    const allScores = scoresRes.ok ? await scoresRes.json() : [];
 
-                    // Get scores
-                    let userScoresMap = {};
-                    const profileIds = profiles.map(p => p.id);
-                    if (profileIds.length > 0) {
-                        const scoresRes = await fetch(
-                            `${SUPABASE_URL}/rest/v1/scores?user_id=in.(${profileIds.join(',')})&select=user_id,score,created_at&order=created_at.desc`,
-                            { headers: publicHeaders }
-                        );
-                        if (scoresRes.ok) {
-                            const data = await scoresRes.json();
-                            data.forEach(s => {
-                                if (!userScoresMap[s.user_id]) userScoresMap[s.user_id] = [];
-                                if (userScoresMap[s.user_id].length < 5) userScoresMap[s.user_id].push(s.score);
-                            });
-                        }
-                    }
+                    // Get unique charities
+                    const charIds = [...new Set(profiles.map(p => p.selected_charity_id).filter(Boolean))];
+                    const charitiesRes = charIds.length > 0 ? await fetch(`${SUPABASE_URL}/rest/v1/charities?id=in.(${charIds.join(',')})&select=id,name`, { headers: publicHeaders }) : { ok: false };
+                    const charityMap = charitiesRes.ok ? Object.fromEntries((await charitiesRes.json()).map(c => [c.id, c.name])) : {};
 
-                    // Map real users to final format
-                    profiles.forEach(profile => {
-                        const name = (profile.full_name || '').toLowerCase();
-                        // Skip generic Admin account and legacy test names that were interfering with the clean mock view
+                    profiles.forEach(p => {
+                        const name = (p.full_name || '').toLowerCase();
                         if (name === 'admin' || name === 'saurabh singh' || name === 'asmit') return;
 
-                        // 🛠️ SPECIAL BOOST: If this is an 'Example' user, give them the mock impact baseline
-                        const mockExample = MOCK_PLAYERS.find(m => m.name.toLowerCase() === (profile.full_name || '').toLowerCase());
-                        let raised = userTotals[profile.id] || 0;
-
-                        if (mockExample && raised < mockExample.raised) {
-                            raised = mockExample.raised;
-                            console.log(`🚀 Boosting Example User ${profile.full_name} to mock baseline: $${raised}`);
-                        }
-
-                        const scores = userScoresMap[profile.id] || [];
-                        const initials = (profile.full_name || 'Anonymous').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                        const userScores = allScores.filter(s => s.user_id === p.id).map(s => s.score).slice(0, 5);
+                        const raised = userTotals[p.id] || 0;
+                        const mockExample = MOCK_IMPACT.find(m => m.name.toLowerCase() === name);
 
                         finalLeaderboard.push({
-                            id: profile.id,
-                            rank: 0, // Will set later
-                            name: profile.full_name || 'Anonymous player',
-                            initials,
-                            // If mock example, use their scores if user has none
-                            scores: scores.length >= 5 ? scores : (mockExample ? mockExample.scores : [...scores, ...Array(5 - scores.length).fill(0)]),
+                            id: p.id,
+                            name: p.full_name || 'Anonymous Golfer',
+                            initials: (p.full_name || '??').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
+                            scores: userScores.length >= 5 ? userScores : (mockExample ? mockExample.scores : [...userScores, ...Array(5 - userScores.length).fill(0)]),
                             raised: `$${Math.round(raised).toLocaleString()}`,
-                            raisedValue: raised, // To keep sorting consistent
-                            charity: charityMap[profile.selected_charity_id] || (mockExample ? mockExample.charity : 'Various Charities'),
-                            charityId: profile.selected_charity_id,
-                            // FORCE 10% if null
-                            percentage: `${profile.donation_percentage || 10}%`,
-                            avg: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : (mockExample ? mockExample.avg : 0),
+                            raisedValue: raised,
+                            charity: charityMap[p.selected_charity_id] || (mockExample ? mockExample.charity : 'Various Charities'),
+                            percentage: `${p.donation_percentage || 10}%`,
+                            avg: userScores.length > 0 ? Math.round(userScores.reduce((a, b) => a + b, 0) / userScores.length) : (mockExample ? mockExample.avg : 0),
                             isMock: false
                         });
                     });
                 }
-            } catch (err) {
-                console.error('Error fetching real golfer details:', err);
+            } catch (e) {
+                console.error('Impact mode error:', e);
+            }
+
+            // Backfill with MOCK_IMPACT
+            for (const mock of MOCK_IMPACT) {
+                if (finalLeaderboard.length >= limit) break;
+                if (!finalLeaderboard.some(p => p.name.toLowerCase() === mock.name.toLowerCase())) {
+                    finalLeaderboard.push({
+                        ...mock,
+                        raised: `$${mock.raised.toLocaleString()}`,
+                        raisedValue: mock.raised,
+                        isMock: true
+                    });
+                }
             }
         }
 
-        // 5. Backfill with remaining mock data until limit is reached
-        // We only add mock players whose names don't already exist as REAL profiles
-        for (const mock of MOCK_PLAYERS) {
-            if (finalLeaderboard.length >= limit) break;
-
-            const isAlreadyPresent = finalLeaderboard.some(p => p.name.toLowerCase() === mock.name.toLowerCase());
-            if (!isAlreadyPresent) {
-                finalLeaderboard.push({
-                    ...mock,
-                    rank: finalLeaderboard.length + 1,
-                    raised: `$${mock.raised.toLocaleString()}`,
-                    raisedValue: mock.raised,
-                    isMock: true
-                });
-            }
-        }
-
-        // 6. FINAL SORT: Prioritize Real Players over Mock Data
-        // This ensures real club members are ALWAYS on top, even if their impact is low.
+        // Final Sort: Real Users first, then by value
         finalLeaderboard.sort((a, b) => {
-            // First Priority: Real vs Mock
-            if (a.isMock !== b.isMock) {
-                return a.isMock ? 1 : -1; // Real users (-1) come first
-            }
-            // Second Priority: Impact value (highest first)
-            return (b.raisedValue || 0) - (a.raisedValue || 0);
+            if (a.isMock !== b.isMock) return a.isMock ? 1 : -1;
+            return b.raisedValue - a.raisedValue;
         });
 
-        // 7. Truncate to limit and assign rank + styling
-        return finalLeaderboard.slice(0, limit).map((player, index) => ({
-            ...player,
-            rank: index + 1, // Reset rank according to final sorted position
-            ...(ACCENTS[index] || ACCENTS[ACCENTS.length - 1])
+        // Slice and map accents
+        return finalLeaderboard.slice(0, limit).map((p, i) => ({
+            ...p,
+            rank: i + 1,
+            ...(ACCENTS[i] || ACCENTS[0])
         }));
 
     } catch (error) {
-        console.error('Leaderboard: Critical error', error);
-        return MOCK_PLAYERS.slice(0, limit).map((p, i) => ({
+        console.error('Leaderboard Critical Error:', error);
+        const fallback = type === 'winners' ? MOCK_WINNERS : MOCK_IMPACT;
+        return fallback.slice(0, limit).map((p, i) => ({
             ...p,
+            rank: i + 1,
             raised: `$${p.raised.toLocaleString()}`,
             raisedValue: p.raised,
             isMock: true,
-            ...(ACCENTS[i] || ACCENTS[ACCENTS.length - 1])
+            ...(ACCENTS[i] || ACCENTS[0])
         }));
     }
 }

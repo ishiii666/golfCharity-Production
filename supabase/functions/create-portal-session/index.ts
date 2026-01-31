@@ -1,6 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4"
+import { serve } from "https://deno.land/std@0.192.0/http/server.ts"
+import Stripe from "https://esm.sh/stripe@14.25.0?target=deno"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 
 /**
  * Create Stripe Billing Portal Session
@@ -16,7 +16,7 @@ const corsHeaders = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -106,7 +106,7 @@ serve(async (req) => {
         console.log('Found Stripe customer:', profile.stripe_customer_id)
 
         // Parse request body for optional return URL
-        let returnUrl = `${req.headers.get('origin') || 'https://golfcharity.vercel.app'}/pricing`
+        let returnUrl = `${req.headers.get('origin') || 'https://www.golfcharity.com.au'}/pricing`
 
         try {
             const body = await req.json()

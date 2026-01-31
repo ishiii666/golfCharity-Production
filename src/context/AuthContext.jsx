@@ -137,6 +137,15 @@ export function AuthProvider({ children }) {
         };
     }, []);
 
+    // SECURITY: Force logout if user becomes suspended
+    useEffect(() => {
+        if (profile?.status === 'suspended' && user) {
+            console.warn('🚫 Account suspended - logging out');
+            logout();
+            setError('Your account has been suspended by the admin.');
+        }
+    }, [profile?.status, user]);
+
     // Fetch user profile - accepts accessToken as param to avoid getSession() hang
     const fetchProfile = async (userId, userEmail = null, accessToken = null) => {
         try {
@@ -299,7 +308,7 @@ export function AuthProvider({ children }) {
                         selected_charity_id: selectedCharityId
                     },
                     emailRedirectTo: import.meta.env.PROD
-                        ? 'https://golfcharity.vercel.app/dashboard'
+                        ? 'https://www.golfcharity.com.au/dashboard'
                         : `${window.location.origin}/dashboard`
                 }
             });
@@ -334,6 +343,32 @@ export function AuthProvider({ children }) {
             });
 
             if (error) throw error;
+
+            if (data?.user) {
+                // IMMEDIATELY fetch profile to check for suspension
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                const headers = {
+                    'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${data.session.access_token}`
+                };
+
+                const url = `${supabaseUrl}/rest/v1/profiles?id=eq.${data.user.id}&select=status`;
+                const response = await fetch(url, { headers });
+                const profiles = await response.json();
+
+                if (profiles && profiles.length > 0 && profiles[0].status === 'suspended') {
+                    // USER IS SUSPENDED - Log them out immediately
+                    await supabase.auth.signOut();
+                    setUser(null);
+                    setProfile(null);
+                    setSession(null);
+                    setSubscription(null);
+                    return {
+                        success: false,
+                        error: 'Your account has been suspended by the admin. Please contact support for more information.'
+                    };
+                }
+            }
 
             return { success: true, data };
         } catch (err) {

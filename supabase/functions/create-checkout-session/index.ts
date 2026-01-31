@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -145,9 +145,10 @@ serve(async (req) => {
         )
 
     } catch (error) {
-        console.error('Checkout session error:', error.message)
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
+        console.error('Checkout session error:', errorMessage)
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({ error: errorMessage }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
     }
