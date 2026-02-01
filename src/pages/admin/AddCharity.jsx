@@ -39,7 +39,8 @@ export default function AddCharity() {
         featured: false,
         goal_amount: 10000,
         charity_day_date: '',
-        charity_day_location: ''
+        charity_day_location: '',
+        stripe_account_id: ''
     });
 
 
@@ -97,7 +98,8 @@ export default function AddCharity() {
                 charity_day_location: formData.charity_day_location || '',
                 status: 'active',
                 total_raised: 0,
-                supporter_count: 0
+                supporter_count: 0,
+                stripe_account_id: formData.stripe_account_id || null
             };
 
             const result = await insertRow('charities', charityData);
@@ -255,6 +257,12 @@ export default function AddCharity() {
                                         value={formData.website_url}
                                         onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
                                         placeholder="https://charitywebsite.com"
+                                    />
+                                    <Input
+                                        label="Stripe Connected Account ID"
+                                        value={formData.stripe_account_id}
+                                        onChange={(e) => setFormData({ ...formData, stripe_account_id: e.target.value })}
+                                        placeholder="acct_1..."
                                     />
                                 </div>
                             </div>

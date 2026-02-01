@@ -62,7 +62,7 @@ const PhaseStepper = ({ status }) => {
     const phases = [
         { id: 'open', label: 'Analysis', icon: '🔍', desc: 'Configure & Simulate' },
         { id: 'processing', label: 'Processing', icon: '⚙️', desc: 'Calculate Results' },
-        { id: 'published', label: 'Fulfillment', icon: '💰', desc: 'Payouts & Reports' }
+        { id: 'published', label: 'Reporting', icon: '�', desc: 'Audit & Analysis' }
     ];
 
     const currentPhaseIndex = phases.findIndex(p => p.id === status);
@@ -333,6 +333,7 @@ export default function DrawControl() {
             setIsPublished(true);
             setAnalysisResults(null);
             addToast('success', 'Draw results published successfully!');
+            addToast('info', 'Verified winners are now ready for verification in the Reports section.', { duration: 6000 });
 
             setTimeout(() => fetchData(true), 1500);
         } catch (error) {
@@ -398,8 +399,8 @@ export default function DrawControl() {
                         <div className="flex items-center justify-center gap-3 mb-4">
                             <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-widest">Admin Control</span>
                         </div>
-                        <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2" style={{ fontFamily: 'var(--font-display)' }}>Draw Lifecycle Management</h1>
-                        <p className="text-slate-400 mb-8 max-w-lg mx-auto">Manage the end-to-end process of monthly draws from range analysis to global fulfillment.</p>
+                        <h1 className="text-3xl lg:text-4xl font-bold text-white mb-2" style={{ fontFamily: 'var(--font-display)' }}>Draw Control Center</h1>
+                        <p className="text-slate-400 mb-8 max-w-lg mx-auto">Analyze, simulate, and publish monthly results. Once results are published, audit individual winners in <strong>Reports</strong> and settle payouts in <strong>Finance</strong>.</p>
                     </motion.div>
 
                     <PhaseStepper status={currentDraw?.status || 'open'} />
@@ -531,9 +532,9 @@ export default function DrawControl() {
                                         <div>
                                             <h4 className="text-sm font-medium text-slate-400 mb-3">Generated Winning Numbers</h4>
                                             <div className="flex flex-wrap gap-3">
-                                                {analysisResults.winningNumbers.map((num, i) => (
+                                                {analysisResults?.winningNumbers?.map((num, i) => (
                                                     <motion.div
-                                                        key={num}
+                                                        key={`${num}-${i}`}
                                                         initial={{ scale: 0 }}
                                                         animate={{ scale: 1 }}
                                                         transition={{ delay: i * 0.1, type: 'spring' }}
@@ -541,16 +542,16 @@ export default function DrawControl() {
                                                     >
                                                         <span className="text-xl font-bold text-white">{num}</span>
                                                     </motion.div>
-                                                ))}
+                                                )) || <div className="text-slate-500 text-xs italic font-bold uppercase tracking-widest">Generating...</div>}
                                             </div>
                                             <div className="mt-4 flex flex-wrap gap-4 text-[10px] font-black uppercase tracking-widest">
                                                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/50 border border-violet-500/20">
                                                     <span className="text-slate-500">Least popular:</span>
-                                                    <span className="text-violet-400">{analysisResults.leastPopular.join(', ')}</span>
+                                                    <span className="text-violet-400">{analysisResults?.leastPopular?.join(', ') || '---'}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/50 border border-teal-500/20">
                                                     <span className="text-slate-500">Most popular:</span>
-                                                    <span className="text-teal-400">{analysisResults.mostPopular.join(', ')}</span>
+                                                    <span className="text-teal-400">{analysisResults?.mostPopular?.join(', ') || '---'}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -558,7 +559,7 @@ export default function DrawControl() {
                                         {/* Winner Breakdown - 3 Big Windows */}
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             {/* 5-Draw Pool Window */}
-                                            <div className={`relative overflow-hidden p-6 rounded-3xl border-2 shadow-2xl transition-all duration-300 ${analysisResults.tier1.count > 0
+                                            <div className={`relative overflow-hidden p-6 rounded-3xl border-2 shadow-2xl transition-all duration-300 ${analysisResults?.tier1?.count > 0
                                                 ? 'bg-gradient-to-br from-amber-500/20 to-orange-600/10 border-amber-500/40 ring-4 ring-amber-500/10'
                                                 : 'bg-slate-800/60 border-slate-700 hover:border-slate-600'}`}>
 
@@ -573,11 +574,11 @@ export default function DrawControl() {
 
                                                     <div className="mb-8">
                                                         <div className="text-3xl font-black text-white leading-none mb-2 tracking-tight">
-                                                            {formatCurrency(analysisResults.tier1.pool)}
+                                                            {formatCurrency(analysisResults?.tier1?.pool || 0)}
                                                         </div>
                                                         <div className="flex flex-col gap-1">
                                                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                                                                Base + {formatCurrency(analysisResults.currentJackpot)} carryover
+                                                                Base + {formatCurrency(analysisResults?.currentJackpot || 0)} carryover
                                                             </span>
                                                         </div>
                                                     </div>
@@ -586,17 +587,17 @@ export default function DrawControl() {
                                                         <div className="flex justify-between items-center text-xs">
                                                             <span className="text-slate-400 font-bold uppercase tracking-wider">Winners</span>
                                                             <span
-                                                                className={`font-black text-lg transition-all duration-200 ${analysisResults.tier1.count > 0 ? 'text-white cursor-pointer hover:text-amber-400 hover:scale-110' : 'text-slate-600'}`}
+                                                                className={`font-black text-lg transition-all duration-200 ${(analysisResults?.tier1?.count || 0) > 0 ? 'text-white cursor-pointer hover:text-amber-400 hover:scale-110' : 'text-slate-600'}`}
                                                                 onClick={() => handleShowWinners(1)}
                                                             >
-                                                                {analysisResults.tier1.count}
+                                                                {analysisResults?.tier1?.count || 0}
                                                             </span>
                                                         </div>
                                                         <div className="flex justify-between items-center p-3 rounded-xl bg-black/20 border border-white/5">
                                                             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Payout</span>
                                                             <span className="text-emerald-400 font-black text-xl">
-                                                                {analysisResults.tier1.count > 0
-                                                                    ? formatCurrency(analysisResults.tier1.payout)
+                                                                {(analysisResults?.tier1?.count || 0) > 0
+                                                                    ? formatCurrency(analysisResults?.tier1?.payout || 0)
                                                                     : 'ROLLOVER'}
                                                             </span>
                                                         </div>
@@ -605,7 +606,7 @@ export default function DrawControl() {
                                             </div>
 
                                             {/* 4-Draw Pool Window */}
-                                            <div className={`relative overflow-hidden p-6 rounded-3xl border-2 shadow-2xl transition-all duration-300 ${analysisResults.tier2.count > 0
+                                            <div className={`relative overflow-hidden p-6 rounded-3xl border-2 shadow-2xl transition-all duration-300 ${(analysisResults?.tier2?.count || 0) > 0
                                                 ? 'bg-gradient-to-br from-violet-500/20 to-purple-600/10 border-violet-500/40'
                                                 : 'bg-slate-800/60 border-slate-700 hover:border-slate-600'}`}>
 
@@ -620,7 +621,7 @@ export default function DrawControl() {
 
                                                     <div className="mb-8">
                                                         <div className="text-3xl font-black text-white leading-none mb-2 tracking-tight">
-                                                            {formatCurrency(analysisResults.tier2.pool)}
+                                                            {formatCurrency(analysisResults?.tier2?.pool || 0)}
                                                         </div>
                                                         <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Fixed Allocation</span>
                                                     </div>
@@ -629,17 +630,17 @@ export default function DrawControl() {
                                                         <div className="flex justify-between items-center text-xs">
                                                             <span className="text-slate-400 font-bold uppercase tracking-wider">Winners</span>
                                                             <span
-                                                                className={`font-black text-lg transition-all duration-200 ${analysisResults.tier2.count > 0 ? 'text-white cursor-pointer hover:text-violet-400 hover:scale-110' : 'text-slate-600'}`}
+                                                                className={`font-black text-lg transition-all duration-200 ${(analysisResults?.tier2?.count || 0) > 0 ? 'text-white cursor-pointer hover:text-violet-400 hover:scale-110' : 'text-slate-600'}`}
                                                                 onClick={() => handleShowWinners(2)}
                                                             >
-                                                                {analysisResults.tier2.count}
+                                                                {analysisResults?.tier2?.count || 0}
                                                             </span>
                                                         </div>
                                                         <div className="flex justify-between items-center p-3 rounded-xl bg-black/20 border border-white/5">
                                                             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Payout</span>
                                                             <span className="text-emerald-400 font-black text-xl">
-                                                                {analysisResults.tier2.count > 0
-                                                                    ? formatCurrency(analysisResults.tier2.payout)
+                                                                {(analysisResults?.tier2?.count || 0) > 0
+                                                                    ? formatCurrency(analysisResults?.tier2?.payout || 0)
                                                                     : formatCurrency(0)}
                                                             </span>
                                                         </div>
@@ -648,7 +649,7 @@ export default function DrawControl() {
                                             </div>
 
                                             {/* 3-Draw Pool Window */}
-                                            <div className={`relative overflow-hidden p-6 rounded-3xl border-2 shadow-2xl transition-all duration-300 ${analysisResults.tier3.count > 0
+                                            <div className={`relative overflow-hidden p-6 rounded-3xl border-2 shadow-2xl transition-all duration-300 ${(analysisResults?.tier3?.count || 0) > 0
                                                 ? 'bg-gradient-to-br from-teal-500/20 to-cyan-600/10 border-teal-500/40'
                                                 : 'bg-slate-800/60 border-slate-700 hover:border-slate-600'}`}>
 
@@ -663,7 +664,7 @@ export default function DrawControl() {
 
                                                     <div className="mb-8">
                                                         <div className="text-3xl font-black text-white leading-none mb-2 tracking-tight">
-                                                            {formatCurrency(analysisResults.tier3.pool)}
+                                                            {formatCurrency(analysisResults?.tier3?.pool || 0)}
                                                         </div>
                                                         <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Fixed Allocation</span>
                                                     </div>
@@ -672,17 +673,17 @@ export default function DrawControl() {
                                                         <div className="flex justify-between items-center text-xs">
                                                             <span className="text-slate-400 font-bold uppercase tracking-wider">Winners</span>
                                                             <span
-                                                                className={`font-black text-lg transition-all duration-200 ${analysisResults.tier3.count > 0 ? 'text-white cursor-pointer hover:text-teal-400 hover:scale-110' : 'text-slate-600'}`}
+                                                                className={`font-black text-lg transition-all duration-200 ${(analysisResults?.tier3?.count || 0) > 0 ? 'text-white cursor-pointer hover:text-teal-400 hover:scale-110' : 'text-slate-600'}`}
                                                                 onClick={() => handleShowWinners(3)}
                                                             >
-                                                                {analysisResults.tier3.count}
+                                                                {analysisResults?.tier3?.count || 0}
                                                             </span>
                                                         </div>
                                                         <div className="flex justify-between items-center p-3 rounded-xl bg-black/20 border border-white/5">
                                                             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Payout</span>
                                                             <span className="text-emerald-400 font-black text-xl">
-                                                                {analysisResults.tier3.count > 0
-                                                                    ? formatCurrency(analysisResults.tier3.payout)
+                                                                {(analysisResults?.tier3?.count || 0) > 0
+                                                                    ? formatCurrency(analysisResults?.tier3?.payout || 0)
                                                                     : formatCurrency(0)}
                                                             </span>
                                                         </div>
@@ -696,11 +697,11 @@ export default function DrawControl() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
                                                 <div className="flex justify-between">
                                                     <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Total Available Pool:</span>
-                                                    <span className="text-white font-black">{formatCurrency(analysisResults.prizePool + analysisResults.currentJackpot)}</span>
+                                                    <span className="text-white font-black">{formatCurrency((analysisResults?.prizePool || 0) + (analysisResults?.currentJackpot || 0))}</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Next Month Rollover:</span>
-                                                    <span className="text-amber-400 font-black">{formatCurrency(analysisResults.jackpotRollover)}</span>
+                                                    <span className="text-amber-400 font-black">{formatCurrency(analysisResults?.jackpotRollover || 0)}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -733,11 +734,27 @@ export default function DrawControl() {
                                         )}
                                     </CardContent>
                                 </Card>
+                            ) : isPublished ? (
+                                <Card variant="glass" className="h-full flex flex-col items-center justify-center min-h-[400px] border-emerald-500/30 bg-emerald-500/5">
+                                    <div className="text-center">
+                                        <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30">
+                                            <svg className="w-10 h-10 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-2xl font-bold text-white mb-2">Draw Published!</h3>
+                                        <p className="text-emerald-400/80 mb-6 font-medium">Monthly results have been saved to the database.</p>
+                                        <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-xl inline-flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            <span className="text-xs text-slate-400 uppercase tracking-widest font-black">Syncing records...</span>
+                                        </div>
+                                    </div>
+                                </Card>
                             ) : (
                                 <Card variant="glass" className="h-full flex items-center justify-center min-h-[400px]">
                                     <div className="text-center">
                                         <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-800 flex items-center justify-center">
-                                            <svg className="w-10 h-10 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                            <svg className="w-10 h-10 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                                         </div>
                                         <h3 className="text-xl font-semibold text-white mb-2">No Analysis Yet</h3>
                                         <p className="text-slate-400">Select a score range and run analysis to begin</p>
@@ -846,10 +863,10 @@ export default function DrawControl() {
                                                 <span className="text-white font-bold">{winner.name}</span>
                                                 <div className="flex gap-2 mt-1">
                                                     {winner.scores.map((score, sIdx) => {
-                                                        const isMatch = analysisResults.winningNumbers.includes(score);
+                                                        const isMatch = analysisResults?.winningNumbers?.includes(score);
                                                         return (
                                                             <span
-                                                                key={sIdx}
+                                                                key={`${idx}-${sIdx}`}
                                                                 className={`text-[10px] font-black w-6 h-6 rounded-md flex items-center justify-center ${isMatch
                                                                     ? viewingTier === 1 ? 'bg-amber-500 text-white' : viewingTier === 2 ? 'bg-violet-500 text-white' : 'bg-teal-500 text-white'
                                                                     : 'bg-slate-800 text-slate-500'

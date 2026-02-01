@@ -151,6 +151,38 @@ serve(async (req: Request) => {
                     }
                 }
 
+                // Handle CHARITY FULFILLMENT (admin paying charity)
+                if (session.mode === 'payment' && metadata.type === 'charity_fulfillment' && metadata.payout_id) {
+                    console.log('✅ Processing charity payout fulfillment for payout:', metadata.payout_id)
+
+                    const { error: updateError } = await supabase
+                        .from('charity_payouts')
+                        .update({
+                            status: 'paid',
+                            paid_at: new Date().toISOString(),
+                            payout_ref: session.payment_intent || session.id,
+                            admin_id: metadata.admin_id
+                        })
+                        .eq('id', metadata.payout_id)
+
+                    if (updateError) {
+                        console.error('Charity payout fulfillment update error:', updateError)
+                    } else {
+                        console.log('✅ Charity payout record marked as paid via Stripe')
+
+                        // Log activity
+                        await supabase.from('admin_activity').insert({
+                            action_type: 'charity_payout_stripe',
+                            description: `Charity ${metadata.charity_name} paid via Stripe fulfillment ($${session.amount_total / 100})`,
+                            metadata: {
+                                payout_id: metadata.payout_id,
+                                session_id: session.id,
+                                amount: session.amount_total / 100
+                            }
+                        })
+                    }
+                }
+
                 // Handle SUBSCRIPTIONS (subscription mode)
                 const userId = metadata.supabase_user_id
                 if (session.mode === 'subscription' && userId && session.subscription) {

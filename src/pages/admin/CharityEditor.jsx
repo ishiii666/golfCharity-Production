@@ -48,7 +48,8 @@ export default function CharityEditor() {
         goal_amount: 10000,
         featured: false,
         charity_day_date: '',
-        charity_day_location: ''
+        charity_day_location: '',
+        stripe_account_id: ''
     });
 
     // Redirect if not admin
@@ -80,7 +81,8 @@ export default function CharityEditor() {
                     goal_amount: charity.goal_amount || 10000,
                     featured: charity.featured || false,
                     charity_day_date: charity.charity_day_date || '',
-                    charity_day_location: charity.charity_day_location || ''
+                    charity_day_location: charity.charity_day_location || '',
+                    stripe_account_id: charity.stripe_account_id || ''
                 });
                 setImagePreview(charity.image_url);
             } else {
@@ -145,7 +147,8 @@ export default function CharityEditor() {
                 featured: formData.featured,
                 charity_day_date: formData.charity_day_date || null,
                 charity_day_location: formData.charity_day_location || '',
-                status: 'active'
+                status: 'active',
+                stripe_account_id: formData.stripe_account_id || null
             };
 
             if (isEditing) {
@@ -344,6 +347,19 @@ export default function CharityEditor() {
                                                         placeholder="https://charitywebsite.com"
                                                         className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white focus:border-emerald-500 focus:outline-none"
                                                     />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium mb-2 text-zinc-300">
+                                                        Stripe Connected Account ID
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.stripe_account_id}
+                                                        onChange={(e) => setFormData({ ...formData, stripe_account_id: e.target.value })}
+                                                        placeholder="acct_1..."
+                                                        className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 border border-zinc-700 text-white focus:border-emerald-500 focus:outline-none"
+                                                    />
+                                                    <p className="text-[10px] text-zinc-500 mt-1">Found in your Stripe Connect dashboard</p>
                                                 </div>
                                             </div>
                                         </div>
