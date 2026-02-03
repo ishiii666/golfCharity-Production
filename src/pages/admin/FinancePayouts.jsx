@@ -169,15 +169,14 @@ export default function FinancePayouts() {
     };
 
     const handleMarkWinnerAsPaid = async (winnerId) => {
+        if (!payoutRef.trim()) {
+            addToast('error', 'A valid payout reference is required for manual settlements.');
+            return;
+        }
+
         setProcessing(true);
         try {
-            const ref = prompt("Enter payout reference (Manual):") || 'Manual Payment';
-            if (ref === 'Manual Payment' && !window.confirm('No reference provided. Continue?')) {
-                setProcessing(false);
-                return;
-            }
-
-            const result = await markWinnerAsPaid(winnerId, ref, user?.id);
+            const result = await markWinnerAsPaid(winnerId, payoutRef, user?.id);
             if (result.success) {
                 addToast('success', 'Winner marked as paid');
                 // Remove from local list
@@ -198,6 +197,7 @@ export default function FinancePayouts() {
                 }).filter(b => b.winner_count > 0));
 
                 setIsWinnerModalOpen(false);
+                setPayoutRef(''); // Clear for next use
             } else {
                 throw new Error(result.error);
             }
@@ -206,6 +206,48 @@ export default function FinancePayouts() {
         } finally {
             setProcessing(false);
         }
+    };
+
+    const handleDownloadWinnerReceipt = async (winner) => {
+        if (!winner) return;
+        try {
+            const details = await getWinnerProfileWithBanking(winner.user_id);
+            const receiptData = [{
+                'Transaction Type': 'Prize Settlement',
+                'Winner Name': winner.profiles?.full_name || 'Anonymous',
+                'Winner Email': winner.profiles?.email || 'N/A',
+                'Draw Cycle': winner.draws?.month_year || 'N/A',
+                'Match Tier': winner.tier === 1 ? '5-Match Jackpot' : winner.tier === 2 ? '4-Match Pool' : '3-Match Pool',
+                'Gross Prize (AUD)': parseFloat(winner.gross_prize || 0).toFixed(2),
+                'Charity Donation (AUD)': parseFloat(winner.charity_amount || 0).toFixed(2),
+                'Net Payout Amount (AUD)': parseFloat(winner.net_payout || 0).toFixed(2),
+                'Settlement Status': 'PAID',
+                'Payment Reference': winner.payment_reference || winner.payout_ref || 'N/A',
+                'Payment Date': winner.paid_at ? new Date(winner.paid_at).toLocaleString() : 'N/A',
+                'Bank Name': details?.bank_name || 'N/A',
+                'Account Holder': details?.full_name || 'N/A'
+            }];
+            exportToCSV(receiptData, `Receipt_Winner_${winner.profiles?.full_name.replace(' ', '_')}`);
+            addToast('success', 'Digital receipt downloaded');
+        } catch (error) {
+            addToast('error', 'Failed to generate receipt');
+        }
+    };
+
+    const handleDownloadCharityReceipt = (payout) => {
+        if (!payout) return;
+        const receiptData = [{
+            'Transaction Type': 'Charity Distribution',
+            'Charity Name': payout.charities?.name || 'Unknown Charity',
+            'Distribution Amount (AUD)': parseFloat(payout.amount || 0).toFixed(2),
+            'Status': 'PAID',
+            'Settlement Reference': payout.payout_ref || 'N/A',
+            'Payment Date': payout.updated_at ? new Date(payout.updated_at).toLocaleString() : 'N/A',
+            'Source Detail': payout.detail_label || (payout.donations?.[0]?.source === 'direct' ? 'Direct Gift' : 'Winner Contributions'),
+            'Transaction ID': payout.id.slice(0, 8).toUpperCase()
+        }];
+        exportToCSV(receiptData, `Receipt_Charity_${payout.charities?.name.replace(' ', '_')}`);
+        addToast('success', 'Charity receipt downloaded');
     };
 
     const handleMarkBatchPaid = async () => {
@@ -496,8 +538,11 @@ export default function FinancePayouts() {
                                                                                                 </div>
                                                                                             </div>
                                                                                             <div className="text-right">
+                                                                                                <p className="text-sm font-black text-white leading-none mb-1">{formatCurrency(winner['Gross Prize'])}</p>
+                                                                                                <p className="text-[10px] font-bold text-rose-500 mb-1">-{formatCurrency(winner['Charity Donation'])}</p>
+                                                                                                <div className="h-px bg-zinc-800 my-1" />
                                                                                                 <p className="text-sm font-black text-emerald-400 leading-none mb-1">{formatCurrency(winner['Net Payout'])}</p>
-                                                                                                <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter">Net Total</p>
+                                                                                                <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter">Settled Net</p>
                                                                                             </div>
                                                                                         </div>
                                                                                     ))
@@ -530,8 +575,8 @@ export default function FinancePayouts() {
                                                 <thead>
                                                     <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-widest text-zinc-500">
                                                         <th className="px-6 py-4">Beneficiary Charity</th>
-                                                        <th className="px-6 py-4">Active Supporters</th>
-                                                        <th className="px-6 py-4">Winner Contribution</th>
+                                                        <th className="px-6 py-4">Contribution Source</th>
+                                                        <th className="px-6 py-4">Total Fund Amount</th>
                                                         <th className="px-6 py-4 text-right">Settlement</th>
                                                     </tr>
                                                 </thead>
@@ -555,11 +600,34 @@ export default function FinancePayouts() {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4">
-                                                                <div className="text-sm text-zinc-300 font-medium">{item.supporter_count || 0} active players</div>
+                                                                <div className="space-y-1">
+                                                                    {(item.winner_records || []).map((rec, nIdx) => (
+                                                                        <div key={nIdx} className="flex items-center gap-2">
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></span>
+                                                                            <span className="text-[10px] text-zinc-300 font-bold uppercase tracking-tight">
+                                                                                Prize Contribution by {rec.user_name} ({rec.pool_info}) - {formatCurrency(rec.amount)}
+                                                                            </span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
                                                             </td>
                                                             <td className="px-6 py-4">
                                                                 <div className="text-lg font-black text-emerald-400">{formatCurrency(item.winner_donations)}</div>
-                                                                <div className="text-[9px] text-zinc-500 uppercase font-bold tracking-tighter">From Draw Prizes</div>
+                                                                <div className="flex flex-wrap gap-x-2 gap-y-1 mt-2">
+                                                                    {(item.winner_records || []).map((rec, rIdx) => (
+                                                                        <div key={rIdx} className="group/donor relative">
+                                                                            <div className="text-[8px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-zinc-500 font-bold uppercase tracking-tighter cursor-help hover:border-emerald-500/30 hover:text-emerald-400 transition-colors">
+                                                                                {rec.draw_name}
+                                                                            </div>
+                                                                            {/* Tooltip on hover */}
+                                                                            <div className="absolute bottom-full left-0 mb-2 invisible group-hover/donor:visible bg-zinc-900 border border-zinc-700 p-2 rounded shadow-2xl z-50 w-40 pointer-events-none transition-all">
+                                                                                <p className="text-[8px] font-black text-emerald-400 uppercase mb-1 tracking-widest">Draw Winner</p>
+                                                                                <p className="text-[10px] font-bold text-white mb-0.5">{rec.user_name}</p>
+                                                                                <p className="text-[8px] text-zinc-500">Contribution: {formatCurrency(rec.amount)}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
                                                             </td>
                                                             <td className="px-6 py-4 text-right">
                                                                 <Button
@@ -570,7 +638,8 @@ export default function FinancePayouts() {
                                                                             ...item,
                                                                             amount: item.winner_donations,
                                                                             total_amount: item.winner_donations,
-                                                                            type: 'winner_fund'
+                                                                            type: 'winner_fund',
+                                                                            donation_ids: item.winner_donation_ids
                                                                         });
                                                                         setIsPayoutModalOpen(true);
                                                                     }}
@@ -698,17 +767,20 @@ export default function FinancePayouts() {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-zinc-800/50">
-                                                    {payoutHistory.filter(p => !p.donations || p.donations.some(d => d.source === 'direct')).length === 0 ? (
+                                                    {payoutHistory.filter(p => p.donations?.length > 0 && p.donations.every(d => d.source === 'direct')).length === 0 ? (
                                                         <tr>
                                                             <td colSpan="6" className="px-6 py-12 text-center text-zinc-500 italic">No direct donation records found.</td>
                                                         </tr>
-                                                    ) : payoutHistory.filter(p => !p.donations || p.donations.some(d => d.source === 'direct')).map(payout => (
+                                                    ) : payoutHistory.filter(p => p.donations?.length > 0 && p.donations.every(d => d.source === 'direct')).map(payout => (
                                                         <tr key={payout.id} className="hover:bg-white/5 transition-colors text-sm">
                                                             <td className="px-6 py-4 text-zinc-400">
                                                                 {new Date(payout.created_at).toLocaleDateString()}
                                                             </td>
                                                             <td className="px-6 py-4">
                                                                 <div className="font-bold text-white">{payout.charities?.name}</div>
+                                                                <div className="text-[10px] text-zinc-500 uppercase tracking-tighter">
+                                                                    Donor: {payout.donations?.[0]?.profiles?.full_name || 'Anonymous'}
+                                                                </div>
                                                             </td>
                                                             <td className="px-6 py-4 font-black text-white">
                                                                 {formatCurrency(payout.amount)}
@@ -761,40 +833,82 @@ export default function FinancePayouts() {
                                             <table className="w-full text-left">
                                                 <thead>
                                                     <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-widest text-zinc-500">
-                                                        <th className="px-6 py-4">Paid Date</th>
-                                                        <th className="px-6 py-4">Beneficiary</th>
-                                                        <th className="px-6 py-4">Batch/Year</th>
-                                                        <th className="px-6 py-4">Amount</th>
-                                                        <th className="px-6 py-4">Ref</th>
+                                                        <th className="px-6 py-4">Beneficiary Charity</th>
+                                                        <th className="px-6 py-4">Contribution Source</th>
+                                                        <th className="px-6 py-4">Total Fund Amount</th>
+                                                        <th className="px-6 py-4">Settlement Reference</th>
+                                                        <th className="px-6 py-4 text-right">Action</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-zinc-800/50">
-                                                    {playerHistory.filter(w => w.isCharity).length === 0 ? (
+                                                    {payoutHistory.filter(p => p.status === 'paid' && p.donations?.some(d => d.source === 'prize_split' || d.source === 'subscription' || d.source === 'winner_manual') && !p.donations.every(d => d.source === 'direct')).length === 0 ? (
                                                         <tr>
-                                                            <td colSpan="5" className="px-6 py-12 text-center text-zinc-500 italic">No winner-led distributions recorded.</td>
+                                                            <td colSpan="4" className="px-6 py-12 text-center text-zinc-500 italic">No winner-led distributions recorded.</td>
                                                         </tr>
-                                                    ) : playerHistory.filter(w => w.isCharity).map(winner => (
-                                                        <tr key={winner.id} className="hover:bg-white/5 transition-colors text-sm bg-emerald-500/5">
-                                                            <td className="px-6 py-4 text-zinc-400">
-                                                                {winner.paid_at ? new Date(winner.paid_at).toLocaleDateString() : 'N/A'}
+                                                    ) : payoutHistory.filter(p => p.status === 'paid' && p.donations?.some(d => d.source === 'prize_split' || d.source === 'subscription' || d.source === 'winner_manual') && !p.donations.every(d => d.source === 'direct')).map(payout => (
+                                                        <tr key={payout.id} className="hover:bg-white/5 transition-colors">
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700">
+                                                                        <img
+                                                                            src={(payout.charities?.logo_url || payout.charities?.logo) || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
+                                                                            alt={payout.charities?.name}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    </div>
+                                                                    <div className="font-bold text-white text-sm">{payout.charities?.name}</div>
+                                                                </div>
                                                             </td>
                                                             <td className="px-6 py-4">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="p-1 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase">Charity</span>
-                                                                    <div className="font-bold text-white">{winner.profiles?.full_name}</div>
+                                                                <div className="space-y-1">
+                                                                    {payout.donations_detail?.length > 0 ? (
+                                                                        payout.donations_detail.map((rec, nIdx) => (
+                                                                            <div key={nIdx} className="flex items-center gap-2">
+                                                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/30"></span>
+                                                                                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">
+                                                                                    Prize Contribution by {rec.profiles?.full_name || 'User'} ({rec.pool_info}) - {formatCurrency(rec.amount)}
+                                                                                </span>
+                                                                            </div>
+                                                                        ))
+                                                                    ) : (
+                                                                        <div className="text-[10px] text-zinc-500 italic font-bold uppercase tracking-tight">
+                                                                            {payout.detail_label || 'Winner Contributions Batch'}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                <div className="text-[10px] text-zinc-500 uppercase tracking-tighter">
-                                                                    {winner.tier}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="text-base font-black text-emerald-400">{formatCurrency(payout.amount)}</div>
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {payout.donations_detail?.length > 0 ? (
+                                                                        Array.from(new Set(payout.donations_detail.map(d => d.draws?.month_year).filter(Boolean))).map((drawName, dIdx) => (
+                                                                            <div key={dIdx} className="text-[8px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-zinc-500 font-bold uppercase tracking-tighter">
+                                                                                {drawName}
+                                                                            </div>
+                                                                        ))
+                                                                    ) : (
+                                                                        <div className="text-[8px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-zinc-500 font-bold uppercase tracking-tighter">
+                                                                            Settled History
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-4 text-zinc-300">
-                                                                {winner.draws?.month_year}
+                                                            <td className="px-6 py-4">
+                                                                <div className="font-mono text-[10px] text-emerald-500 font-bold mb-0.5">{payout.payout_ref || '--'}</div>
+                                                                <div className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">
+                                                                    Paid: {new Date(payout.updated_at).toLocaleDateString()}
+                                                                </div>
                                                             </td>
-                                                            <td className="px-6 py-4 font-black text-amber-400">
-                                                                {formatCurrency(winner.net_payout)}
-                                                            </td>
-                                                            <td className="px-6 py-4 text-zinc-500 font-mono text-[10px]">
-                                                                {winner.payment_reference || winner.payout_ref || '--'}
+                                                            <td className="px-6 py-4 text-right">
+                                                                <button
+                                                                    onClick={() => handleDownloadCharityReceipt(payout)}
+                                                                    className="w-8 h-8 ml-auto rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-all"
+                                                                    title="Download Charity Receipt"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                    </svg>
+                                                                </button>
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -819,7 +933,10 @@ export default function FinancePayouts() {
                                                         <th className="px-6 py-4">Winner</th>
                                                         <th className="px-6 py-4">Tier</th>
                                                         <th className="px-6 py-4">Draw</th>
-                                                        <th className="px-6 py-4">Amount</th>
+                                                        <th className="px-6 py-4 text-center">Receipt</th>
+                                                        <th className="px-6 py-4 font-black">Gross</th>
+                                                        <th className="px-6 py-4 font-black">Charity</th>
+                                                        <th className="px-6 py-4 font-black">Paid Amt</th>
                                                         <th className="px-6 py-4">Ref</th>
                                                     </tr>
                                                 </thead>
@@ -843,6 +960,23 @@ export default function FinancePayouts() {
                                                             </td>
                                                             <td className="px-6 py-4 text-zinc-300">
                                                                 {winner.draws?.month_year}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-center">
+                                                                <button
+                                                                    onClick={() => handleDownloadWinnerReceipt(winner)}
+                                                                    className="w-8 h-8 mx-auto rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-all"
+                                                                    title="Download Digital Receipt"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                    </svg>
+                                                                </button>
+                                                            </td>
+                                                            <td className="px-6 py-4 font-bold text-zinc-300">
+                                                                {formatCurrency(winner.gross_prize)}
+                                                            </td>
+                                                            <td className="px-6 py-4 font-bold text-rose-500">
+                                                                -{formatCurrency(winner.charity_amount)}
                                                             </td>
                                                             <td className="px-6 py-4 font-black text-emerald-400">
                                                                 {formatCurrency(winner.net_payout)}
@@ -981,29 +1115,29 @@ export default function FinancePayouts() {
 
                                 <div className="space-y-4 text-xs">
                                     <div className="flex justify-between border-b border-zinc-100 pb-2">
-                                        <span className="opacity-50">Settlement ID</span>
-                                        <span className="font-bold">#{selectedWinner.id.slice(0, 8).toUpperCase()}</span>
+                                        <span className="opacity-50 uppercase font-black text-[8px] tracking-widest">Settlement ID</span>
+                                        <span className="font-bold font-mono">#{selectedWinner.id.slice(0, 8).toUpperCase()}</span>
                                     </div>
                                     <div className="flex justify-between border-b border-zinc-100 pb-2">
-                                        <span className="opacity-50">Draw Cycle</span>
-                                        <span className="font-bold">{unpaidWinners.find(b => b.draw_id === expandedDrawId)?.month_year || '---'}</span>
+                                        <span className="opacity-50 uppercase font-black text-[8px] tracking-widest">Draw Cycle</span>
+                                        <span className="font-bold">{unpaidWinners.find(b => b.draw_id === expandedDrawId)?.month_year || 'Historical Cycle'}</span>
                                     </div>
                                     <div className="pt-4 pb-2">
-                                        <p className="opacity-50 mb-1">Beneficiary</p>
-                                        <p className="font-black text-lg">{selectedWinner['Name']}</p>
-                                        <p className="text-[10px] opacity-60">{selectedWinner['Email']}</p>
+                                        <p className="opacity-50 uppercase font-black text-[8px] tracking-widest mb-1">Beneficiary</p>
+                                        <p className="font-black text-xl uppercase tracking-tighter">{selectedWinner['Name']}</p>
+                                        <p className="text-[10px] opacity-60 font-medium italic">{selectedWinner['Email']}</p>
                                     </div>
                                     <div className="py-4 border-y border-dashed border-zinc-300 space-y-3">
                                         <div className="flex justify-between">
-                                            <span>Gross Prize Pool</span>
-                                            <span>{formatCurrency(selectedWinner['Gross Prize'])}</span>
+                                            <span className="opacity-60 text-[10px] uppercase font-bold">Gross Prize Pool</span>
+                                            <span className="font-bold">{formatCurrency(selectedWinner['Gross Prize'])}</span>
                                         </div>
                                         <div className="flex justify-between text-rose-600">
-                                            <span>Charity Donation</span>
-                                            <span>-{formatCurrency(selectedWinner['Charity Donation'])}</span>
+                                            <span className="opacity-60 text-[10px] uppercase font-bold">Charity Donation</span>
+                                            <span className="font-bold">-{formatCurrency(selectedWinner['Charity Donation'])}</span>
                                         </div>
-                                        <div className="flex justify-between font-black text-lg pt-2">
-                                            <span>NET TOTAL</span>
+                                        <div className="flex justify-between font-black text-xl pt-2 border-t border-zinc-100 mt-2">
+                                            <span className="uppercase tracking-tighter">NET TOTAL</span>
                                             <span className="text-emerald-700">{formatCurrency(selectedWinner['Net Payout'])}</span>
                                         </div>
                                     </div>
@@ -1046,14 +1180,19 @@ export default function FinancePayouts() {
 
                             <div className="flex-1 space-y-6">
                                 <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-4">
-                                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] px-2">Remittance Target</h4>
+                                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] px-2 mb-2">Remittance Target</h4>
                                     {isFetchingPayout ? (
                                         <div className="py-4 text-center text-zinc-600 text-[10px] uppercase font-black tracking-widest italic animate-pulse">Syncing Banking Data...</div>
-                                    ) : payoutDetails ? (
+                                    ) : (payoutDetails?.bank_name || payoutDetails?.account_number || payoutDetails?.stripe_account_id) ? (
                                         <div className="grid grid-cols-2 gap-y-4 px-2">
                                             <div>
                                                 <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Institution</p>
-                                                <p className="text-sm font-bold text-white uppercase">{payoutDetails.bank_name || 'N/A'}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm font-bold text-white uppercase">{payoutDetails.bank_name || 'STRIPE CONNECT'}</p>
+                                                    {payoutDetails.stripe_account_id && (
+                                                        <span className="px-1.5 py-0.5 rounded-sm bg-emerald-500/10 text-emerald-400 text-[8px] font-black uppercase">Active</span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">BSB/Swift</p>
@@ -1061,7 +1200,9 @@ export default function FinancePayouts() {
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Account No.</p>
-                                                <p className="text-sm font-bold text-white font-mono">{payoutDetails.account_number || '---'}</p>
+                                                <p className="text-sm font-bold text-white font-mono">
+                                                    {payoutDetails.account_number || (payoutDetails.stripe_account_id ? `${payoutDetails.stripe_account_id.slice(0, 8)}...` : '---')}
+                                                </p>
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Reference</p>
@@ -1069,24 +1210,42 @@ export default function FinancePayouts() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="py-4 text-center text-zinc-600 text-[10px] uppercase font-black tracking-widest italic">No banking records found for user.</div>
+                                        <div className="py-6 px-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 text-center">
+                                            <p className="text-[10px] font-black uppercase text-amber-500 tracking-widest mb-2">⚠️ Missing Banking Profile</p>
+                                            <p className="text-[9px] text-zinc-500 leading-relaxed">
+                                                This user has not completed their payout profile. You must manually contact {selectedWinner['Name']} via {selectedWinner['Email']} before processing this settlement.
+                                            </p>
+                                        </div>
                                     )}
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                            <div className="grid grid-cols-2 gap-4 pt-10 border-t border-white/5">
+                                <div className="col-span-2">
+                                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-3 px-1">Execute Settlement</p>
+                                    {!payoutDetails?.stripe_account_id && (
+                                        <div className="mb-4">
+                                            <Input
+                                                placeholder="Enter Bank Reference or Receipt ID..."
+                                                value={payoutRef}
+                                                onChange={(e) => setPayoutRef(e.target.value)}
+                                                className="!bg-black/40 border-white/5 !py-3 font-mono text-emerald-400 placeholder:text-zinc-700 h-14"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                                 <Button
                                     onClick={handleOpenStripe}
-                                    disabled={processing}
-                                    className="h-16 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl"
+                                    disabled={processing || !payoutDetails?.stripe_account_id}
+                                    className="h-16 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-500/10"
                                     variant="primary"
                                 >
                                     Stripe Process
                                 </Button>
                                 <Button
                                     onClick={() => handleMarkWinnerAsPaid(selectedWinner.id)}
-                                    disabled={processing}
-                                    className="h-16 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl"
+                                    disabled={processing || (!payoutDetails?.stripe_account_id && !payoutRef.trim())}
+                                    className="h-16 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl border border-white/10 hover:border-white/20"
                                     variant="outline"
                                 >
                                     Manual Payout

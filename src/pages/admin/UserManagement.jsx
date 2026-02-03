@@ -219,157 +219,182 @@ export default function UserManagement() {
                         ))}
                     </motion.div>
 
-                    {/* Filters */}
+                    {/* Filters - Responsive Grid */}
                     <Card variant="glass" className="mb-6">
-                        <CardContent>
-                            <div className="flex flex-wrap gap-3 items-center">
-                                <div className="flex-1 min-w-[200px]">
+                        <CardContent padding="p-4 lg:p-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+                                <div className="sm:col-span-2">
                                     <Input
                                         placeholder="Search by name or email..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full"
                                     />
                                 </div>
                                 <select
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="px-3 py-2 rounded-lg text-sm"
+                                    className="w-full px-4 py-3 rounded-xl text-sm font-medium"
                                     style={{
-                                        background: 'rgba(26, 77, 46, 0.3)',
-                                        border: '1px solid rgba(201, 162, 39, 0.2)',
-                                        color: '#f9f5e3',
-                                        minWidth: '100px'
+                                        background: 'rgba(255, 255, 255, 0.03)',
+                                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                                        color: '#fff'
                                     }}
                                 >
-                                    <option value="all" style={{ background: '#0f3621' }}>All Status</option>
-                                    <option value="active" style={{ background: '#0f3621' }}>Active</option>
-                                    <option value="suspended" style={{ background: '#0f3621' }}>Suspended</option>
+                                    <option value="all" className="bg-slate-900">All Status</option>
+                                    <option value="active" className="bg-slate-900">Active Only</option>
+                                    <option value="suspended" className="bg-slate-900">Suspended Only</option>
                                 </select>
                                 <select
                                     value={sortOrder}
                                     onChange={(e) => setSortOrder(e.target.value)}
-                                    className="px-3 py-2 rounded-lg text-sm"
+                                    className="w-full px-4 py-3 rounded-xl text-sm font-medium"
                                     style={{
-                                        background: 'rgba(26, 77, 46, 0.3)',
-                                        border: '1px solid rgba(201, 162, 39, 0.2)',
-                                        color: '#f9f5e3',
-                                        minWidth: '120px'
+                                        background: 'rgba(255, 255, 255, 0.03)',
+                                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                                        color: '#fff'
                                     }}
                                 >
-                                    <option value="name-asc" style={{ background: '#0f3621' }}>A-Z</option>
-                                    <option value="name-desc" style={{ background: '#0f3621' }}>Z-A</option>
-                                    <option value="date-newest" style={{ background: '#0f3621' }}>Newest</option>
-                                    <option value="date-oldest" style={{ background: '#0f3621' }}>Oldest</option>
+                                    <option value="name-asc" className="bg-slate-900">Sort: Name (A-Z)</option>
+                                    <option value="name-desc" className="bg-slate-900">Sort: Name (Z-A)</option>
+                                    <option value="date-newest" className="bg-slate-900">Sort: Newest First</option>
+                                    <option value="date-oldest" className="bg-slate-900">Sort: Oldest First</option>
                                 </select>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Users Table */}
+                    {/* User List - Responsive Table/Cards */}
                     {loading ? (
-                        <div className="text-center py-12">
-                            <div className="animate-spin w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                            <p style={{ color: 'var(--color-neutral-400)' }}>Loading users...</p>
+                        <div className="text-center py-20 bg-white/[0.01] rounded-[2rem] border border-white/5">
+                            <div className="animate-spin w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full mx-auto mb-6"></div>
+                            <p className="text-xs font-black uppercase tracking-[0.3em] text-zinc-500 animate-pulse">Syncing Player Database...</p>
                         </div>
                     ) : sortedUsers.length === 0 ? (
-                        <div className="text-center py-12">
-                            <p style={{ color: 'var(--color-neutral-400)' }}>No users found.</p>
+                        <div className="text-center py-20 bg-white/[0.01] rounded-[2rem] border border-white/5">
+                            <p className="text-zinc-500 font-bold">No players found matching your filters.</p>
                         </div>
                     ) : (
-                        <Card variant="glass" className="overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid rgba(201, 162, 39, 0.1)' }}>
-                                            <th className="text-left py-4 px-4 text-zinc-400">User</th>
-                                            <th className="text-left py-4 px-4 text-zinc-400">Role</th>
-                                            <th className="text-left py-4 px-4 text-zinc-400">Status</th>
-                                            <th className="text-left py-4 px-4 text-zinc-400">Subscription</th>
-                                            <th className="text-left py-4 px-4 text-zinc-400">Joined</th>
-                                            <th className="text-right py-4 px-4 text-zinc-400">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {sortedUsers.map((user) => (
-                                            <tr
-                                                key={user.id}
-                                                className="hover:bg-white/5 transition-colors"
-                                                style={{ borderBottom: '1px solid rgba(201, 162, 39, 0.05)' }}
-                                            >
-                                                <td className="py-4 px-4">
-                                                    <div>
-                                                        <p className="font-medium" style={{ color: 'var(--color-cream-100)' }}>
-                                                            {user.fullName}
-                                                        </p>
-                                                        <p className="text-sm" style={{ color: 'var(--color-neutral-500)' }}>
-                                                            {user.email}
-                                                        </p>
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 px-4">
-                                                    <span
-                                                        className={`px-2 py-1 rounded-full text-xs font-medium ${user.role === 'admin'
-                                                            ? 'bg-amber-500/20 text-amber-400'
-                                                            : 'bg-slate-500/20 text-slate-300'
-                                                            }`}
-                                                    >
-                                                        {user.role}
-                                                    </span>
-                                                </td>
-                                                <td className="py-4 px-4">
-                                                    <span
-                                                        className={`px-2 py-1 rounded-full text-xs font-medium ${user.status === 'active'
-                                                            ? 'bg-emerald-500/20 text-emerald-400'
-                                                            : 'bg-red-500/20 text-red-400'
-                                                            }`}
-                                                    >
-                                                        {user.status}
-                                                    </span>
-                                                </td>
-                                                <td className="py-4 px-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${user.subscription === 'annual'
-                                                            ? 'bg-violet-500/20 text-violet-400'
-                                                            : user.subscription === 'monthly'
-                                                                ? 'bg-emerald-500/20 text-emerald-400'
-                                                                : 'bg-red-500/20 text-red-400'
-                                                            }`}>
-                                                            {user.subscription === 'none' ? 'Not Subscribed' : user.subscription}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => handleSyncUser(user)}
-                                                            className="p-1 hover:bg-white/10 rounded-full transition-colors text-zinc-500 hover:text-emerald-400"
-                                                            title="Sync with Stripe"
-                                                        >
-                                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 px-4 text-zinc-400">
-                                                    {user.joinDate}
-                                                </td>
-                                                <td className="py-4 px-4">
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
-                                                            Edit
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => openStatusConfirmation(user)}
-                                                        >
-                                                            {user.status === 'active' ? 'Suspend' : 'Activate'}
-                                                        </Button>
-                                                    </div>
-                                                </td>
+                        <div className="grid grid-cols-1 gap-4 lg:hidden">
+                            {/* Mobile User Cards */}
+                            {sortedUsers.map((user) => (
+                                <Card key={user.id} variant="glass" className="relative group overflow-hidden">
+                                    <div className="p-6">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400 font-bold uppercase">
+                                                    {user.fullName.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-white uppercase tracking-tight">{user.fullName}</p>
+                                                    <p className="text-[10px] text-zinc-500">{user.email}</p>
+                                                </div>
+                                            </div>
+                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${user.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                                {user.status}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 mb-6 pt-4 border-t border-white/5">
+                                            <div>
+                                                <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1">Plan</p>
+                                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${user.subscription === 'annual' ? 'bg-violet-500/10 text-violet-400' : user.subscription === 'monthly' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-zinc-500'}`}>
+                                                    {user.subscription}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1">Joined</p>
+                                                <p className="text-[10px] text-zinc-400 font-bold">{user.joinDate}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            <Button variant="primary" fullWidth size="sm" onClick={() => handleEdit(user)} className="h-10 text-[10px] font-black uppercase tracking-widest">
+                                                Edit Profile
+                                            </Button>
+                                            <Button variant="outline" fullWidth size="sm" onClick={() => openStatusConfirmation(user)} className="h-10 text-[10px] font-black uppercase tracking-widest border-white/10">
+                                                {user.status === 'active' ? 'Suspend' : 'Activate'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Desktop Table View */}
+                    {!loading && sortedUsers.length > 0 && (
+                        <div className="hidden lg:block">
+                            <Card variant="glass" className="overflow-hidden border-white/5 bg-white/[0.01]">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-white/[0.05]">
+                                                <th className="text-left py-5 px-6 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Player Identity</th>
+                                                <th className="text-left py-5 px-6 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Access Role</th>
+                                                <th className="text-left py-5 px-6 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Platform Status</th>
+                                                <th className="text-left py-5 px-6 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Subscription context</th>
+                                                <th className="text-left py-5 px-6 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Origin Date</th>
+                                                <th className="text-right py-5 px-6 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Control Actions</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </Card>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/[0.03]">
+                                            {sortedUsers.map((user) => (
+                                                <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                    <td className="py-5 px-6">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-xs font-black text-white group-hover:border-emerald-500/30 group-hover:bg-emerald-500/5 transition-all">
+                                                                {user.fullName.charAt(0)}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-white uppercase tracking-tight group-hover:text-emerald-400 transition-colors">{user.fullName}</p>
+                                                                <p className="text-[10px] text-zinc-500">{user.email}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-5 px-6">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{user.role}</span>
+                                                    </td>
+                                                    <td className="py-5 px-6">
+                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] border ${user.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-400/10 text-red-400 border-red-400/20'}`}>
+                                                            {user.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-5 px-6">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${user.subscription === 'annual' ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20' : user.subscription === 'monthly' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-zinc-500'}`}>
+                                                                {user.subscription}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => handleSyncUser(user)}
+                                                                className="p-1.5 rounded-lg hover:bg-white/5 text-zinc-500 hover:text-emerald-400 transition-all"
+                                                            >
+                                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-5 px-6 text-[10px] font-bold text-zinc-500">
+                                                        {user.joinDate}
+                                                    </td>
+                                                    <td className="py-5 px-6 text-right">
+                                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <Button variant="ghost" size="sm" onClick={() => handleEdit(user)} className="h-8 text-[9px] font-black uppercase tracking-widest">
+                                                                Edit
+                                                            </Button>
+                                                            <Button variant="ghost" size="sm" onClick={() => openStatusConfirmation(user)} className="h-8 text-[9px] font-black uppercase tracking-widest">
+                                                                {user.status === 'active' ? 'Suspend' : 'Activate'}
+                                                            </Button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
+                        </div>
                     )}
 
                     {/* Edit Modal */}
@@ -382,6 +407,7 @@ export default function UserManagement() {
                         userId={selectedUser?.id}
                         charities={charities}
                         onUpdate={fetchUsers}
+                        onDelete={fetchUsers}
                     />
 
                     {/* Confirmation Modal for Suspend/Activate */}

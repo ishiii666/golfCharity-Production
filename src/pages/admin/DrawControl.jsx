@@ -16,17 +16,20 @@ import {
     getJackpot,
     getCurrentDraw,
     runDraw,
+    resetDraw,
+    getWinnersForVerification,
+    updateWinnerVerification,
+    simulateDraw,
+    getDrawSettings,
+    getDraws,
+    getActiveSubscribersCount,
     publishDraw,
     createNewDraw,
-    getDrawSettings,
-    updateDrawSettings,
-    simulateDraw,
-    getActiveSubscribersCount,
     getDrawWinnersExport,
     exportToCSV,
-    getDraws,
-    resetDraw
+    updateDrawSettings
 } from '../../lib/supabaseRest';
+import { useAuth } from '../../context/AuthContext';
 
 // Helper to get next month string
 const getNextMonthName = (currentMonthYear) => {
@@ -140,6 +143,9 @@ export default function DrawControl() {
     const [isWinnersModalOpen, setIsWinnersModalOpen] = useState(false);
     const [selectedTierWinners, setSelectedTierWinners] = useState([]);
     const [viewingTier, setViewingTier] = useState(null);
+    const [winners, setWinners] = useState([]);
+    const [isVerifying, setIsVerifying] = useState(false);
+    const { user } = useAuth();
 
     // Fetch real data on mount
     useEffect(() => {
@@ -200,11 +206,54 @@ export default function DrawControl() {
             setCurrentDrawState(draw || null);
             setDraws(Array.isArray(allDraws) ? allDraws : []);
 
+            // Fetch winners for verification if draw is completed or published
+            if (draw?.status === 'completed' || draw?.status === 'published') {
+                const verifWinners = await getWinnersForVerification();
+                // Filter for winners of THIS draw specifically
+                setWinners(verifWinners.filter(w => w.draw_id === targetDrawId));
+            } else {
+                setWinners([]);
+            }
+
+            // SYNC: Update publication state based on the actual draw status
+            const status = draw?.status;
+            setIsPublished(status === 'published');
+
         } catch (error) {
             console.error('Error fetching data:', error);
             if (!silent) addToast('error', 'Failed to load draw data');
         } finally {
             if (!silent) setLoading(false);
+        }
+    };
+
+    const handleVerifyWinner = async (entryId, status) => {
+        try {
+            const res = await updateWinnerVerification(entryId, status, user?.id);
+            if (res.success) {
+                addToast('success', `Winner ${status === 'verified' ? 'verified' : 'rejected'}`);
+                fetchData(true);
+            } else {
+                addToast('error', res.error || 'Failed to update verification');
+            }
+        } catch (error) {
+            addToast('error', 'Verification error');
+        }
+    };
+
+    const handleVerifyAll = async () => {
+        const pending = winners.filter(w => !w.verification_status || w.verification_status.toLowerCase() === 'pending');
+        if (pending.length === 0) return;
+
+        setIsVerifying(true);
+        try {
+            await Promise.all(pending.map(w => updateWinnerVerification(w.id, 'verified', user?.id)));
+            addToast('success', `Verified ${pending.length} pending winners`);
+            fetchData(true);
+        } catch (error) {
+            addToast('error', 'Failed to verify all winners');
+        } finally {
+            setIsVerifying(false);
         }
     };
 
@@ -268,6 +317,7 @@ export default function DrawControl() {
             }
 
             setAnalysisResults(results);
+            setIsPublished(false); // New analysis session is never published yet
             addToast('success', 'Analysis complete! Review results before publishing.');
         } catch (error) {
             console.error('Error running analysis:', error);
@@ -277,7 +327,7 @@ export default function DrawControl() {
         }
     };
 
-    const handlePublish = async () => {
+    const handleRunDraw = async () => {
         if (!analysisResults) {
             addToast('error', 'Please run an analysis first');
             return;
@@ -285,45 +335,57 @@ export default function DrawControl() {
 
         setIsPublishing(true);
         try {
-            // Determine the target month for the draw.
-            // Prioritize an existing 'open' draw. If none, use the current calendar month.
             const targetMonth = currentDraw && currentDraw.status === 'open'
                 ? currentDraw.month_year
                 : getDrawMonthYear();
 
             let activeDrawId = null;
 
-            // 1. Ensure we have an OPEN record for the target month
             if (currentDraw && currentDraw.status === 'open') {
                 activeDrawId = currentDraw.id;
             } else {
-                // If no current record or it's published, find/create for calendar month
                 const newDraw = await createNewDraw(targetMonth);
                 if (!newDraw) throw new Error(`Failed to initialize record for ${targetMonth}.`);
-
-                if (newDraw.status === 'published') {
-                    // If the draw for the target month is already published,
-                    // it means we missed a cycle or are ahead.
-                    // Try to create/use the next month's draw.
-                    const nextMonth = getNextMonthName(targetMonth);
-                    const nextDraw = await createNewDraw(nextMonth);
-                    if (!nextDraw) throw new Error(`Failed to initialize record for ${nextMonth}.`);
-                    activeDrawId = nextDraw.id;
-                } else {
-                    activeDrawId = newDraw.id;
-                }
+                activeDrawId = newDraw.id;
             }
 
-            // 2. Execute and Publish
+            // Execute draw logic - This moves status to 'completed' (DRAFT)
             const result = await runDraw(activeDrawId, rangeMin, rangeMax);
             if (!result.success) throw new Error(result.error || 'Draw execution failed');
 
-            const publishResult = await publishDraw(activeDrawId);
+            setAnalysisResults(null);
+            addToast('success', 'Draw finalized in DRAFT mode. Please verify winners before publishing.');
+
+            setTimeout(() => fetchData(false), 1000);
+        } catch (error) {
+            console.error('Error in run draw flow:', error);
+            addToast('error', error.message);
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    const handlePublish = async () => {
+        if (!currentDraw || currentDraw.status !== 'completed') {
+            addToast('error', 'No draft results available to publish');
+            return;
+        }
+
+        // ENFORCEMENT: Check if all winners are verified
+        const unverifiedCount = winners.filter(w => !w.verification_status || w.verification_status.toLowerCase() === 'pending').length;
+        if (unverifiedCount > 0) {
+            addToast('error', `Cannot publish. There are ${unverifiedCount} unverified winners.`);
+            return;
+        }
+
+        setIsPublishing(true);
+        try {
+            const publishResult = await publishDraw(currentDraw.id);
             if (!publishResult.success) throw new Error(publishResult.error || 'Publish failed');
 
-            // 3. Automation: Proactively create the NEXT record to ensure cycle continuity
+            // Automation: Proactively create the NEXT record
             try {
-                const finishedMonth = (currentDraw?.month_year || targetMonth); // Use the month that was just published
+                const finishedMonth = currentDraw.month_year;
                 const nextMonth = getNextMonthName(finishedMonth);
                 await createNewDraw(nextMonth);
             } catch (nextMonthErr) {
@@ -331,11 +393,9 @@ export default function DrawControl() {
             }
 
             setIsPublished(true);
-            setAnalysisResults(null);
-            addToast('success', 'Draw results published successfully!');
-            addToast('info', 'Verified winners are now ready for verification in the Reports section.', { duration: 6000 });
+            addToast('success', 'Draw results published successfully! Results are now visible to the public.');
 
-            setTimeout(() => fetchData(true), 1500);
+            setTimeout(() => fetchData(false), 1500);
         } catch (error) {
             console.error('Error in publish flow:', error);
             addToast('error', error.message);
@@ -717,23 +777,186 @@ export default function DrawControl() {
                                                         </div>
                                                         <p className="text-sm text-zinc-300">
                                                             <strong className="text-amber-400 block mb-1">Cycle Locked</strong>
-                                                            The February cycle is currently collecting data. You can only finalize results once the month has officially started.
+                                                            The cycle is currently collecting data. You can only finalize results once the month has officially started.
                                                         </p>
                                                     </div>
                                                 )}
                                                 <Button
                                                     variant="accent"
                                                     fullWidth
-                                                    onClick={handlePublish}
+                                                    onClick={handleRunDraw}
                                                     disabled={isPublishing || isFutureDraw}
                                                     className="h-16 text-lg font-bold"
                                                 >
-                                                    {isPublishing ? "Publishing..." : isFutureDraw ? "Execution Phase Not Started" : "Lock & Publish results"}
+                                                    <div className="flex flex-col items-center">
+                                                        <span>{isPublishing ? "Finalizing..." : "Finalize Results (DRAFT)"}</span>
+                                                        <span className="text-[10px] font-normal uppercase tracking-widest opacity-60">Moves draw to Review phase</span>
+                                                    </div>
                                                 </Button>
                                             </div>
                                         )}
                                     </CardContent>
                                 </Card>
+                            ) : currentDraw?.status === 'completed' ? (
+                                <Card variant="glow" className="flex-1">
+                                    <CardHeader>
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                                                </div>
+                                                <div>
+                                                    <CardTitle className="text-xl tracking-tight uppercase">Winner Audit: {currentDraw.month_year}</CardTitle>
+                                                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest leading-none mt-1">Status: Verification Phase</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black border border-amber-500/20 uppercase tracking-widest italic">Action Required</span>
+                                                {winners.some(w => !w.verification_status || w.verification_status.toLowerCase() === 'pending') && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-8 px-4 font-black text-[9px] uppercase tracking-[0.1em] border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/5"
+                                                        onClick={handleVerifyAll}
+                                                        disabled={isVerifying}
+                                                    >
+                                                        {isVerifying ? 'Processing...' : 'Auto-Verify All'}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-8">
+                                        <div className="bg-black/20 rounded-3xl border border-white/5 overflow-hidden">
+                                            <table className="w-full text-xs text-left">
+                                                <thead>
+                                                    <tr className="bg-white/5 text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 border-b border-white/5">
+                                                        <th className="px-6 py-4">Claimant Profile</th>
+                                                        <th className="px-6 py-4">Prize Tier</th>
+                                                        <th className="px-6 py-4">Net Payout</th>
+                                                        <th className="px-6 py-4">Verification</th>
+                                                        <th className="px-6 py-4 text-right">Audit</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-white/[0.03]">
+                                                    {winners.map(winner => (
+                                                        <tr key={winner.id} className="hover:bg-white/[0.02] transition-colors group">
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-white font-bold text-sm tracking-tight">{winner.profiles?.full_name || 'Anonymous User'}</span>
+                                                                    <span className="text-[9px] text-zinc-600 font-mono italic">{winner.profiles?.email || 'legacy-system-user'}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter border ${winner.tier === 1 ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                                                                            winner.tier === 2 ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                                                                                'bg-teal-500/10 text-teal-400 border-teal-500/20'
+                                                                        }`}>
+                                                                        {winner.tier === 1 ? '5M Jackpot' : winner.tier === 2 ? '4M Pool' : '3M Pool'}
+                                                                    </span>
+                                                                    <div className="flex gap-1">
+                                                                        {Array.isArray(winner.scores) && winner.scores.map((num, idx) => {
+                                                                            const isMatch = currentDraw?.winning_numbers?.includes(Number(num));
+                                                                            return (
+                                                                                <span key={idx} className={`w-4 h-4 rounded-md flex items-center justify-center text-[8px] font-black border transition-all ${isMatch ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-700'
+                                                                                    }`}>
+                                                                                    {num}
+                                                                                </span>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <span className="font-black text-emerald-400 font-mono tracking-tighter">
+                                                                    {formatCurrency(winner.net_payout)}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-[0.1em] border transition-all ${winner.verification_status === 'verified' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]' :
+                                                                        winner.verification_status === 'rejected' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                                            'bg-zinc-800 text-zinc-600 border-zinc-700'
+                                                                    }`}>
+                                                                    {winner.verification_status || 'Pending'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                {(!winner.verification_status || winner.verification_status.toLowerCase() === 'pending') ? (
+                                                                    <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <button
+                                                                            onClick={() => handleVerifyWinner(winner.id, 'verified')}
+                                                                            className="w-8 h-8 flex items-center justify-center bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20"
+                                                                            title="Verify Winner"
+                                                                        >
+                                                                            ✓
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleVerifyWinner(winner.id, 'rejected')}
+                                                                            className="w-8 h-8 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20"
+                                                                            title="Reject Claim"
+                                                                        >
+                                                                            ✕
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="w-8 h-8 ml-auto flex items-center justify-center">
+                                                                        <svg className="w-4 h-4 text-zinc-800" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {winners.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan="5" className="py-16 text-center">
+                                                                <p className="text-zinc-600 font-bold uppercase tracking-[0.2em] text-xs">No claimants discovered for this sequence</p>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <div className="p-8 rounded-[2.5rem] bg-emerald-500/[0.03] border border-emerald-500/10 relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:rotate-12 transition-transform duration-700">
+                                                <svg className="w-24 h-24 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                            </div>
+
+                                            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                                                <div className="flex-1">
+                                                    <h4 className="text-xl font-black text-white uppercase tracking-tighter mb-2">Finalize and Secure Results</h4>
+                                                    <p className="text-sm text-zinc-500 font-medium max-w-md">
+                                                        Once all winners are verified, you can lock the results and publish them to the public leaderboard.
+                                                        Settlements will then be accessible in the <span className="text-white font-bold">Finance Center</span>.
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2 shrink-0">
+                                                    <div className="flex items-center gap-3 mb-2 px-4 py-2 rounded-2xl bg-black/40 border border-white/5">
+                                                        <div className="text-right">
+                                                            <p className="text-2xl font-black text-white leading-none">{winners.filter(w => w.verification_status === 'verified').length}/{winners.length}</p>
+                                                            <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Verified Claims</p>
+                                                        </div>
+                                                        <div className="w-px h-8 bg-white/10" />
+                                                        <div className="text-right">
+                                                            <p className="text-2xl font-black text-emerald-400 leading-none">{formatCurrency(winners.reduce((sum, w) => sum + (w.verification_status === 'verified' ? w.net_payout : 0), 0))}</p>
+                                                            <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Total Payable</p>
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        variant="primary"
+                                                        onClick={handlePublish}
+                                                        disabled={isPublishing || winners.length === 0 || winners.some(w => !w.verification_status || w.verification_status.toLowerCase() === 'pending')}
+                                                        className="h-14 w-full md:w-64 font-black text-xs uppercase tracking-[0.3em] shadow-[0_10px_30px_rgba(16,185,129,0.2)]"
+                                                    >
+                                                        {isPublishing ? "Publishing..." : "Commit & Publish"}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
                             ) : isPublished ? (
                                 <Card variant="glass" className="h-full flex flex-col items-center justify-center min-h-[400px] border-emerald-500/30 bg-emerald-500/5">
                                     <div className="text-center">

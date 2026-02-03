@@ -339,9 +339,21 @@ export default function Dashboard() {
                                                 </svg>
                                             </div>
                                             <div>
-                                                <h3 className="text-xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
-                                                    Latest Draw Result
-                                                </h3>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h3 className="text-xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
+                                                        Latest Draw Result
+                                                    </h3>
+                                                    {latestResult.gross_prize > 0 && (
+                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${latestResult.is_paid ? 'bg-emerald-500/20 text-emerald-400' :
+                                                            latestResult.verification_status?.toLowerCase() === 'verified' ? 'bg-amber-500/20 text-amber-500' :
+                                                                'bg-zinc-800 text-zinc-500 border border-white/5'
+                                                            }`}>
+                                                            {latestResult.is_paid ? 'Paid' :
+                                                                latestResult.verification_status?.toLowerCase() === 'verified' ? 'Processing' :
+                                                                    (latestResult.verification_status || 'Pending Verification')}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-zinc-400 text-sm">
                                                     {latestResult.draws.month_year} Result • {latestResult.matches} Match{latestResult.matches !== 1 ? 'es' : ''}
                                                 </p>

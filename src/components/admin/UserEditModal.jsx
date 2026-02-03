@@ -9,18 +9,19 @@ import {
     updateRow,
     adminUpdatePassword,
     assignSubscription,
-    logActivity
+    logActivity,
+    deleteUser
 } from '../../lib/supabaseRest';
 
 export default function UserEditModal({
     isOpen,
     onClose,
     userId,
-    initialUser = null,
     charities = [],
-    onUpdate = () => { }
+    onUpdate = () => { },
+    onDelete = () => { }
 }) {
-    const [editData, setEditData] = useState(initialUser || {});
+    const [editData, setEditData] = useState({});
     const [userStats, setUserStats] = useState(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -100,6 +101,26 @@ export default function UserEditModal({
             fetchData();
         }
     }, [isOpen, userId]);
+
+    const handleDeleteUser = async () => {
+        if (!window.confirm('Are you absolutely sure you want to PERMANENTLY delete this user? This will remove all their data and access. This action CANNOT be undone.')) {
+            return;
+        }
+
+        setSaving(true);
+        try {
+            await deleteUser(userId);
+            addToast('success', 'User account has been completely removed');
+            onDelete();
+            onClose();
+        } catch (error) {
+            console.error('❌ Error deleting user:', error);
+            const errMsg = error.message || 'Check server logs';
+            addToast('error', `Deletion failed: ${errMsg}`);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const handleSaveUser = async () => {
         setSaving(true);
@@ -198,13 +219,13 @@ export default function UserEditModal({
                         </button>
                     </div>
 
-                    {/* Tab Navigation */}
-                    <div className="px-10 bg-white/[0.01] relative z-10 border-b border-white/[0.03]">
-                        <div className="flex items-center gap-6">
+                    {/* Tab Navigation - Scrollable on mobile */}
+                    <div className="px-6 lg:px-10 bg-white/[0.01] relative z-10 border-b border-white/[0.03] overflow-x-auto no-scrollbar">
+                        <div className="flex items-center gap-6 min-w-max">
                             {[
-                                { id: 'overview', label: 'User Overview', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
-                                { id: 'financials', label: 'Financials & Payouts', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-                                { id: 'security', label: 'Settings & Security', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
+                                { id: 'overview', label: 'Overview', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
+                                { id: 'financials', label: 'Financials', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+                                { id: 'security', label: 'Security', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.543-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }
                             ].map(tab => (
                                 <button
                                     key={tab.id}
@@ -238,20 +259,21 @@ export default function UserEditModal({
                         {/* TABS CONTENT */}
                         {activeTab === 'overview' && (
                             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-5">
                                     {[
                                         { label: 'Total Prize Winnings', value: `$${userStats?.totalWinnings?.toLocaleString() || '0.00'}`, icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', gradient: 'from-emerald-500/10 to-transparent' },
                                         { label: 'Withdrawable Balance', value: `$${Math.max(0, userStats?.currentBalance || 0).toLocaleString()}`, icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', gradient: 'from-blue-500/10 to-transparent' },
-                                        { label: 'Platform Tenure', value: userStats?.membershipMonths ? `${userStats.membershipMonths} Months` : 'New Member', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', gradient: 'from-violet-500/10 to-transparent' },
-                                        { label: 'Total Paid Out', value: `$${userStats?.totalPaidOut?.toLocaleString() || '0.00'}`, icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', gradient: 'from-amber-500/10 to-transparent' }
+                                        { label: 'Platform Tenure', value: userStats?.membershipMonths ? `${userStats.membershipMonths} Mo` : 'New', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', gradient: 'from-violet-500/10 to-transparent' },
+                                        { label: 'Total Paid Out', value: `$${userStats?.totalPaidOut?.toLocaleString() || '0.00'}`, icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', gradient: 'from-amber-500/10 to-transparent' },
+                                        { label: 'Charity Impact', value: `$${userStats?.totalCharityImpact?.toLocaleString() || '0.00'}`, icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', gradient: 'from-rose-500/10 to-transparent' }
                                     ].map((stat, i) => (
-                                        <div key={i} className={`group p-6 rounded-[2rem] bg-gradient-to-br ${stat.gradient} border border-white/5 hover:border-white/10 transition-all duration-500 relative overflow-hidden`}>
+                                        <div key={i} className={`group p-4 lg:p-6 rounded-2xl lg:rounded-[2rem] bg-gradient-to-br ${stat.gradient} border border-white/5 hover:border-white/10 transition-all duration-500 relative overflow-hidden`}>
                                             <div className="relative z-10">
-                                                <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-1">{stat.label}</p>
-                                                <p className="text-2xl font-black text-white tracking-tighter">{stat.value}</p>
+                                                <p className="text-[9px] lg:text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-1">{stat.label}</p>
+                                                <p className="text-xl lg:text-2xl font-black text-white tracking-tighter">{stat.value}</p>
                                             </div>
                                             <div className="absolute top-[-20%] right-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-700">
-                                                <svg className="w-20 h-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg className="w-16 lg:w-20 h-16 lg:h-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={stat.icon} />
                                                 </svg>
                                             </div>
@@ -315,15 +337,25 @@ export default function UserEditModal({
                                     <div className="grid md:grid-cols-2 gap-4">
                                         {userStats?.payouts?.length > 0 ? (
                                             userStats.payouts.map(payout => (
-                                                <div key={payout.id} className="p-6 rounded-[1.5rem] bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all duration-300">
-                                                    <div>
-                                                        <p className="text-white text-xl font-black tracking-tighter">-${Number(payout.amount).toLocaleString()}</p>
-                                                        <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mt-0.5">{new Date(payout.transfer_date).toLocaleDateString()}</p>
+                                                <div key={payout.id} className="p-5 lg:p-6 rounded-[1.5rem] bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all duration-300">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${payout.type === 'Withdrawal' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'}`}>
+                                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={payout.type === 'Withdrawal' ? "M15 13l-3 3m0 0l-3-3m3 3V8m0 13a9 9 0 110-18 9 9 0 010 18z" : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"} />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-white text-lg font-black tracking-tighter">-${Number(payout.amount).toLocaleString()}</p>
+                                                                <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">{payout.type}</span>
+                                                            </div>
+                                                            <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mt-0.5">{new Date(payout.date).toLocaleDateString()}</p>
+                                                        </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.1em] bg-white/5 border border-white/5 py-1.5 px-4 rounded-full block mb-1">REF: {payout.reference?.slice(0, 12) || 'SYSTEM'}</span>
-                                                        <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest mr-2 flex items-center justify-end gap-1">
-                                                            <div className="w-1 h-1 rounded-full bg-emerald-500" /> Confirmed
+                                                        <span className="text-slate-500 text-[9px] font-black uppercase tracking-[0.1em] mb-1 block">Ref: {payout.reference?.slice(0, 10) || 'SYSTEM'}</span>
+                                                        <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest flex items-center justify-end gap-1">
+                                                            <div className="w-1 h-1 rounded-full bg-emerald-500" /> {payout.status}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -373,22 +405,43 @@ export default function UserEditModal({
                                         </div>
                                     </div>
 
-                                    <div className="p-10 rounded-[3rem] bg-gradient-to-br from-amber-500/[0.04] to-transparent border border-amber-500/10 space-y-6 relative overflow-hidden shadow-2xl">
-                                        <div className="flex items-center gap-3 text-amber-200">
-                                            <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                            </svg>
-                                            <p className="text-sm font-bold tracking-tight uppercase">Credential Override</p>
-                                        </div>
-                                        <p className="text-slate-500 text-[10px] font-medium leading-relaxed">System-level reset of user credentials. The user will be required to re-authenticate using the new password on their next session.</p>
-                                        <div className="pt-2">
-                                            <Input label="New System Password" type="password" value={editData.password || ''} onChange={(e) => setEditData({ ...editData, password: e.target.value })} placeholder="••••••••" className="bg-slate-900/60 border-white/5 focus:border-amber-500/30 font-mono" />
-                                        </div>
-                                        <div className="mt-4 p-4 rounded-2xl bg-black/40 border border-white/5">
-                                            <div className="flex justify-between items-center text-[10px] text-zinc-500 font-black uppercase tracking-widest">
-                                                <span>Security Level</span>
-                                                <span className="text-emerald-500">Encrypted</span>
+                                    <div className="flex flex-col gap-6">
+                                        {/* Credential Override */}
+                                        <div className="p-8 rounded-[2.5rem] bg-gradient-to-br from-amber-500/[0.04] to-transparent border border-amber-500/10 space-y-4 relative overflow-hidden shadow-2xl">
+                                            <div className="flex items-center gap-3 text-amber-200">
+                                                <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                </svg>
+                                                <p className="text-[10px] font-black tracking-tight uppercase italic text-amber-500">Credential Override</p>
                                             </div>
+                                            <Input
+                                                label="New System Password"
+                                                type="password"
+                                                value={editData.password || ''}
+                                                onChange={(e) => setEditData({ ...editData, password: e.target.value })}
+                                                placeholder="••••••••"
+                                                className="bg-slate-900/60 border-white/5 focus:border-amber-500/30 font-mono text-xs"
+                                            />
+                                        </div>
+
+                                        {/* Danger Zone */}
+                                        <div className="p-8 rounded-[2.5rem] bg-gradient-to-br from-red-500/[0.04] to-transparent border border-red-500/10 space-y-4 relative overflow-hidden shadow-2xl">
+                                            <div className="flex items-center gap-3 text-red-200">
+                                                <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                                <p className="text-[10px] font-black tracking-tight uppercase italic text-red-500">Danger Zone</p>
+                                            </div>
+                                            <p className="text-slate-500 text-[9px] font-medium leading-relaxed">Permanently remove this user. This action is irreversible.</p>
+                                            <Button
+                                                variant="outline"
+                                                fullWidth
+                                                size="sm"
+                                                onClick={handleDeleteUser}
+                                                className="border-red-500/20 text-red-500 hover:bg-red-500/5 h-10 text-[9px] font-black uppercase tracking-widest"
+                                            >
+                                                Delete Account
+                                            </Button>
                                         </div>
                                     </div>
                                 </div>
@@ -431,27 +484,22 @@ export default function UserEditModal({
                                                     {editData.showBanking ? 'Mask Details' : 'View Details'}
                                                 </button>
                                             </div>
-                                            <Input
-                                                label="Bank Institution"
-                                                value={editData.bankName || ''}
-                                                onChange={(e) => setEditData({ ...editData, bankName: e.target.value })}
-                                                className="bg-slate-900/60"
-                                            />
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <Input
-                                                    label="BSB"
-                                                    type={editData.showBanking ? "number" : "text"}
-                                                    value={editData.showBanking ? editData.bsbNumber : 'xxx-xxx'}
-                                                    onChange={(e) => setEditData({ ...editData, bsbNumber: e.target.value.replace(/\D/g, '') })}
-                                                    className="bg-slate-900/60 font-mono text-xs"
-                                                />
-                                                <Input
-                                                    label="Account"
-                                                    type={editData.showBanking ? "number" : "text"}
-                                                    value={editData.showBanking ? editData.accountNumber : 'xxxx' + String(editData.accountNumber || '').slice(-2)}
-                                                    onChange={(e) => setEditData({ ...editData, accountNumber: e.target.value.replace(/\D/g, '') })}
-                                                    className="bg-slate-900/60 font-mono text-xs"
-                                                />
+                                            <div className="space-y-4">
+                                                <div className="px-5 py-4 rounded-xl bg-slate-900/40 border border-white/5">
+                                                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Bank Institution</p>
+                                                    <p className="text-white font-bold">{editData.bankName || 'NOT PROVIDED'}</p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="px-5 py-4 rounded-xl bg-slate-900/40 border border-white/5">
+                                                        <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">BSB</p>
+                                                        <p className="text-white font-mono">{editData.showBanking ? editData.bsbNumber : 'xxx-xxx'}</p>
+                                                    </div>
+                                                    <div className="px-5 py-4 rounded-xl bg-slate-900/40 border border-white/5">
+                                                        <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Account</p>
+                                                        <p className="text-white font-mono">{editData.showBanking ? editData.accountNumber : 'xxxx' + String(editData.accountNumber || '').slice(-2)}</p>
+                                                    </div>
+                                                </div>
+                                                <p className="text-[8px] text-amber-500/60 font-medium px-2 italic text-center">Banking details are managed by the user and cannot be altered by admins.</p>
                                             </div>
                                         </div>
                                     </div>

@@ -21,9 +21,9 @@ export default function Results() {
                 // Fetch all draws
                 const draws = await getDraws();
 
-                // Filter to only published/completed draws
+                // Filter to only published draws
                 const publishedDraws = draws.filter(d =>
-                    d.status === 'published' || d.status === 'completed'
+                    d.status === 'published'
                 );
 
                 if (publishedDraws.length > 0) {
@@ -37,31 +37,33 @@ export default function Results() {
                     setLatestDraw({
                         id: latest.id,
                         date: latest.draw_date || latest.created_at,
+                        monthYear: latest.month_year,
                         status: latest.status,
                         winningNumbers: latest.winning_numbers || [],
                         prizePool: latest.prize_pool || 0,
                         winners: {
-                            fiveMatch: latest.five_match_winners || 0,
-                            fourMatch: latest.four_match_winners || 0,
-                            threeMatch: latest.three_match_winners || 0
+                            fiveMatch: latest.tier1_winners || 0,
+                            fourMatch: latest.tier2_winners || 0,
+                            threeMatch: latest.tier3_winners || 0
                         },
                         payouts: {
-                            fiveMatch: latest.five_match_payout || 0,
-                            fourMatch: latest.four_match_payout || 0,
-                            threeMatch: latest.three_match_payout || 0
+                            fiveMatch: latest.tier1_winners > 0 ? (latest.tier1_pool / latest.tier1_winners) : 0,
+                            fourMatch: latest.tier2_winners > 0 ? (latest.tier2_pool / latest.tier2_winners) : 0,
+                            threeMatch: latest.tier3_winners > 0 ? (latest.tier3_pool / latest.tier3_winners) : 0
                         },
-                        jackpot: latest.jackpot_amount || 0
+                        jackpot: latest.tier1_rollover_amount || latest.tier1_pool || 0
                     });
 
                     // Transform past draws (skip the first one which is latest)
                     setPastDraws(publishedDraws.slice(1).map(draw => ({
                         id: draw.id,
                         date: draw.draw_date || draw.created_at,
+                        monthYear: draw.month_year,
                         winningNumbers: draw.winning_numbers || [],
                         winners: {
-                            five: draw.five_match_winners || 0,
-                            four: draw.four_match_winners || 0,
-                            three: draw.three_match_winners || 0
+                            five: draw.tier1_winners || 0,
+                            four: draw.tier2_winners || 0,
+                            three: draw.tier3_winners || 0
                         }
                     })));
                 }
@@ -168,7 +170,7 @@ export default function Results() {
                                 <div className="flex items-center justify-between mb-6">
                                     <div>
                                         <span className="text-teal-400 text-sm font-medium">Latest Draw</span>
-                                        <h2 className="text-2xl font-bold text-white">{formatDate(latestDraw.date)}</h2>
+                                        <h2 className="text-2xl font-bold text-white">{latestDraw.monthYear || formatDate(latestDraw.date)}</h2>
                                     </div>
                                     <span className="px-4 py-2 rounded-full bg-teal-500/10 border border-teal-500/20 text-teal-400 font-semibold">
                                         ${latestDraw.prizePool.toLocaleString()} Pool
@@ -272,7 +274,7 @@ export default function Results() {
                                             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                                                 <div>
                                                     <h4 className="text-lg font-semibold text-white mb-1">
-                                                        {formatDate(draw.date)}
+                                                        {draw.monthYear || formatDate(draw.date)}
                                                     </h4>
                                                     <div className="flex gap-2">
                                                         {draw.winningNumbers.map((num) => (

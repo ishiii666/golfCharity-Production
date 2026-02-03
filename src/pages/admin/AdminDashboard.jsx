@@ -68,7 +68,21 @@ export default function AdminDashboard() {
     ];
 
     // Admin navigation cards
+    // Admin navigation cards reordered for logical flow
     const adminCards = [
+        {
+            title: 'User Management',
+            description: 'Manage players, subscriber status, and account permissions',
+            icon: (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            ),
+            to: '/admin/users',
+            color: 'from-violet-500 to-purple-500',
+            stat: 'Total players',
+            statValue: stats.loading ? '...' : stats.totalUsers
+        },
         {
             title: 'Draw Control Center',
             description: 'Run pre-draw analysis and publish monthly results',
@@ -84,7 +98,7 @@ export default function AdminDashboard() {
         },
         {
             title: 'Draw Management',
-            description: 'Verify winners, process payouts, and view past draws',
+            description: 'Verify winners, process payout verification, and audit draws',
             icon: (
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -94,58 +108,6 @@ export default function AdminDashboard() {
             color: 'from-emerald-500 to-green-500',
             stat: 'Due Payouts',
             statValue: stats.loading ? '...' : (stats.pendingPayouts || 0)
-        },
-        {
-            title: 'User Management',
-            description: 'View, edit, and manage player accounts',
-            icon: (
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-            ),
-            to: '/admin/users',
-            color: 'from-violet-500 to-purple-500',
-            stat: 'Total players',
-            statValue: stats.loading ? '...' : stats.totalUsers
-        },
-        {
-            title: 'Charity Manager',
-            description: 'Add, edit, and feature partner charities',
-            icon: (
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-            ),
-            to: '/admin/charities',
-            color: 'from-rose-500 to-pink-500',
-            stat: 'Partners',
-            statValue: stats.loading ? '...' : stats.totalCharities
-        },
-        {
-            title: 'Content Editor',
-            description: 'Edit homepage copy, T&Cs, and privacy policy',
-            icon: (
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-            ),
-            to: '/admin/content',
-            color: 'from-cyan-500 to-teal-500',
-            stat: 'Site Status',
-            statValue: 'Live'
-        },
-        {
-            title: 'Reports',
-            description: 'View analytics and donation reports',
-            icon: (
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-            ),
-            to: '/admin/reports',
-            color: 'from-indigo-500 to-blue-500',
-            stat: 'Last Update',
-            statValue: 'Today'
         },
         {
             title: 'Finance & Payouts',
@@ -159,6 +121,45 @@ export default function AdminDashboard() {
             color: 'from-emerald-600 to-teal-500',
             stat: 'Action Required',
             statValue: stats.loading ? '...' : ((stats.pendingPayouts || 0) + (stats.charityPayoutCount || 0))
+        },
+        {
+            title: 'Reports & Analytics',
+            description: 'View site-wide analytics, revenue, and donor reports',
+            icon: (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+            ),
+            to: '/admin/reports',
+            color: 'from-indigo-500 to-blue-500',
+            stat: 'Last Update',
+            statValue: 'Today'
+        },
+        {
+            title: 'Content Editor',
+            description: 'Edit homepage copy, FAQs, and site legal policies',
+            icon: (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+            ),
+            to: '/admin/content',
+            color: 'from-cyan-500 to-teal-500',
+            stat: 'Site Status',
+            statValue: 'Live'
+        },
+        {
+            title: 'Charity Manager',
+            description: 'Add, edit, and feature partner charities',
+            icon: (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+            ),
+            to: '/admin/charities',
+            color: 'from-rose-500 to-pink-500',
+            stat: 'Partners',
+            statValue: stats.loading ? '...' : stats.totalCharities
         }
     ];
 
@@ -198,7 +199,7 @@ export default function AdminDashboard() {
                         variants={staggerContainer}
                         initial="initial"
                         animate="animate"
-                        className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+                        className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
                     >
                         {quickStats.map((stat) => (
                             <motion.div key={stat.label} variants={staggerItem}>

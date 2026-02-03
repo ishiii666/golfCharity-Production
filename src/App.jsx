@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/ui/Toast';
@@ -413,10 +413,10 @@ function App() {
         <SmoothScroll>
           {/* Scroll to top on route change */}
           <ScrollToTop />
-          {/* Cinematic Entry Animation - temporarily disabled to fix black screen */}
-          {showEntryAnimation && (
+          {/* Cinematic Entry Animation - Disabled to fix black screen issues */}
+          {/* {showEntryAnimation && (
             <EntryAnimation onComplete={handleAnimationComplete} />
-          )}
+          )} */}
           <AppRoutes />
         </SmoothScroll>
       </AuthProvider>

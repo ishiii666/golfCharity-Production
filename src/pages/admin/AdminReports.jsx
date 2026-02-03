@@ -10,21 +10,21 @@ import {
     getDrawAnalysisReport,
     getCharityDonationsReport,
     getJackpotHistory,
-    getWinnersForVerification,
-    updateWinnerVerification,
     getSubscriptionReport,
     getMonthlyRevenue,
     getMonthlyUserGrowth,
     getReportStats,
     getSettledPlayerPayouts,
     getCharityPayouts,
+    getWinnerAuditReport,
+    getWinnerProfileWithBanking,
     exportToCSV
 } from '../../lib/supabaseRest';
 
 const TABS = [
     { id: 'draws', label: 'Draw Analysis', icon: '🎯' },
     { id: 'charities', label: 'Charity Donations', icon: '💚' },
-    { id: 'winners', label: 'Winner Verification', icon: '🏆' },
+    { id: 'winners', label: 'Winners Hub', icon: '🏆' },
     { id: 'subscriptions', label: 'Subscriptions', icon: '👥' },
     { id: 'analytics', label: 'Analytics', icon: '📈' },
 ];
@@ -40,12 +40,12 @@ export default function AdminReports() {
     const [drawReports, setDrawReports] = useState([]);
     const [charityData, setCharityData] = useState([]);
     const [jackpotData, setJackpotData] = useState({ history: [], current: 0 });
-    const [winners, setWinners] = useState([]);
     const [subscriptionData, setSubscriptionData] = useState({ active: 0, inactive: 0, eligible: 0 });
     const [revenueData, setRevenueData] = useState([]);
     const [userGrowthData, setUserGrowthData] = useState([]);
     const [payoutHistory, setPayoutHistory] = useState([]); // Direct Gift Settlements
     const [playerHistory, setPlayerHistory] = useState([]); // Player Prize & Winner-Led Charity
+    const [winnersData, setWinnersData] = useState([]);     // Full Winner Audit Report
 
     // Fetch data on mount
     useEffect(() => {
@@ -57,25 +57,25 @@ export default function AdminReports() {
         try {
             const months = timeRange === '1m' ? 1 : timeRange === '3m' ? 3 : timeRange === '6m' ? 6 : 12;
 
-            const [statsData, draws, charities, jackpot, winnersData, subs, revenue, growth] = await Promise.all([
+            const [statsData, draws, charities, jackpot, subs, revenue, growth, winners] = await Promise.all([
                 getReportStats(),
                 getDrawAnalysisReport(),
                 getCharityDonationsReport(),
                 getJackpotHistory(),
-                getWinnersForVerification(),
                 getSubscriptionReport(),
                 getMonthlyRevenue(months),
-                getMonthlyUserGrowth(months)
+                getMonthlyUserGrowth(months),
+                getWinnerAuditReport()
             ]);
 
             setStats(statsData);
             setDrawReports(draws);
             setCharityData(charities);
             setJackpotData(jackpot);
-            setWinners(winnersData);
             setSubscriptionData(subs);
             setRevenueData(revenue);
             setUserGrowthData(growth);
+            setWinnersData(winners);
 
             // Fetch payout history for real-time audit
             const [pHistory, plHistory] = await Promise.all([
@@ -93,14 +93,35 @@ export default function AdminReports() {
         }
     };
 
-    const handleVerifyWinner = async (entryId, status) => {
-        const result = await updateWinnerVerification(entryId, status, user?.id);
-        if (result.success) {
-            setWinners(prev => prev.map(w =>
-                w.id === entryId ? { ...w, verification_status: status } : w
-            ));
-            // Refresh stats since verification might affect donations
-            fetchAllData();
+
+    const handleDownloadReceipt = async (winner) => {
+        if (!winner || !winner.is_paid) return;
+
+        try {
+            // Fetch banking/profile details for the receipt
+            const details = await getWinnerProfileWithBanking(winner.user_id);
+
+            const receiptData = [{
+                'Transaction Type': 'Prize Settlement',
+                'Winner Name': winner.profiles?.full_name || 'Anonymous',
+                'Winner Email': winner.profiles?.email || 'N/A',
+                'Draw Cycle': winner.draws?.month_year || 'N/A',
+                'Match Tier': winner.tier === 1 ? '5-Match Jackpot' : winner.tier === 2 ? '4-Match Pool' : '3-Match Pool',
+                'Gross Prize (AUD)': parseFloat(winner.gross_prize || 0).toFixed(2),
+                'Charity Donation (AUD)': parseFloat(winner.charity_amount || 0).toFixed(2),
+                'Net Payout Amount (AUD)': parseFloat(winner.net_payout || 0).toFixed(2),
+                'Settlement Status': 'PAID',
+                'Payment Reference': winner.payout_ref || 'N/A',
+                'Payment Date': winner.updated_at ? new Date(winner.updated_at).toLocaleString() : 'N/A',
+                'Bank Name': details?.bank_name || 'N/A',
+                'Account Holder': details?.full_name || 'N/A'
+            }];
+
+            exportToCSV(receiptData, `Receipt_${winner.profiles?.full_name.replace(' ', '_')}_${winner.draws?.month_year.replace(' ', '_')}`);
+            addToast('success', 'Digital receipt downloaded');
+        } catch (error) {
+            console.error('Receipt download error:', error);
+            addToast('error', 'Failed to generate receipt');
         }
     };
 
@@ -137,15 +158,17 @@ export default function AdminReports() {
                 exportToCSV(allGifts, 'Charity_Direct_Gifts_Ledger');
                 break;
             case 'winners':
-                exportToCSV(winners.map(w => ({
-                    draw: w.draws?.month_year,
-                    user: w.profiles?.full_name || 'Unknown',
-                    tier: w.tier,
-                    gross_prize: w.gross_prize,
-                    charity_amount: w.charity_amount,
-                    net_payout: w.net_payout,
-                    status: w.verification_status
-                })), 'winners');
+                exportToCSV(winnersData.map(w => ({
+                    'Month/Year': w.draws?.month_year || 'N/A',
+                    'Winner': w.profiles?.full_name || 'Anonymous',
+                    'Email': w.profiles?.email || 'N/A',
+                    'Tier': `${w.tier}-Match`,
+                    'Gross Prize': w.gross_prize,
+                    'Charity Donation': w.charity_amount,
+                    'Charity Beneficiary': w.charities?.name || 'N/A',
+                    'Status': w.is_paid ? 'PAID' : w.verification_status,
+                    'Payout Ref': w.payout_ref || '--'
+                })), 'Winner_Audit_Report');
                 break;
             default:
                 console.warn('Unknown export type');
@@ -235,13 +258,13 @@ export default function AdminReports() {
                         {[
                             { label: 'Total Revenue', value: formatCurrency(stats?.totalRevenue), color: '#c9a227' },
                             { label: 'Active Subscribers', value: stats?.activeSubscribers?.toLocaleString() || '0', color: '#22c55e' },
-                            { label: 'Total Donated', value: formatCurrency(stats?.totalDonated), color: '#a855f7' },
-                            { label: 'Current Jackpot', value: formatCurrency(jackpotData.current), color: '#f59e0b' }
+                            { label: 'Community Impact', value: formatCurrency(stats?.totalDonated), color: '#a855f7' },
+                            { label: 'Direct | Prize', value: `${formatCurrency(stats?.totalDirectPaid)} | ${formatCurrency(stats?.winnerLedPending)}`, color: '#ec4899' }
                         ].map((stat) => (
                             <motion.div key={stat.label} variants={staggerItem}>
                                 <Card variant="glass" padding="p-5">
                                     <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: 'var(--color-neutral-500)' }}>{stat.label}</p>
-                                    <p className="text-2xl font-black" style={{ color: stat.color }}>{stat.value}</p>
+                                    <p className={`text-${stat.label.includes('|') ? 'lg' : '2xl'} font-black`} style={{ color: stat.color }}>{stat.value}</p>
                                 </Card>
                             </motion.div>
                         ))}
@@ -272,454 +295,68 @@ export default function AdminReports() {
                     >
                         {/* DRAW ANALYSIS TAB */}
                         {activeTab === 'draws' && (
-                            <Card variant="glass">
-                                <CardHeader>
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="text-lg font-bold" style={{ color: 'var(--color-cream-100)' }}>
-                                            Draw Analysis
-                                        </h2>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    {drawReports.length === 0 ? (
-                                        <p className="text-zinc-400 text-center py-8">No draw data yet</p>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            {drawReports.map(draw => (
-                                                <div key={draw.id} className="p-4 rounded-xl bg-zinc-800/50">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <h3 className="font-semibold text-white">{draw.month_year}</h3>
-                                                        <span className={`px-2 py-1 rounded text-xs ${draw.status === 'published' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
-                                                            }`}>
-                                                            {draw.status}
-                                                        </span>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
-                                                        <div>
-                                                            <p className="text-zinc-500">5-Match</p>
-                                                            <p className="text-amber-400 font-semibold">{draw.tier1_winners || 0}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-zinc-500">4-Match</p>
-                                                            <p className="text-violet-400 font-semibold">{draw.tier2_winners || 0}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-zinc-500">3-Match</p>
-                                                            <p className="text-teal-400 font-semibold">{draw.tier3_winners || 0}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-zinc-500">Prize Pool</p>
-                                                            <p className="text-green-400 font-semibold">{formatCurrency(draw.prize_pool)}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-zinc-500">To Charity</p>
-                                                            <p className="text-pink-400 font-semibold">{formatCurrency(draw.total_charity)}</p>
-                                                        </div>
-                                                    </div>
-                                                    {draw.winning_numbers && (
-                                                        <div className="mt-3 flex gap-2">
-                                                            {draw.winning_numbers.map((num, i) => (
-                                                                <span key={i} className="w-8 h-8 rounded-lg bg-zinc-700 flex items-center justify-center text-sm font-bold text-amber-400">
-                                                                    {num}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        {/* CHARITY DONATIONS TAB */}
-                        {activeTab === 'charities' && (
-                            <div className="space-y-8">
-                                {/* Section 1: Macro Charity Impact Overview */}
-                                <Card variant="glass">
-                                    <CardHeader>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h2 className="text-lg font-bold text-white uppercase tracking-wider">1. Macro Charity Impact Overview</h2>
-                                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black mt-1">Consolidated All-Time Performance</p>
-                                            </div>
-                                            <Button variant="ghost" size="sm" onClick={() => handleExport('charity_winners')}>
-                                                Export Impact
-                                            </Button>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {(!charityData || charityData.length === 0) ? (
-                                            <p className="text-zinc-400 text-center py-8">No charity impact data yet</p>
-                                        ) : (
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="text-left text-zinc-500 uppercase text-[10px] tracking-widest border-b border-zinc-800">
-                                                            <th className="pb-3 pl-2">Charity</th>
-                                                            <th className="pb-3">Supporters</th>
-                                                            <th className="pb-3 text-emerald-400">Winner Share</th>
-                                                            <th className="pb-3 text-pink-400">Direct Gifts</th>
-                                                            <th className="pb-3">Cycle</th>
-                                                            <th className="pb-3 text-right pr-2">Status</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {charityData.map((charity, i) => (
-                                                            <tr key={charity.id || i} className="border-b border-zinc-800/50 hover:bg-white/5 transition-colors group">
-                                                                <td className="py-4 pl-2">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 p-1">
-                                                                            <img
-                                                                                src={charity.logo}
-                                                                                alt=""
-                                                                                className="w-full h-full object-contain opacity-80 group-hover:opacity-100 transition-opacity"
-                                                                            />
-                                                                        </div>
-                                                                        <div className="font-bold text-white">{charity.name}</div>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="py-4">
-                                                                    <div className="text-white font-medium">{charity.supporter_count}</div>
-                                                                    <div className="text-[10px] text-zinc-500">Active Players</div>
-                                                                </td>
-                                                                <td className="py-4 font-bold text-emerald-400">
-                                                                    {formatCurrency(charity.winner_donations)}
-                                                                </td>
-                                                                <td className="py-4 font-bold text-pink-400">
-                                                                    {formatCurrency(charity.direct_donations)}
-                                                                </td>
-                                                                <td className="py-4">
-                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${charity.next_cycle_status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}>
-                                                                        {charity.next_cycle_status}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="py-4 text-right pr-2">
-                                                                    <div className={`text-[10px] font-black uppercase tracking-tighter ${charity.payout_status === 'settled' ? 'text-zinc-500' : 'text-amber-500 animate-pulse'}`}>
-                                                                        {charity.payout_status === 'payout_pending' ? 'Pending settlement' : 'Settled'}
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                                {/* Section 2: Charity Winner-Led Distribution Audit */}
-                                <Card variant="glass">
-                                    <CardHeader>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h2 className="text-lg font-bold text-white uppercase tracking-wider">2. Charity Winner-Led Distribution Audit</h2>
-                                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black mt-1">Micro-Donations from Player Winnings</p>
-                                            </div>
-                                            <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest">Live Shares</span>
-                                        </div>
-                                    </CardHeader>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left">
-                                            <thead>
-                                                <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-widest text-zinc-500">
-                                                    <th className="px-6 py-4">Paid Date</th>
-                                                    <th className="px-6 py-4">Beneficiary</th>
-                                                    <th className="px-6 py-4">Winner/Origin</th>
-                                                    <th className="px-6 py-4">Amount</th>
-                                                    <th className="px-6 py-4">Reference</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-zinc-800/50">
-                                                {playerHistory.filter(p => p.isCharity).length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan="5" className="px-6 py-12 text-center text-zinc-500 italic">No winner-led charity payout records found.</td>
-                                                    </tr>
-                                                ) : playerHistory.filter(p => p.isCharity).slice(0, 5).map(payout => (
-                                                    <tr key={payout.id} className="hover:bg-white/5 transition-colors text-xs">
-                                                        <td className="px-6 py-4 text-zinc-400">
-                                                            {new Date(payout.paid_at).toLocaleDateString()}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="font-bold text-white">{payout.profiles?.full_name}</div>
-                                                            <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Community Prize Share</div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="text-zinc-300">Winner Led Share</div>
-                                                            <div className="text-[10px] text-zinc-500 uppercase">Draw Distribution</div>
-                                                        </td>
-                                                        <td className="px-6 py-4 font-black text-emerald-400">
-                                                            {formatCurrency(payout.net_payout)}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-zinc-500 font-mono text-[10px]">
-                                                            {payout.payment_reference || '--'}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </Card>
-
-                                <div className="pt-8 mb-4">
-                                    <h2 className="text-xl font-bold text-pink-500 uppercase tracking-tighter flex items-center gap-2">
-                                        <span className="w-8 h-px bg-pink-500/30"></span>
-                                        Direct Donation Intelligence Hub
-                                        <span className="flex-1 h-px bg-pink-500/30"></span>
-                                    </h2>
-                                </div>
-
-                                {/* Section 3: Direct Donation Detail Ledger (Section 2 original) */}
-                                <Card variant="glass">
-                                    <CardHeader>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h2 className="text-lg font-bold" style={{ color: 'var(--color-pink-100)' }}>
-                                                    3. Direct Gift Donor Ledger
-                                                </h2>
-                                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black mt-1">Individual Contributions via Donate Portal</p>
-                                            </div>
-                                            <Button variant="ghost" size="sm" onClick={() => handleExport('charity_direct')}>
-                                                Export Gifts
-                                            </Button>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="space-y-6">
-                                            {charityData.filter(c => c.direct_gifts_detail?.length > 0).length === 0 ? (
-                                                <p className="text-zinc-500 text-center py-12 italic">No direct gifts recorded in this period.</p>
-                                            ) : (
-                                                charityData.filter(c => c.direct_gifts_detail?.length > 0).map(charity => (
-                                                    <div key={charity.id} className="space-y-3">
-                                                        <div className="flex items-center justify-between px-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-5 h-5 rounded bg-pink-500/20 flex items-center justify-center text-[10px]">🎁</div>
-                                                                <h3 className="font-bold text-zinc-300 text-sm uppercase tracking-tight">{charity.name}</h3>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="text-xs text-zinc-500 mr-2">Total Direct:</span>
-                                                                <span className="text-sm font-black text-pink-400">{formatCurrency(charity.direct_donations)}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                            {charity.direct_gifts_detail.map((gift, idx) => (
-                                                                <div key={idx} className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:border-pink-500/20 transition-all">
-                                                                    <div className="flex justify-between items-start mb-2">
-                                                                        <div>
-                                                                            <p className="text-xs font-black text-white leading-none">{gift.donor}</p>
-                                                                            <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-tighter">
-                                                                                {new Date(gift.date).toLocaleDateString()}
-                                                                            </p>
-                                                                        </div>
-                                                                        <div className="text-right">
-                                                                            <p className="text-sm font-black text-white">{formatCurrency(gift.amount)}</p>
-                                                                            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded mt-1 inline-block ${gift.status === 'paid'
-                                                                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                                                                                : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                                                                                }`}>
-                                                                                {gift.status === 'paid' ? 'Paid' : 'Unpaid'}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Section 4: Direct Donation Settlement Audit (Section 3 original) */}
-                                <Card variant="glass">
-                                    <CardHeader>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h2 className="text-lg font-bold text-white uppercase tracking-wider">4. Direct Donation Settlement Audit</h2>
-                                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black mt-1">Official Payment Trail to Multi-Charities</p>
-                                            </div>
-                                            <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest text-right">Settled Ledger</span>
-                                        </div>
-                                    </CardHeader>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left">
-                                            <thead>
-                                                <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-widest text-zinc-500">
-                                                    <th className="px-6 py-4">Date</th>
-                                                    <th className="px-6 py-4">Charity</th>
-                                                    <th className="px-6 py-4">Amount</th>
-                                                    <th className="px-6 py-4">Reference</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-zinc-800/50">
-                                                {payoutHistory.filter(p => !p.donations || p.donations.some(d => d.source === 'direct')).length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan="4" className="px-6 py-12 text-center text-zinc-500 italic">No direct donation payout history found.</td>
-                                                    </tr>
-                                                ) : payoutHistory.filter(p => !p.donations || p.donations.some(d => d.source === 'direct')).slice(0, 5).map(payout => (
-                                                    <tr key={payout.id} className="hover:bg-white/5 transition-colors text-xs">
-                                                        <td className="px-6 py-4 text-zinc-400">
-                                                            {new Date(payout.created_at).toLocaleDateString()}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="font-bold text-white">{payout.charities?.name}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4 font-black text-white">
-                                                            {formatCurrency(payout.amount)}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-zinc-500 font-mono text-[10px]">
-                                                            {payout.payout_ref || '--'}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </Card>
-
-                                {/* Global Stats Footer */}
-                                <div className="mt-8 p-6 rounded-2xl border border-zinc-800" style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
-                                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                                        <div className="flex flex-col">
-                                            <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Total Community Impact</span>
-                                            <span className="text-4xl font-black text-white mt-1">
-                                                {formatCurrency(charityData?.reduce((sum, c) => sum + (c.total_raised || 0), 0) || 0)}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-12">
-                                            <div className="text-left md:text-right">
-                                                <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Winner Split</div>
-                                                <div className="text-xl font-bold text-emerald-400">
-                                                    {formatCurrency(charityData?.reduce((sum, c) => sum + (c.winner_donations || 0), 0) || 0)}
-                                                </div>
-                                            </div>
-                                            <div className="text-left md:text-right">
-                                                <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Direct Gifts</div>
-                                                <div className="text-xl font-bold text-pink-400">
-                                                    {formatCurrency(charityData?.reduce((sum, c) => sum + (c.direct_donations || 0), 0) || 0)}
-                                                </div>
-                                            </div>
-                                            <div className="text-left md:text-right">
-                                                <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Supporters</div>
-                                                <div className="text-xl font-bold text-white">
-                                                    {charityData?.reduce((sum, c) => sum + (c.supporter_count || 0), 0)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* WINNER VERIFICATION TAB */}
-                        {activeTab === 'winners' && (
                             <div className="space-y-8">
                                 <Card variant="glass">
                                     <CardHeader>
                                         <div className="flex items-center justify-between">
                                             <h2 className="text-lg font-bold" style={{ color: 'var(--color-cream-100)' }}>
-                                                Winner Verification
+                                                Draw Analysis
                                             </h2>
-                                            <Button variant="ghost" size="sm" onClick={() => handleExport('winners')}>
-                                                Export CSV
-                                            </Button>
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        {winners.length === 0 ? (
-                                            <p className="text-zinc-400 text-center py-8">No winners to verify</p>
+                                        {drawReports.length === 0 ? (
+                                            <p className="text-zinc-400 text-center py-8">No draw data yet</p>
                                         ) : (
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="text-left text-zinc-500">
-                                                            <th className="pb-3">Draw</th>
-                                                            <th className="pb-3">User</th>
-                                                            <th className="pb-3">Prize (G/N)</th>
-                                                            <th className="pb-3">Charity</th>
-                                                            <th className="pb-3">Verification</th>
-                                                            <th className="pb-3">Payout</th>
-                                                            <th className="pb-3 text-right">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {winners.map(winner => (
-                                                            <tr key={winner.id} className="border-t border-zinc-800 hover:bg-white/5 transition-colors">
-                                                                <td className="py-3 text-white">
-                                                                    <div className="font-bold">{winner.draws?.month_year || 'N/A'}</div>
-                                                                    <div className="text-[10px] text-zinc-500">Tier {winner.tier}</div>
-                                                                </td>
-                                                                <td className="py-3 text-white">
-                                                                    <div className="font-medium">{winner.profiles?.full_name || 'Unknown'}</div>
-                                                                    <div className="text-[10px] text-zinc-500 font-mono">{winner.user_id.slice(0, 8)}</div>
-                                                                </td>
-                                                                <td className="py-3">
-                                                                    <div className="text-white font-bold">{formatCurrency(winner.gross_prize)}</div>
-                                                                    <div className="text-[10px] text-emerald-400 font-bold tracking-tighter">NET: {formatCurrency(winner.net_payout)}</div>
-                                                                </td>
-                                                                <td className="py-3 text-pink-400">
-                                                                    <div className="text-[10px] font-medium text-pink-500 uppercase tracking-widest mb-1">Impact</div>
-                                                                    {formatCurrency(winner.charity_amount)}
-                                                                </td>
-                                                                <td className="py-3">
-                                                                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${winner.verification_status === 'verified' ? 'bg-green-500/10 text-green-400' :
-                                                                        winner.verification_status === 'rejected' ? 'bg-red-500/10 text-red-400' :
-                                                                            'bg-amber-500/10 text-amber-500'
-                                                                        }`}>
-                                                                        {winner.verification_status || 'pending'}
+                                            <div className="space-y-4">
+                                                {drawReports.map(draw => (
+                                                    <div key={draw.id} className="p-4 rounded-xl bg-zinc-800/50">
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <h3 className="font-semibold text-white">{draw.month_year}</h3>
+                                                            <span className={`px-2 py-1 rounded text-xs ${draw.status === 'published' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                                                                }`}>
+                                                                {draw.status}
+                                                            </span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
+                                                            <div>
+                                                                <p className="text-zinc-500">5-Match</p>
+                                                                <p className="text-amber-400 font-semibold">{draw.tier1_winners || 0}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-zinc-500">4-Match</p>
+                                                                <p className="text-violet-400 font-semibold">{draw.tier2_winners || 0}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-zinc-500">3-Match</p>
+                                                                <p className="text-teal-400 font-semibold">{draw.tier3_winners || 0}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-zinc-500">Prize Pool</p>
+                                                                <p className="text-green-400 font-semibold">{formatCurrency(draw.prize_pool)}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-zinc-500">To Charity</p>
+                                                                <p className="text-pink-400 font-semibold">{formatCurrency(draw.total_charity)}</p>
+                                                            </div>
+                                                        </div>
+                                                        {draw.winning_numbers && (
+                                                            <div className="mt-3 flex gap-2">
+                                                                {draw.winning_numbers.map((num, i) => (
+                                                                    <span key={i} className="w-8 h-8 rounded-lg bg-zinc-700 flex items-center justify-center text-sm font-bold text-amber-400">
+                                                                        {num}
                                                                     </span>
-                                                                </td>
-                                                                <td className="py-3">
-                                                                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${winner.is_paid ? 'bg-emerald-500/10 text-emerald-500' : 'bg-zinc-800 text-zinc-500'}`}>
-                                                                        {winner.is_paid ? 'Paid' : 'Unpaid'}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="py-3 text-right">
-                                                                    {(!winner.verification_status ||
-                                                                        winner.verification_status.toLowerCase() === 'pending' ||
-                                                                        winner.verification_status.toLowerCase() === 'unverified') ? (
-                                                                        <div className="flex gap-2 justify-end">
-                                                                            <button
-                                                                                onClick={() => handleVerifyWinner(winner.id, 'verified')}
-                                                                                title="Verify Winner"
-                                                                                className="w-8 h-8 flex items-center justify-center bg-green-500/10 text-green-500 rounded-lg hover:bg-green-500 hover:text-white transition-all shadow-lg shadow-green-500/10"
-                                                                            >
-                                                                                ✓
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleVerifyWinner(winner.id, 'rejected')}
-                                                                                title="Reject Winner"
-                                                                                className="w-8 h-8 flex items-center justify-center bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/10"
-                                                                            >
-                                                                                ✕
-                                                                            </button>
-                                                                        </div>
-                                                                    ) : winner.is_paid ? (
-                                                                        <div className="flex items-center justify-end gap-1 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                                                                            <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                                                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                                            </svg>
-                                                                            Locked
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="flex items-center justify-end gap-2 text-[10px] text-emerald-500/80 font-bold uppercase tracking-widest bg-emerald-500/5 px-2 py-1 rounded-lg border border-emerald-500/20">
-                                                                            <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                                                                            Pushed to Finance
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </CardContent>
                                 </Card>
 
-                                {/* Prize Settlement Ledger */}
+                                {/* Prize Settlement Ledger - Moved here as read-only audit */}
                                 <Card variant="glass" className="mt-8">
                                     <CardHeader>
                                         <div className="flex items-center justify-between">
@@ -775,7 +412,298 @@ export default function AdminReports() {
                             </div>
                         )}
 
-                        {/* SUBSCRIPTIONS TAB */}
+                        {/* CHARITY DONATIONS TAB */}
+                        {activeTab === 'charities' && (
+                            <div className="space-y-8">
+                                {/* Section 1: Charity Winner-Led Distribution Audit */}
+                                <Card variant="glass">
+                                    <CardHeader>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h2 className="text-lg font-bold text-white uppercase tracking-wider">1. Winner-Led Distribution Audit Hub</h2>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Audit Trail of Player Prize Contributions</p>
+                                                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-black border border-emerald-500/20">
+                                                        TOTAL PENDING: {formatCurrency(stats?.winnerLedPending)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest">Distributed Ledger</span>
+                                        </div>
+                                    </CardHeader>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-[0.15em] text-zinc-500 font-black">
+                                                    <th className="px-6 py-4">Beneficiary Charity</th>
+                                                    <th className="px-6 py-4">Contribution Source</th>
+                                                    <th className="px-6 py-4 text-center">Status</th>
+                                                    <th className="px-6 py-4 text-right">Total Fund Amount</th>
+                                                    <th className="px-6 py-4 text-right">Reference</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-800/50">
+                                                {charityData.filter(c => c.winner_led_detail?.length > 0).length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="5" className="px-6 py-12 text-center text-zinc-500 italic">No winner-led distributions found in this report cycle.</td>
+                                                    </tr>
+                                                ) : charityData.filter(c => c.winner_led_detail?.length > 0).map(charity => (
+                                                    charity.winner_led_detail.map((record, rIdx) => (
+                                                        <tr key={`${charity.id}-${rIdx}`} className={`hover:bg-white/5 transition-colors text-xs ${record.status === 'paid' ? 'bg-emerald-500/[0.02]' : ''}`}>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-[10px]">🏢</div>
+                                                                    <span className="font-bold text-white uppercase tracking-tight">{charity.name}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">
+                                                                    {record.contribution_source}
+                                                                </div>
+                                                                <div className="text-[9px] text-zinc-600 uppercase mt-0.5">Draw: {record.draw_name}</div>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-center">
+                                                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase transition-all ${record.status === 'paid'
+                                                                    ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                                                    : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                                                                    }`}>
+                                                                    {record.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right font-black text-white">
+                                                                {formatCurrency(record.amount)}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right text-zinc-500 font-mono text-[9px]">
+                                                                {record.payout_ref || '--'}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </Card>
+
+                                <Card variant="glass">
+                                    <CardHeader>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h2 className="text-lg font-bold uppercase tracking-wider" style={{ color: 'var(--color-pink-100)' }}>
+                                                    2. Direct Donation Comprehensive Audit
+                                                </h2>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Unified Ledger of All Individual Contributions & Settlements</p>
+                                                    <span className="text-[10px] px-2 py-0.5 rounded bg-pink-500/10 text-pink-500 font-black border border-pink-500/20">
+                                                        TOTAL SETTLED: {formatCurrency(stats?.totalDirectPaid)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[10px] text-pink-500 font-black uppercase tracking-[0.2em]">Source of Truth</span>
+                                                <Button variant="ghost" size="sm" onClick={() => handleExport('charity_direct')} className="h-8 text-[10px] font-black uppercase border border-white/5">
+                                                    Export Hub
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="space-y-12">
+                                            {charityData.filter(c => c.direct_gifts_detail?.length > 0).length === 0 ? (
+                                                <p className="text-zinc-500 text-center py-12 italic border border-dashed border-zinc-800 rounded-3xl">No direct gifts found in this audit cycle.</p>
+                                            ) : (
+                                                charityData.filter(c => c.direct_gifts_detail?.length > 0).map(charity => (
+                                                    <div key={charity.id} className="space-y-4">
+                                                        <div className="flex items-center justify-between px-5 bg-gradient-to-r from-zinc-900 to-black p-4 rounded-2xl border border-white/5 shadow-xl">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="w-10 h-10 rounded-xl bg-pink-500/10 flex items-center justify-center text-xl">🎁</div>
+                                                                <div>
+                                                                    <h3 className="font-black text-white text-base uppercase tracking-tight">{charity.name}</h3>
+                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                        <span className="w-1.5 h-1.5 rounded-full bg-pink-500"></span>
+                                                                        <p className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em]">Direct Gift Donor Ledger</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest block mb-1">TOTAL DIRECT GIFTS RECEIVED</span>
+                                                                <span className="text-2xl font-black text-pink-400 leading-none">{formatCurrency(charity.direct_donations)}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="overflow-hidden rounded-3xl border border-white/5 bg-zinc-900/20 backdrop-blur-sm">
+                                                            <table className="w-full text-left text-xs">
+                                                                <thead>
+                                                                    <tr className="bg-white/[0.02] text-[9px] uppercase tracking-[0.25em] text-zinc-500 font-black">
+                                                                        <th className="px-8 py-5">Donor / Beneficiary</th>
+                                                                        <th className="px-6 py-5 text-center">Contribution Date</th>
+                                                                        <th className="px-6 py-5 text-center">Payout Status</th>
+                                                                        <th className="px-6 py-5 text-right">Stripe Reference</th>
+                                                                        <th className="px-8 py-5 text-right">Amount</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-white/[0.03]">
+                                                                    {charity.direct_gifts_detail.map((gift, idx) => (
+                                                                        <tr key={idx} className="group hover:bg-white/[0.03] transition-all duration-300">
+                                                                            <td className="px-8 py-5">
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="font-black text-zinc-100 group-hover:text-white transition-colors uppercase tracking-tight">{gift.donor}</span>
+                                                                                    <span className="text-[10px] text-zinc-600 font-mono mt-0.5">{gift.email || 'Portal Record'}</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-6 py-5 text-center text-zinc-400 font-medium">
+                                                                                {new Date(gift.date).toLocaleDateString()}
+                                                                            </td>
+                                                                            <td className="px-6 py-5 text-center">
+                                                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${gift.status === 'paid'
+                                                                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                                                                                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                                                                    }`}>
+                                                                                    {gift.status}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-6 py-5 text-right">
+                                                                                <span className="font-mono text-[9px] text-zinc-600 group-hover:text-zinc-400 transition-colors">
+                                                                                    {gift.payout_ref || '--'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-8 py-5 text-right">
+                                                                                <span className={`text-sm font-black transition-colors ${gift.status === 'paid' ? 'text-white' : 'text-zinc-500'}`}>
+                                                                                    {formatCurrency(gift.amount)}
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Global Stats Footer */}
+                                <div className="mt-8 p-6 rounded-2xl border border-zinc-800" style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
+                                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                                        <div className="flex flex-col">
+                                            <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Total Community Impact</span>
+                                            <span className="text-4xl font-black text-white mt-1">
+                                                {formatCurrency(charityData?.reduce((sum, c) => sum + (c.total_raised || 0), 0) || 0)}
+                                            </span>
+                                        </div>
+                                        <div className="text-left md:text-right">
+                                            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Supporters</div>
+                                            <div className="text-xl font-bold text-white">
+                                                {charityData?.reduce((sum, c) => sum + (c.supporter_count || 0), 0)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* WINNERS HUB TAB */}
+                        {activeTab === 'winners' && (
+                            <Card variant="glass">
+                                <CardHeader>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h2 className="text-lg font-bold text-white uppercase tracking-wider">Comprehensive Winner Ledger</h2>
+                                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black mt-1">Audit trail of all prize distributions and verification statuses</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <Button variant="ghost" size="sm" onClick={() => handleExport('winners')} className="h-8 text-[10px] font-black uppercase border border-white/5">
+                                                Export Winner Data
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-[0.15em] text-zinc-500 font-black">
+                                                <th className="px-6 py-5">Winner Profile</th>
+                                                <th className="px-6 py-5 text-center">Draw Period</th>
+                                                <th className="px-4 py-5 text-center">Pool</th>
+                                                <th className="px-4 py-5 text-right">Gross Prize</th>
+                                                <th className="px-4 py-5 text-right">Charity (10%)</th>
+                                                <th className="px-4 py-5 text-right">Paid (Net)</th>
+                                                <th className="px-6 py-5 text-center">Status</th>
+                                                <th className="px-6 py-5 text-center">Receipt</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-zinc-800/50">
+                                            {winnersData.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="7" className="px-6 py-12 text-center text-zinc-500 italic">No winner records found for this period.</td>
+                                                </tr>
+                                            ) : (
+                                                winnersData.map((winner, idx) => (
+                                                    <tr key={winner.id || idx} className="group hover:bg-white/[0.03] transition-all text-xs">
+                                                        <td className="px-6 py-5">
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold text-zinc-100 uppercase tracking-tight">{winner.profiles?.full_name || 'Anonymous'}</span>
+                                                                <span className="text-[9px] text-zinc-600 font-mono mt-0.5">{winner.profiles?.email || 'System Record'}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-5 text-center text-zinc-400 font-bold uppercase">
+                                                            {winner.draws?.month_year || 'N/A'}
+                                                        </td>
+                                                        <td className="px-6 py-5 text-center">
+                                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${winner.tier === 1 ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                                                                winner.tier === 2 ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20' :
+                                                                    'bg-teal-500/10 text-teal-400 border border-teal-500/20'
+                                                                }`}>
+                                                                {winner.tier === 1 ? '5M Jackpot' : winner.tier === 2 ? '4M Pool' : '3M Pool'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-5 text-right font-bold text-zinc-300">
+                                                            {formatCurrency(winner.gross_prize)}
+                                                        </td>
+                                                        <td className="px-4 py-5 text-right">
+                                                            <div className="flex flex-col items-end">
+                                                                <span className="text-[10px] text-zinc-300 font-bold uppercase truncate max-w-[100px] mb-1">{winner.charities?.name || 'Charity'}</span>
+                                                                <span className="text-[10px] text-rose-500 font-black">-{formatCurrency(winner.charity_amount)}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-5 text-right font-black text-emerald-400">
+                                                            {formatCurrency(winner.net_payout)}
+                                                        </td>
+                                                        <td className="px-6 py-5 text-center">
+                                                            <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${winner.is_paid
+                                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)]'
+                                                                : winner.verification_status === 'verified'
+                                                                    ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                                                    : 'bg-zinc-800 text-zinc-500 border-zinc-700'
+                                                                }`}>
+                                                                {winner.is_paid ? 'PAID' : (winner.verification_status || 'PENDING')}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-5 text-center">
+                                                            {winner.is_paid ? (
+                                                                <button
+                                                                    onClick={() => handleDownloadReceipt(winner)}
+                                                                    className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-all group/receipt"
+                                                                    title="Download Digital Receipt"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                    </svg>
+                                                                </button>
+                                                            ) : (
+                                                                <span className="text-[10px] text-zinc-600 font-black uppercase tracking-tighter">—</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
+                        )}
+
                         {activeTab === 'subscriptions' && (
                             <Card variant="glass">
                                 <CardHeader>
@@ -918,7 +846,7 @@ export default function AdminReports() {
                         )}
                     </motion.div>
                 </div>
-            </div >
-        </PageTransition >
+            </div>
+        </PageTransition>
     );
 }

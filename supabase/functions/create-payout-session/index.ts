@@ -72,8 +72,8 @@ serve(async (req: Request) => {
                 },
                 quantity: 1,
             }],
-            success_url: `${origin}/admin/draw?payout=success&entry=${entryId}`,
-            cancel_url: `${origin}/admin/draw?payout=canceled`,
+            success_url: `${origin}/admin/finance?payout=success&entry=${entryId}`,
+            cancel_url: `${origin}/admin/finance?payout=canceled`,
             metadata: {
                 type: 'payout_fulfillment',
                 entry_id: entryId,
