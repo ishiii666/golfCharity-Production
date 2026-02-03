@@ -45,101 +45,91 @@ Deno.serve(async (req) => {
             auth: { autoRefreshToken: false, persistSession: false }
         });
 
-        // Verify user token by decoding JWT
         const token = authHeader.replace('Bearer ', '');
-        const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+        const { data: { user: caller }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
-        console.log('User lookup result:', { userId: user?.id, email: user?.email, error: userError?.message });
-
-        if (userError || !user) {
-            console.error('User verification failed:', userError);
-            return new Response(
-                JSON.stringify({ error: 'Invalid user token: ' + (userError?.message || 'No user found') }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+        if (userError || !caller) {
+            return new Response(JSON.stringify({ error: 'Invalid user token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
-        const userId = user.id;
-        const userEmail = user.email;
-        console.log('=== DELETING USER ===', { userId, userEmail });
+        // Get request body
+        let targetUserId = caller.id;
+        try {
+            const body = await req.json();
+            if (body.targetUserId) {
+                // If a target user is specified, verify the caller is an admin
+                const { data: profile } = await supabaseAdmin
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', caller.id)
+                    .single();
 
-        // Step 1: Delete activity logs (Must happen before auth user deletion as it references auth.users)
-        console.log('Step 1: Deleting activity logs...');
-        const { error: logsError } = await supabaseAdmin
-            .from('activity_log')
-            .delete()
-            .eq('user_id', userId);
-        console.log('Activity logs deleted:', { error: logsError?.message });
+                if (profile?.role === 'admin') {
+                    targetUserId = body.targetUserId;
+                    console.log(`Admin ${caller.email} is deleting user ${targetUserId}`);
+                } else if (body.targetUserId !== caller.id) {
+                    return new Response(JSON.stringify({ error: 'Unauthorized: Only admins can delete other users' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                }
+            }
+        } catch (e) {
+            // No body or invalid JSON, default to deleting own account
+        }
+
+        console.log('=== DELETING USER ===', { targetUserId });
+
+        // Step 1: Delete activity logs
+        await supabaseAdmin.from('activity_log').delete().eq('user_id', targetUserId);
 
         // Step 2: Delete scores
-        console.log('Step 2: Deleting scores...');
-        const { error: scoresError } = await supabaseAdmin
-            .from('scores')
-            .delete()
-            .eq('user_id', userId);
-        console.log('Scores deleted:', { error: scoresError?.message });
+        await supabaseAdmin.from('scores').delete().eq('user_id', targetUserId);
 
-        // Step 3: Delete subscription record
-        console.log('Step 3: Deleting subscription...');
-        const { error: subError } = await supabaseAdmin
-            .from('subscriptions')
-            .delete()
-            .eq('user_id', userId);
-        console.log('Subscription deleted:', { error: subError?.message });
+        // Step 3: Delete subscription records
+        await supabaseAdmin.from('subscriptions').delete().eq('user_id', targetUserId);
 
-        // Step 4: Anonymize donations
-        console.log('Step 4: Anonymizing donations...');
-        const { error: donationError } = await supabaseAdmin
-            .from('donations')
-            .update({
-                user_id: null,
-                donor_name: 'Deleted User',
-                donor_email: null
-            })
-            .eq('user_id', userId);
-        console.log('Donations anonymized:', { error: donationError?.message });
+        // Step 4: Delete verification uploads (added)
+        await supabaseAdmin.from('verification_uploads').delete().eq('user_id', targetUserId);
+        await supabaseAdmin.from('verification_uploads').delete().eq('reviewed_by', targetUserId); // If they were an admin once
 
-        // Step 5: Delete profile
-        console.log('Step 5: Deleting profile...');
-        const { error: profileError } = await supabaseAdmin
-            .from('profiles')
-            .delete()
-            .eq('id', userId);
-        console.log('Profile deleted:', { error: profileError?.message });
+        // Step 5: Anonymize or Delete Payouts (added)
+        // We'll anonymize payouts to keep financial records accurate
+        await supabaseAdmin.from('payouts').update({ user_id: null, reference: '(Deleted User Record)' }).eq('user_id', targetUserId);
 
-        // Step 6: DELETE THE AUTH USER
-        console.log('Step 6: Deleting auth user...');
-        const { data: deleteData, error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        // Step 5b: Handle Charity Payouts references (added)
+        await supabaseAdmin.from('charity_payouts').update({ processed_by: null }).eq('processed_by', targetUserId);
 
-        console.log('Auth user deletion result:', {
-            success: !authDeleteError,
-            error: authDeleteError?.message,
-            data: deleteData
-        });
+        // Step 5c: Handle Draw Simulations (added)
+        await supabaseAdmin.from('draw_simulations').update({ run_by: null }).eq('run_by', targetUserId);
+
+        // Step 6: Delete Draw Entries (added)
+        await supabaseAdmin.from('draw_entries').delete().eq('user_id', targetUserId);
+
+        // Step 7: Anonymize donations
+        await supabaseAdmin.from('donations').update({
+            user_id: null,
+            donor_name: 'Deleted User',
+            donor_email: null
+        }).eq('user_id', targetUserId);
+
+        // Step 8: Delete profile
+        const { error: profileError } = await supabaseAdmin.from('profiles').delete().eq('id', targetUserId);
+        if (profileError) {
+            console.error('Profile deletion error:', profileError);
+            throw new Error(`Database error deleting user: ${profileError.message}`);
+        }
+
+        // Step 9: DELETE THE AUTH USER
+        const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(targetUserId);
 
         if (authDeleteError) {
-            console.error('CRITICAL: Failed to delete auth user:', authDeleteError);
+            console.error('Auth deletion error:', authDeleteError);
             throw new Error(`Failed to delete auth user: ${authDeleteError.message}`);
         }
 
-        console.log('=== USER COMPLETELY DELETED ===', { userId, userEmail });
-
-        return new Response(
-            JSON.stringify({
-                success: true,
-                message: 'Account completely deleted',
-                deletedUserId: userId,
-                deletedEmail: userEmail
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ success: true, message: 'Account completely deleted' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     } catch (error) {
         console.error('=== DELETE ACCOUNT ERROR ===', error);
-        return new Response(
-            JSON.stringify({ error: error.message || 'Unknown error occurred' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: error.message || 'Unknown error occurred' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 });
 

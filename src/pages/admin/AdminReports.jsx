@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '../../components/layout/PageTransition';
 import Card, { CardContent, CardHeader } from '../../components/ui/Card';
+import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import BackButton from '../../components/ui/BackButton';
 import { fadeUp, staggerContainer, staggerItem } from '../../utils/animations';
@@ -18,6 +19,7 @@ import {
     getCharityPayouts,
     getWinnerAuditReport,
     getWinnerProfileWithBanking,
+    getDrawWinnersExport,
     exportToCSV
 } from '../../lib/supabaseRest';
 
@@ -46,6 +48,15 @@ export default function AdminReports() {
     const [payoutHistory, setPayoutHistory] = useState([]); // Direct Gift Settlements
     const [playerHistory, setPlayerHistory] = useState([]); // Player Prize & Winner-Led Charity
     const [winnersData, setWinnersData] = useState([]);     // Full Winner Audit Report
+
+    // Expansion & Winner detail states
+    const [expandedDrawId, setExpandedDrawId] = useState(null);
+    const [drawWinnersList, setDrawWinnersList] = useState({});
+    const [isLoadingWinners, setIsLoadingWinners] = useState(false);
+    const [selectedWinner, setSelectedWinner] = useState(null);
+    const [payoutDetails, setPayoutDetails] = useState(null);
+    const [isFetchingPayout, setIsFetchingPayout] = useState(false);
+    const [isWinnerModalOpen, setIsWinnerModalOpen] = useState(false);
 
     // Fetch data on mount
     useEffect(() => {
@@ -109,6 +120,7 @@ export default function AdminReports() {
                 'Match Tier': winner.tier === 1 ? '5-Match Jackpot' : winner.tier === 2 ? '4-Match Pool' : '3-Match Pool',
                 'Gross Prize (AUD)': parseFloat(winner.gross_prize || 0).toFixed(2),
                 'Charity Donation (AUD)': parseFloat(winner.charity_amount || 0).toFixed(2),
+                'Charity Beneficiary': winner.charities?.name || 'N/A',
                 'Net Payout Amount (AUD)': parseFloat(winner.net_payout || 0).toFixed(2),
                 'Settlement Status': 'PAID',
                 'Payment Reference': winner.payout_ref || 'N/A',
@@ -170,9 +182,81 @@ export default function AdminReports() {
                     'Payout Ref': w.payout_ref || '--'
                 })), 'Winner_Audit_Report');
                 break;
+            case 'charity_supporters':
+                const supporterMatrix = [];
+                charityData.forEach(c => {
+                    (c.supporters || []).forEach(s => {
+                        supporterMatrix.push({
+                            'Charity': c.name,
+                            'Supporter Name': s.name,
+                            'Supporter Email': s.email,
+                            'Donation Percentage': `${s.percentage}%`
+                        });
+                    });
+                });
+                exportToCSV(supporterMatrix, 'Charity_Supporter_Matrix');
+                break;
             default:
                 console.warn('Unknown export type');
         }
+    };
+
+    const toggleExpandDraw = async (drawId) => {
+        if (expandedDrawId === drawId) {
+            setExpandedDrawId(null);
+            return;
+        }
+
+        setExpandedDrawId(drawId);
+
+        if (!drawWinnersList[drawId]) {
+            setIsLoadingWinners(true);
+            try {
+                const winners = await getDrawWinnersExport(drawId);
+                setDrawWinnersList(prev => ({ ...prev, [drawId]: winners }));
+            } catch (error) {
+                console.error('Error fetching winners:', error);
+            } finally {
+                setIsLoadingWinners(false);
+            }
+        }
+    };
+
+    const fetchPayoutDetails = async (winner) => {
+        const userId = winner.userId || winner.user_id;
+        if (!userId) return;
+        setIsFetchingPayout(true);
+        try {
+            const details = await getWinnerProfileWithBanking(userId);
+            setPayoutDetails(details);
+        } catch (error) {
+            console.warn('Failed to fetch banking details:', error);
+        } finally {
+            setIsFetchingPayout(false);
+        }
+    };
+
+    const handleDownloadStatement = (winner) => {
+        if (!winner) return;
+        const drawMonth = drawReports.find(d => d.id === expandedDrawId)?.month_year || 'Monthly Draw';
+
+        const receiptData = [{
+            'Transaction Type': 'Prize Settlement',
+            'Winner Name': winner['Name'] || winner.profiles?.full_name,
+            'Winner Email': winner['Email'] || winner.profiles?.email,
+            'Draw Cycle': drawMonth,
+            'Match Tier': winner['Match Tier'] || `${winner.tier}-Match`,
+            'Gross Prize (AUD)': (winner['Gross Prize'] || winner.gross_prize).toFixed(2),
+            'Charity Donation (AUD)': (winner['Charity Donation'] || winner.charity_amount).toFixed(2),
+            'Charity Beneficiary': winner['Charity Name'] || winner.charities?.name || 'Assigned Charity',
+            'Net Payout Amount (AUD)': (winner['Net Payout'] || winner.net_payout).toFixed(2),
+            'Settlement Status': (winner.isPaid || winner.is_paid) ? 'PAID' : 'PENDING',
+            'Payment Reference': winner.paymentReference || winner.payout_ref || 'N/A',
+            'Bank Name': payoutDetails?.bank_name || 'N/A',
+            'Account Holder': payoutDetails?.full_name || 'N/A'
+        }];
+
+        exportToCSV(receiptData, `Receipt_${(winner['Name'] || winner.profiles?.full_name).replace(/\s+/g, '_')}_${drawMonth.replace(/\s+/g, '_')}`);
     };
 
     const formatCurrency = (value) => `$${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -309,105 +393,128 @@ export default function AdminReports() {
                                             <p className="text-zinc-400 text-center py-8">No draw data yet</p>
                                         ) : (
                                             <div className="space-y-4">
-                                                {drawReports.map(draw => (
-                                                    <div key={draw.id} className="p-4 rounded-xl bg-zinc-800/50">
-                                                        <div className="flex items-center justify-between mb-3">
-                                                            <h3 className="font-semibold text-white">{draw.month_year}</h3>
-                                                            <span className={`px-2 py-1 rounded text-xs ${draw.status === 'published' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
-                                                                }`}>
-                                                                {draw.status}
-                                                            </span>
+                                                {drawReports.map(draw => {
+                                                    const isExpanded = expandedDrawId === draw.id;
+                                                    const winners = drawWinnersList[draw.id] || [];
+                                                    return (
+                                                        <div key={draw.id} className={`rounded-2xl transition-all duration-300 ${isExpanded ? 'bg-zinc-800/80 border border-zinc-700/50 p-2' : 'bg-zinc-800/50'}`}>
+                                                            <div
+                                                                className="p-4 flex items-center justify-between cursor-pointer group"
+                                                                onClick={() => toggleExpandDraw(draw.id)}
+                                                            >
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className="w-12 h-12 rounded-xl bg-zinc-900 flex flex-col items-center justify-center border border-zinc-700">
+                                                                        <span className="text-[8px] font-black text-zinc-500 uppercase leading-none mb-1">{draw.month_year.split(' ')[1]}</span>
+                                                                        <span className="text-sm font-black text-white leading-none uppercase">{draw.month_year.split(' ')[0].slice(0, 3)}</span>
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="flex items-center gap-3 mb-1">
+                                                                            <h3 className="font-bold text-white text-base">{draw.month_year}</h3>
+                                                                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-widest ${draw.status === 'published' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                                                                                {draw.status}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-3 text-[10px] font-bold text-zinc-500 uppercase tracking-tight">
+                                                                            <span>{draw.participants_count || 0} Players</span>
+                                                                            <span className="w-1 h-1 rounded-full bg-zinc-700" />
+                                                                            <span className="text-zinc-400">{(draw.tier1_winners || 0) + (draw.tier2_winners || 0) + (draw.tier3_winners || 0)} Winners</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex items-center gap-6">
+                                                                    <div className="hidden lg:flex gap-1.5 bg-black/20 p-2 rounded-lg border border-zinc-700/50">
+                                                                        {draw.winning_numbers?.map((num, i) => (
+                                                                            <span key={i} className="w-7 h-7 rounded-md bg-zinc-800 flex items-center justify-center text-[10px] font-black text-amber-500 border border-zinc-700">
+                                                                                {num}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <p className="text-lg font-black text-emerald-400 leading-none mb-1">{formatCurrency(draw.prize_pool)}</p>
+                                                                        <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest">Total Prize Pool</p>
+                                                                    </div>
+                                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all ${isExpanded ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-zinc-900 border-zinc-700 text-zinc-500 group-hover:text-zinc-300'}`}>
+                                                                        <svg className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+                                                                        </svg>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <AnimatePresence>
+                                                                {isExpanded && (
+                                                                    <motion.div
+                                                                        initial={{ height: 0, opacity: 0 }}
+                                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                                        exit={{ height: 0, opacity: 0 }}
+                                                                        className="overflow-hidden bg-black/20 rounded-xl"
+                                                                    >
+                                                                        <div className="p-4 border-t border-zinc-700/50">
+                                                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 px-2">
+                                                                                <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Winner Distribution Audit</h5>
+                                                                                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                                                                                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Draw Charity Impact:</span>
+                                                                                    <span className="text-[10px] text-emerald-400 font-black">{formatCurrency(draw.total_charity)}</span>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {isLoadingWinners && winners.length === 0 ? (
+                                                                                <div className="py-8 text-center text-[10px] font-black uppercase text-zinc-600 tracking-widest animate-pulse">Syncing Winner Records...</div>
+                                                                            ) : winners.length === 0 ? (
+                                                                                <div className="py-8 text-center text-zinc-600 text-[10px] font-bold uppercase italic">No winners recorded for this cycle.</div>
+                                                                            ) : (
+                                                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                                                    {winners.map((winner, idx) => (
+                                                                                        <div
+                                                                                            key={idx}
+                                                                                            onClick={() => {
+                                                                                                setSelectedWinner(winner);
+                                                                                                setIsWinnerModalOpen(true);
+                                                                                                fetchPayoutDetails(winner);
+                                                                                            }}
+                                                                                            className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/50 border border-zinc-700/30 cursor-pointer hover:border-emerald-500/30 hover:bg-zinc-800 transition-all group"
+                                                                                        >
+                                                                                            <div className="flex items-center gap-3">
+                                                                                                <div className={`w-1 h-10 rounded-full ${winner['Match Tier']?.includes('5') ? 'bg-amber-500' : winner['Match Tier']?.includes('4') ? 'bg-violet-500' : 'bg-teal-500'}`} />
+                                                                                                <div className="flex flex-col">
+                                                                                                    <p className="text-xs font-bold text-white uppercase tracking-tight group-hover:text-emerald-400 transition-colors leading-tight mb-0.5">{winner['Name']}</p>
+                                                                                                    <p className="text-[9px] text-zinc-500 font-mono truncate max-w-[120px] leading-none mb-1">{winner['Email']}</p>
+                                                                                                    <p className="text-[8px] text-zinc-400 font-black uppercase tracking-widest leading-none truncate max-w-[120px]">
+                                                                                                        {winner['Charity Name'] || 'Assigned Charity'}
+                                                                                                    </p>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className="text-right">
+                                                                                                <p className="text-xs font-black text-emerald-400 leading-none mb-1">{formatCurrency(winner['Net Payout'])}</p>
+                                                                                                <div className="flex flex-col items-end gap-0.5">
+                                                                                                    <p className="text-[8px] text-rose-500 font-black leading-none italic uppercase tracking-tighter">
+                                                                                                        +{formatCurrency(winner['Charity Donation'])} Gift
+                                                                                                    </p>
+                                                                                                    <div className="flex items-center gap-1.5">
+                                                                                                        <span className={`text-[8px] font-black uppercase tracking-widest px-1 rounded bg-zinc-800 ${winner['Match Tier']?.includes('5') ? 'text-amber-500' : winner['Match Tier']?.includes('4') ? 'text-violet-400' : 'text-teal-400'}`}>
+                                                                                                            {winner['Match Tier']?.split('-')[0]} Match
+                                                                                                        </span>
+                                                                                                        <span className={`text-[8px] font-black uppercase tracking-widest ${winner.isPaid ? 'text-emerald-500' : 'text-zinc-600'}`}>
+                                                                                                            {winner.isPaid ? 'PAID' : 'PENDING'}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
                                                         </div>
-                                                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
-                                                            <div>
-                                                                <p className="text-zinc-500">5-Match</p>
-                                                                <p className="text-amber-400 font-semibold">{draw.tier1_winners || 0}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-zinc-500">4-Match</p>
-                                                                <p className="text-violet-400 font-semibold">{draw.tier2_winners || 0}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-zinc-500">3-Match</p>
-                                                                <p className="text-teal-400 font-semibold">{draw.tier3_winners || 0}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-zinc-500">Prize Pool</p>
-                                                                <p className="text-green-400 font-semibold">{formatCurrency(draw.prize_pool)}</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-zinc-500">To Charity</p>
-                                                                <p className="text-pink-400 font-semibold">{formatCurrency(draw.total_charity)}</p>
-                                                            </div>
-                                                        </div>
-                                                        {draw.winning_numbers && (
-                                                            <div className="mt-3 flex gap-2">
-                                                                {draw.winning_numbers.map((num, i) => (
-                                                                    <span key={i} className="w-8 h-8 rounded-lg bg-zinc-700 flex items-center justify-center text-sm font-bold text-amber-400">
-                                                                        {num}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </CardContent>
-                                </Card>
-
-                                {/* Prize Settlement Ledger - Moved here as read-only audit */}
-                                <Card variant="glass" className="mt-8">
-                                    <CardHeader>
-                                        <div className="flex items-center justify-between">
-                                            <h2 className="text-lg font-bold text-white uppercase tracking-wider">Settled Prize History</h2>
-                                            <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest">Winner Payouts</span>
-                                        </div>
-                                    </CardHeader>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left">
-                                            <thead>
-                                                <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-widest text-zinc-500">
-                                                    <th className="px-6 py-4">Paid Date</th>
-                                                    <th className="px-6 py-4">Winner</th>
-                                                    <th className="px-6 py-4">Tier</th>
-                                                    <th className="px-6 py-4">Draw</th>
-                                                    <th className="px-6 py-4">Amount</th>
-                                                    <th className="px-6 py-4">Ref</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-zinc-800/50">
-                                                {playerHistory.filter(w => !w.isCharity).length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan="6" className="px-6 py-12 text-center text-zinc-500 italic">No prize settlement records found.</td>
-                                                    </tr>
-                                                ) : playerHistory.filter(w => !w.isCharity).slice(0, 10).map(winner => (
-                                                    <tr key={winner.id} className="hover:bg-white/5 transition-colors text-xs">
-                                                        <td className="px-6 py-4 text-zinc-400">
-                                                            {winner.paid_at ? new Date(winner.paid_at).toLocaleDateString() : 'N/A'}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="font-bold text-white">{winner.profiles?.full_name}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="text-[10px] text-zinc-500 uppercase tracking-tighter">
-                                                                {winner.tier}-match
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-zinc-300">
-                                                            {winner.draws?.month_year}
-                                                        </td>
-                                                        <td className="px-6 py-4 font-black text-emerald-400">
-                                                            {formatCurrency(winner.net_payout)}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-zinc-500 font-mono text-[10px]">
-                                                            {winner.payment_reference || winner.payout_ref || '--'}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
                                 </Card>
                             </div>
                         )}
@@ -451,8 +558,19 @@ export default function AdminReports() {
                                                     charity.winner_led_detail.map((record, rIdx) => (
                                                         <tr key={`${charity.id}-${rIdx}`} className={`hover:bg-white/5 transition-colors text-xs ${record.status === 'paid' ? 'bg-emerald-500/[0.02]' : ''}`}>
                                                             <td className="px-6 py-4">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="w-6 h-6 rounded bg-zinc-800 flex items-center justify-center text-[10px]">🏢</div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0">
+                                                                        <img
+                                                                            src={charity.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
+                                                                            alt={charity.name}
+                                                                            className="w-full h-full object-cover"
+                                                                            referrerPolicy="no-referrer"
+                                                                            onError={(e) => {
+                                                                                e.target.onerror = null;
+                                                                                e.target.src = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+                                                                            }}
+                                                                        />
+                                                                    </div>
                                                                     <span className="font-bold text-white uppercase tracking-tight">{charity.name}</span>
                                                                 </div>
                                                             </td>
@@ -515,7 +633,18 @@ export default function AdminReports() {
                                                     <div key={charity.id} className="space-y-4">
                                                         <div className="flex items-center justify-between px-5 bg-gradient-to-r from-zinc-900 to-black p-4 rounded-2xl border border-white/5 shadow-xl">
                                                             <div className="flex items-center gap-4">
-                                                                <div className="w-10 h-10 rounded-xl bg-pink-500/10 flex items-center justify-center text-xl">🎁</div>
+                                                                <div className="w-10 h-10 rounded-xl bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0">
+                                                                    <img
+                                                                        src={charity.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
+                                                                        alt={charity.name}
+                                                                        className="w-full h-full object-cover"
+                                                                        referrerPolicy="no-referrer"
+                                                                        onError={(e) => {
+                                                                            e.target.onerror = null;
+                                                                            e.target.src = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+                                                                        }}
+                                                                    />
+                                                                </div>
                                                                 <div>
                                                                     <h3 className="font-black text-white text-base uppercase tracking-tight">{charity.name}</h3>
                                                                     <div className="flex items-center gap-2 mt-0.5">
@@ -563,7 +692,7 @@ export default function AdminReports() {
                                                                             </td>
                                                                             <td className="px-6 py-5 text-right">
                                                                                 <span className="font-mono text-[9px] text-zinc-600 group-hover:text-zinc-400 transition-colors">
-                                                                                    {gift.payout_ref || '--'}
+                                                                                    {gift.stripe_ref || gift.payout_ref || '--'}
                                                                                 </span>
                                                                             </td>
                                                                             <td className="px-8 py-5 text-right">
@@ -581,6 +710,117 @@ export default function AdminReports() {
                                             )}
                                         </div>
                                     </CardContent>
+                                </Card>
+
+                                {/* Section 3: Active Impact Base & Supporter Preferences */}
+                                <Card variant="glass">
+                                    <CardHeader>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h2 className="text-lg font-bold text-white uppercase tracking-wider">3. Active Supporter Impact Preferences</h2>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Live Supporter Matrix & Donation Commitment Ratios</p>
+                                                    <span className="text-[10px] px-2 py-0.5 rounded bg-teal-500/10 text-teal-500 font-black border border-teal-500/20">
+                                                        COMMUNITY AUDIT
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[10px] text-teal-500 font-black uppercase tracking-[0.2em]">Engagement Hub</span>
+                                                <Button variant="ghost" size="sm" onClick={() => handleExport('charity_supporters')} className="h-8 text-[10px] font-black uppercase border border-white/5">
+                                                    Export Roster
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="border-b border-zinc-700/50 text-[10px] uppercase tracking-[0.15em] text-zinc-500 font-black">
+                                                    <th className="px-6 py-4">Beneficiary Charity</th>
+                                                    <th className="px-6 py-4 text-center">Active Base</th>
+                                                    <th className="px-6 py-4">Supporter Roster (Sample)</th>
+                                                    <th className="px-6 py-4 text-right">Impact Commitment</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-800/50">
+                                                {charityData.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="4" className="px-6 py-12 text-center text-zinc-500 italic">No charity engagement data available.</td>
+                                                    </tr>
+                                                ) : charityData.map(charity => (
+                                                    <tr key={charity.id} className="hover:bg-white/[0.02] transition-colors group text-xs">
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0">
+                                                                    <img
+                                                                        src={charity.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
+                                                                        alt={charity.name}
+                                                                        className="w-full h-full object-cover"
+                                                                        referrerPolicy="no-referrer"
+                                                                        onError={(e) => {
+                                                                            e.target.onerror = null;
+                                                                            e.target.src = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                                <span className="font-bold text-white uppercase tracking-tight">{charity.name}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <div className="flex flex-col items-center">
+                                                                <span className="text-base font-black text-white leading-none">{charity.supporter_count}</span>
+                                                                <span className="text-[8px] text-zinc-500 font-black uppercase mt-1">Supporters</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-col gap-2 max-w-[250px]">
+                                                                {charity.supporters && charity.supporters.length > 0 ? (
+                                                                    <>
+                                                                        {charity.supporters.slice(0, 2).map((supporter, sIdx) => (
+                                                                            <div key={sIdx} className="flex flex-col">
+                                                                                <span className="text-[10px] text-zinc-300 font-bold uppercase tracking-tight truncate leading-none mb-0.5">
+                                                                                    {supporter.name}
+                                                                                </span>
+                                                                                <span className="text-[8px] text-zinc-600 font-mono truncate">{supporter.email}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                        {charity.supporters.length > 2 && (
+                                                                            <span className="text-[9px] text-zinc-500 font-black italic uppercase tracking-tighter">
+                                                                                + {charity.supporters.length - 2} more community members
+                                                                            </span>
+                                                                        )}
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-[9px] text-zinc-700 italic uppercase font-bold tracking-widest">No Active Connections</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex flex-col items-end gap-2">
+                                                                {charity.supporters && charity.supporters.length > 0 ? (
+                                                                    charity.supporters.slice(0, 2).map((supporter, sIdx) => (
+                                                                        <div key={sIdx} className="flex items-center gap-2">
+                                                                            <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                                                                <motion.div
+                                                                                    initial={{ width: 0 }}
+                                                                                    animate={{ width: `${supporter.percentage}%` }}
+                                                                                    className="h-full bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.3)]"
+                                                                                />
+                                                                            </div>
+                                                                            <span className="text-[10px] font-black text-teal-400">{supporter.percentage}%</span>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <span className="text-[9px] text-zinc-700 font-black uppercase tracking-widest">0% Allocation</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </Card>
 
                                 {/* Global Stats Footer */}
@@ -663,7 +903,21 @@ export default function AdminReports() {
                                                         </td>
                                                         <td className="px-4 py-5 text-right">
                                                             <div className="flex flex-col items-end">
-                                                                <span className="text-[10px] text-zinc-300 font-bold uppercase truncate max-w-[100px] mb-1">{winner.charities?.name || 'Charity'}</span>
+                                                                <div className="flex items-center gap-1.5 mb-1">
+                                                                    <div className="w-4 h-4 rounded-sm bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0">
+                                                                        <img
+                                                                            src={winner.charities?.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
+                                                                            alt={winner.charities?.name}
+                                                                            className="w-full h-full object-cover"
+                                                                            referrerPolicy="no-referrer"
+                                                                            onError={(e) => {
+                                                                                e.target.onerror = null;
+                                                                                e.target.src = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                    <span className="text-[10px] text-zinc-300 font-bold uppercase truncate max-w-[100px]">{winner.charities?.name || 'Charity'}</span>
+                                                                </div>
                                                                 <span className="text-[10px] text-rose-500 font-black">-{formatCurrency(winner.charity_amount)}</span>
                                                             </div>
                                                         </td>
@@ -734,7 +988,7 @@ export default function AdminReports() {
                                         <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
                                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Monthly Platform Revenue</p>
                                             <p className="text-2xl font-black text-white">{formatCurrency(subscriptionData.platformRevenue)}</p>
-                                            <p className="text-[10px] text-zinc-500 mt-1 italic">$4.00 per active subscriber</p>
+                                            <p className="text-[10px] text-zinc-500 mt-1 italic">Based on plan mix</p>
                                         </div>
                                         <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
                                             <p className="text-[10px] text-emerald-500 uppercase tracking-widest mb-1">Prize Pool Contribution</p>
@@ -847,6 +1101,173 @@ export default function AdminReports() {
                     </motion.div>
                 </div>
             </div>
+
+            {/* Winner Settlement Archive Modal */}
+            {selectedWinner && (
+                <Modal
+                    isOpen={isWinnerModalOpen}
+                    onClose={() => { setIsWinnerModalOpen(false); setSelectedWinner(null); setPayoutDetails(null); }}
+                    title="Settlement Archive"
+                    size="lg"
+                >
+                    <div className="flex flex-col lg:flex-row gap-8 pb-10" data-lenis-prevent="true">
+                        {/* LEFT: Structural Receipt */}
+                        <div className="flex-1 lg:max-w-[400px]">
+                            <div className="bg-[#f8f9fa] dark:bg-white text-zinc-950 p-8 rounded-lg shadow-2xl relative overflow-hidden flex flex-col font-mono" style={{ boxShadow: '0 30px 60px -12px rgba(0,0,0,0.5)' }}>
+                                <div className="text-center space-y-2 mb-6 border-b border-dashed border-zinc-300 pb-6">
+                                    <h3 className="text-2xl font-black tracking-tighter uppercase">GOLFCHARITY.</h3>
+                                    <p className="text-[10px] uppercase font-bold tracking-widest opacity-60">Digital Settlement Receipt</p>
+                                    <div className="flex justify-center gap-1 mt-2">
+                                        {[...Array(30)].map((_, i) => <div key={i} className="w-1 h-0.5 bg-zinc-950/10" />)}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 text-xs">
+                                    <div className="flex justify-between border-b border-zinc-100 pb-2">
+                                        <span className="opacity-50 uppercase font-bold text-[9px]">Transaction Access</span>
+                                        <span className="font-bold">STRIPE_ESCROW_API</span>
+                                    </div>
+                                    <div className="flex justify-between border-b border-zinc-100 pb-2">
+                                        <span className="opacity-50 uppercase font-bold text-[9px]">Internal Audit ID</span>
+                                        <span className="font-bold">#WIN_{(selectedWinner.id || 'N/A').slice(0, 8).toUpperCase()}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b border-zinc-100 pb-2">
+                                        <span className="opacity-50 uppercase font-bold text-[9px]">Cycle Period</span>
+                                        <span className="font-bold">{drawReports.find(d => d.id === expandedDrawId)?.month_year || 'Historical'}</span>
+                                    </div>
+
+                                    <div className="pt-4 pb-2">
+                                        <p className="opacity-50 uppercase font-bold text-[9px] mb-1">Beneficiary Account</p>
+                                        <p className="font-black text-lg uppercase tracking-tight">{selectedWinner['Name'] || selectedWinner.profiles?.full_name}</p>
+                                        <p className="text-[10px] opacity-60 font-bold tracking-tight">{selectedWinner['Email'] || selectedWinner.profiles?.email}</p>
+                                    </div>
+
+                                    <div className="py-4 border-y border-dashed border-zinc-300 space-y-3">
+                                        <div className="flex justify-between">
+                                            <span className="opacity-60">Gross Prize Pool ({selectedWinner['Match Tier'] || `${selectedWinner.tier}-Match`})</span>
+                                            <span className="font-bold">{formatCurrency(selectedWinner['Gross Prize'] || selectedWinner.gross_prize)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-rose-600">
+                                            <span className="opacity-60">Charity Contribution (10%)</span>
+                                            <span className="font-bold">-{formatCurrency(selectedWinner['Charity Donation'] || selectedWinner.charity_amount)}</span>
+                                        </div>
+                                        <div className="text-[9px] text-rose-600/60 font-black uppercase text-right leading-none -mt-2">
+                                            Beneficiary: {selectedWinner['Charity Name'] || selectedWinner.charities?.name || 'Assigned Charity'}
+                                        </div>
+                                        <div className="flex justify-between font-black text-xl pt-2 border-t border-zinc-100 mt-2">
+                                            <span className="uppercase">Net Payable</span>
+                                            <span className="text-emerald-700">{formatCurrency(selectedWinner['Net Payout'] || selectedWinner.net_payout)}</span>
+                                        </div>
+                                    </div>
+
+                                    {(selectedWinner.paymentReference || selectedWinner.payout_ref) && (
+                                        <div className="bg-zinc-100 p-4 rounded text-[10px] space-y-1">
+                                            <p className="opacity-50 uppercase font-black tracking-widest text-[8px]">External Reference</p>
+                                            <p className="break-all font-bold font-mono">{selectedWinner.paymentReference || selectedWinner.payout_ref}</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-8 flex flex-col items-center gap-2 opacity-30">
+                                    <div className="h-10 w-full flex items-end gap-0.5 px-2">
+                                        {[...Array(40)].map((_, i) => (
+                                            <div key={i} className="bg-zinc-950 flex-1" style={{ height: `${Math.random() * 100}%`, minWidth: '1px' }} />
+                                        ))}
+                                    </div>
+                                    <p className="text-[8px] uppercase tracking-[0.4em] font-black">Authorized via central ledger</p>
+                                </div>
+
+                                <div className="absolute bottom-0 left-0 right-0 flex justify-between px-0 overflow-hidden">
+                                    {[...Array(20)].map((_, i) => (
+                                        <div key={i} className="w-4 h-4 bg-zinc-950 rotate-45 translate-y-2 shrink-0 shadow-inner" />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RIGHT: Admin Actions */}
+                        <div className="flex-1 flex flex-col justify-between">
+                            <div className="space-y-6">
+                                <div className="space-y-1">
+                                    <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.3em]">Operational Status</h4>
+                                    <div className={`p-6 rounded-3xl border transition-all duration-500 flex items-center justify-between ${(selectedWinner.isPaid || selectedWinner.is_paid) ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-amber-500/5 border-amber-500/20'}`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${(selectedWinner.isPaid || selectedWinner.is_paid) ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-500'}`}>
+                                                {(selectedWinner.isPaid || selectedWinner.is_paid) ? (
+                                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                                ) : (
+                                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{selectedWinner['Match Tier'] || `${selectedWinner.tier}-Match`} Fulfillment</p>
+                                                <p className={`text-2xl font-black uppercase tracking-tighter ${(selectedWinner.isPaid || selectedWinner.is_paid) ? 'text-emerald-400' : 'text-amber-500'}`}>
+                                                    {(selectedWinner.isPaid || selectedWinner.is_paid) ? 'Paid & Settled' : 'Verified Claim'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-8 rounded-[2.5rem] bg-white/[0.02] border border-white/5 space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Banking Target</h4>
+                                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-[9px] font-black text-zinc-400 uppercase tracking-widest">AU Domestic</span>
+                                    </div>
+
+                                    {payoutDetails ? (
+                                        <div className="grid grid-cols-2 gap-y-8">
+                                            <div>
+                                                <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Institution</p>
+                                                <p className="text-sm font-black text-white uppercase">{payoutDetails.bank_name || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">BSB Number</p>
+                                                <p className="text-sm font-black text-white font-mono">{payoutDetails.bsb_number || '---'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Account No.</p>
+                                                <p className="text-sm font-black text-white font-mono">{payoutDetails.account_number || '---'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Settlement Ref</p>
+                                                <p className="text-sm font-black text-emerald-400 font-mono tracking-tighter truncate uppercase italic">GOLF_{(selectedWinner.id || 'N/A').slice(0, 8)}</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="py-10 text-center">
+                                            <div className="w-8 h-8 mx-auto mb-4 border-2 border-zinc-800 border-t-zinc-600 rounded-full animate-spin" />
+                                            <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest">Accessing secure credentials...</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Actions Area */}
+                            <div className="space-y-4 pt-8 border-t border-white/5 mt-8">
+                                {(selectedWinner.isPaid || selectedWinner.is_paid) ? (
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <Button
+                                            variant="secondary"
+                                            className="h-16 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl border border-white/5 bg-white/5 text-emerald-400"
+                                            onClick={() => handleDownloadStatement(selectedWinner)}
+                                        >
+                                            Digital Receipt
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="p-8 rounded-3xl bg-amber-500/5 border border-amber-500/10 text-center">
+                                        <p className="text-[11px] font-black uppercase text-amber-500 tracking-[0.2em] mb-3">⚠️ Payment Pending</p>
+                                        <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                                            Verification is complete but settlement is pending.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </Modal>
+            )}
         </PageTransition>
     );
 }

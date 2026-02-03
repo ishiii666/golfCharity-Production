@@ -20,14 +20,14 @@ const PHASES = {
     COMPLETE: 'complete'
 };
 
-// Timing constants (in milliseconds) - ~3.5 second total
+// Timing constants (in milliseconds) - ~2.1 second total
 const TIMING = {
-    LINE_DURATION: 200,      // 0s - 0.2s (instant start)
-    DROP_DURATION: 1500,     // 0.2s - 1.7s (faster drop)
-    IMPACT_DURATION: 150,    // 1.7s - 1.85s
-    LOGO_DURATION: 1200,     // 1.85s - 3.05s
-    EXIT_DURATION: 500,      // Fade out duration
-    TOTAL: 3050              // Total animation time
+    LINE_DURATION: 150,      // 0.15s
+    DROP_DURATION: 1100,     // 1.1s (crisper drop)
+    IMPACT_DURATION: 100,    // 0.1s
+    LOGO_DURATION: 800,      // 0.8s
+    EXIT_DURATION: 400,      // 0.4s
+    TOTAL: 2150              // 0.15 + 1.1 + 0.1 + 0.8 = 2.15s
 };
 
 // Custom easing for heavy, gravity-defying drop

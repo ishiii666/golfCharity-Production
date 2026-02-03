@@ -88,7 +88,12 @@ INSERT INTO public.site_content (section_id, field_name, field_value, field_type
 ('howItWorks', 'step3Desc', 'When you win, your chosen charity receives a donation from the prize pool.', 'textarea'),
 -- Footer section
 ('footer', 'copyright', '© 2026 Golf Charity. All rights reserved.', 'text'),
-('footer', 'tagline', 'Play for a cause.', 'text')
+('footer', 'tagline', 'Play for a cause.', 'text'),
+-- Concept section
+('concept', 'drawPoint1', 'All player scores are analyzed on the 1st of each month', 'textarea'),
+('concept', 'drawPoint2', 'We find statistical outliers in the data', 'textarea'),
+('concept', 'drawPoint3', '3 rarest + 2 most common = winning combo', 'textarea'),
+('concept', 'drawPoint4', 'Match your scores to win & give!', 'textarea')
 ON CONFLICT (section_id, field_name) DO NOTHING;
 
 -- =====================================================

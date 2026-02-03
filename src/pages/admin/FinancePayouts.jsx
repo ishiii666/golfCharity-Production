@@ -594,6 +594,11 @@ export default function FinancePayouts() {
                                                                             src={item.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
                                                                             alt={item.name}
                                                                             className="w-full h-full object-cover"
+                                                                            referrerPolicy="no-referrer"
+                                                                            onError={(e) => {
+                                                                                e.target.onerror = null;
+                                                                                e.target.src = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+                                                                            }}
                                                                         />
                                                                     </div>
                                                                     <div className="font-bold text-white">{item.name}</div>
@@ -669,14 +674,17 @@ export default function FinancePayouts() {
                                                     </div>
                                                 ) : charitySummary.filter(c => c.direct_donations > 0).map(charity => (
                                                     <div key={charity.charity_id} className="space-y-3">
-                                                        <div className="flex items-center justify-between px-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-5 h-5 rounded bg-pink-500/20 flex items-center justify-center text-[10px]">🎁</div>
-                                                                <h3 className="font-bold text-zinc-300 text-sm uppercase tracking-tight">{charity.name}</h3>
+                                                        <div className="flex items-center justify-between px-4 py-3 bg-zinc-800/20 rounded-xl border border-zinc-100/5">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center text-sm">🏢</div>
+                                                                <div>
+                                                                    <h3 className="font-black text-white text-sm uppercase tracking-tight">{charity.name}</h3>
+                                                                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest leading-none mt-1">Beneficiary Institution</p>
+                                                                </div>
                                                             </div>
                                                             <div className="text-right">
-                                                                <span className="text-xs text-zinc-500 mr-2">Total Direct:</span>
-                                                                <span className="text-sm font-black text-pink-400">{formatCurrency(charity.direct_donations)}</span>
+                                                                <span className="text-[10px] text-zinc-500 uppercase font-black block mb-0.5">PENDING GIFTS</span>
+                                                                <span className="text-lg font-black text-pink-400 leading-none">{formatCurrency(charity.direct_donations)}</span>
                                                             </div>
                                                         </div>
                                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -725,13 +733,14 @@ export default function FinancePayouts() {
                                                                         ...charity,
                                                                         amount: charity.direct_donations,
                                                                         total_amount: charity.direct_donations,
-                                                                        type: 'direct_batch'
+                                                                        type: 'direct_batch',
+                                                                        donation_ids: charity.direct_donation_ids
                                                                     });
                                                                     setIsPayoutModalOpen(true);
                                                                 }}
                                                             >
                                                                 <span>📦</span>
-                                                                BATCH SETTLE {charity.name.toUpperCase()} DIRECT GIFTS
+                                                                BATCH SETTLE ALL PENDING GIFTS
                                                             </Button>
                                                         </div>
                                                         <div className="h-4" />
@@ -777,9 +786,26 @@ export default function FinancePayouts() {
                                                                 {new Date(payout.created_at).toLocaleDateString()}
                                                             </td>
                                                             <td className="px-6 py-4">
-                                                                <div className="font-bold text-white">{payout.charities?.name}</div>
-                                                                <div className="text-[10px] text-zinc-500 uppercase tracking-tighter">
-                                                                    Donor: {payout.donations?.[0]?.profiles?.full_name || 'Anonymous'}
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0">
+                                                                        <img
+                                                                            src={payout.charities?.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
+                                                                            alt={payout.charities?.name}
+                                                                            className="w-full h-full object-cover"
+                                                                            referrerPolicy="no-referrer"
+                                                                            onError={(e) => {
+                                                                                e.target.onerror = null;
+                                                                                const fallback = payout.charities?.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+                                                                                if (e.target.src !== fallback) e.target.src = fallback;
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="font-bold text-white">{payout.charities?.name}</div>
+                                                                        <div className="text-[10px] text-zinc-500 uppercase tracking-tighter">
+                                                                            Donor: {payout.donations?.[0]?.profiles?.full_name || 'Anonymous'}
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4 font-black text-white">
@@ -851,9 +877,15 @@ export default function FinancePayouts() {
                                                                 <div className="flex items-center gap-3">
                                                                     <div className="w-8 h-8 rounded-lg bg-zinc-800 overflow-hidden border border-zinc-700">
                                                                         <img
-                                                                            src={(payout.charities?.logo_url || payout.charities?.logo) || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
+                                                                            src={payout.charities?.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200'}
                                                                             alt={payout.charities?.name}
                                                                             className="w-full h-full object-cover"
+                                                                            referrerPolicy="no-referrer"
+                                                                            onError={(e) => {
+                                                                                e.target.onerror = null;
+                                                                                const fallback = payout.charities?.logo_url || 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+                                                                                if (e.target.src !== fallback) e.target.src = fallback;
+                                                                            }}
                                                                         />
                                                                     </div>
                                                                     <div className="font-bold text-white text-sm">{payout.charities?.name}</div>

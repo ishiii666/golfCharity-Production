@@ -12,6 +12,55 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 /**
+ * Enrich charity data with robust image fallbacks and standardized fields
+ */
+export function enrichCharityData(c) {
+    if (!c) return null;
+
+    const name = c.name?.toLowerCase() || '';
+    const category = c.category?.toLowerCase() || '';
+
+    // Standardizing Unsplash fallbacks with proper query params
+    let fallbackImageId = 'photo-1488521787991-ed7bbaae773c'; // Default humanitarian
+    let fallbackLogo = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+
+    if (name.includes('blue') || category.includes('mental')) {
+        fallbackImageId = 'photo-1527137342181-19aab11a8ee1';
+    } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
+        fallbackImageId = 'photo-1579154235602-3c2c244b748b';
+    } else if (name.includes('starlight') || category.includes('child')) {
+        fallbackImageId = 'photo-1502086223501-7ea6ecd79368';
+    } else if (name.includes('wild') || category.includes('environ')) {
+        fallbackImageId = 'photo-1441974231531-c6227db76b6e';
+    } else if (name.includes('salvation') || name.includes('army') || category.includes('community')) {
+        fallbackImageId = 'photo-1469571486292-0ba58a3f068b';
+    } else if (name.includes('red cross') || name.includes('humanitarian')) {
+        fallbackImageId = 'photo-1488521787991-ed7bbaae773c';
+    }
+
+    let fallbackUrl = `https://images.unsplash.com/${fallbackImageId}?auto=format&fit=crop&q=80&w=800`;
+    fallbackLogo = `https://images.unsplash.com/${fallbackImageId}?auto=format&fit=crop&q=80&w=200`;
+
+    // Priority 1: High-quality local assets for core charities
+    if (name.includes('blue') || category.includes('mental')) {
+        fallbackUrl = '/images/charities/beyond_blue_main.png';
+        fallbackLogo = '/images/charities/beyond_blue_main.png';
+    } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
+        fallbackUrl = '/images/charities/cancer_council_main.png';
+        fallbackLogo = '/images/charities/cancer_council_main.png';
+    }
+
+    // Return object with standardized fields
+    return {
+        ...c,
+        image_url: c.image_url || c.image || fallbackUrl,
+        logo_url: c.logo_url || c.logo || fallbackLogo,
+        image: c.image_url || c.image || fallbackUrl,
+        logo: c.logo_url || c.logo || fallbackLogo
+    };
+}
+
+/**
  * Get the current auth token - either from session or fallback to anon key
  */
 async function getAuthToken() {
@@ -227,7 +276,16 @@ export async function getSiteContent() {
 
         const data = await response.json();
         console.log('📝 Site content fetched:', data.length, 'items');
-        return Array.isArray(data) ? data : [];
+
+        // AUTO-FIX: Ensure "9th" is transformed to "1st" globally for consistency
+        const sanitizedData = Array.isArray(data) ? data.map(item => ({
+            ...item,
+            field_value: (typeof item.field_value === 'string')
+                ? item.field_value.replace(/9th/g, '1st')
+                : item.field_value
+        })) : [];
+
+        return sanitizedData;
     } catch (error) {
         console.error('Error fetching site content:', error);
         return [];
@@ -689,15 +747,104 @@ export async function deleteUser(userId) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to delete user');
+            let errorMessage = 'Failed to delete user';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+                // If not JSON, get text
+                const text = await response.text();
+                errorMessage = text || response.statusText || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
 
-        return await response.json();
+        const data = await response.json();
+        return data;
     } catch (error) {
         console.error('Error deleting user:', error);
         throw error;
     }
+}
+
+/**
+ * Insert a row into a table
+ */
+export async function insertData(table, rowData) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/${table}`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(rowData)
+        });
+
+        if (!response.ok) {
+            let errorMessage = 'Insert failed';
+            try {
+                const text = await response.text();
+                try {
+                    const error = JSON.parse(text);
+                    errorMessage = error.message || error.error || errorMessage;
+                } catch (e) {
+                    errorMessage = text || errorMessage;
+                }
+            } catch (e) {
+                errorMessage = response.statusText || errorMessage;
+            }
+            throw new Error(errorMessage);
+        }
+
+        // Handle empty response (common when RLS allows INSERT but not SELECT/representation)
+        const text = await response.text();
+        if (!text) return { success: true };
+
+        try {
+            const data = JSON.parse(text);
+            return Array.isArray(data) ? data[0] : data;
+        } catch (e) {
+            return { success: true };
+        }
+    } catch (error) {
+        console.error(`Error inserting into ${table}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Submit a contact inquiry
+ */
+export async function submitContactInquiry(inquiryData) {
+    return insertData('contact_inquiries', inquiryData);
+}
+
+/**
+ * Get all contact inquiries (Admin only)
+ */
+export async function getContactInquiries() {
+    try {
+        const { data } = await supabaseRest('contact_inquiries', {
+            select: '*',
+            filter: 'order=created_at.desc'
+        });
+        return data || [];
+    } catch (error) {
+        console.error('Error fetching contact inquiries:', error);
+        return [];
+    }
+}
+
+/**
+ * Update a contact inquiry (Status, Notes)
+ */
+export async function updateContactInquiry(id, updates) {
+    return updateRow('contact_inquiries', id, updates);
 }
 
 /**
@@ -771,17 +918,22 @@ export async function getAdminStats() {
         getCharityPayoutSummary()
     ]);
 
-    // 3. Get accurate subscriber count (global for dashboard)
-    const activeSubCount = await getActiveSubscribersCount(null, true);
+    // 3. Get accurate subscriber count and plan details for revenue
+    const subsUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=plan`;
+    const subsRes = await fetch(subsUrl, { headers });
+    const activeSubs = subsRes.ok ? await subsRes.json() : [];
+    const activeSubCount = activeSubs.length;
 
-    // 4. Calculate pending payouts (verified but not paid)
-    const pendingPayouts = (winners || []).filter(w => w.tier !== null && !w.is_paid).length;
+    // 4. Calculate Platform Revenue and Prize Pool contribution
+    const monthlyRev = activeSubs.reduce((sum, sub) => {
+        const amount = sub.plan === 'annual' ? 9 : 11;
+        return sum + (amount - 5);
+    }, 0);
 
-    // 5. Monthly estimated PLATFORM revenue (Active Subs * $4)
-    const monthlyRev = activeSubCount * 4;
-
-    // 6. Monthly estimated PRIZE POOL contribution (Active Subs * $5)
     const prizePoolRev = activeSubCount * 5;
+
+    // 5. Calculate pending payouts (verified but not paid)
+    const pendingPayouts = (winners || []).filter(w => w.tier !== null && !w.is_paid).length;
 
     // 7. Charities needing payout
     const charityPayoutCount = (charitySummary || []).length;
@@ -791,7 +943,13 @@ export async function getAdminStats() {
         ? currentDraw.month_year
         : getDrawMonthYear();
 
-    console.log('📊 Admin Stats Updated:', { activeSubCount, nextDrawLabel, pendingPayouts });
+    // 8. Contact inquiries count (pending)
+    const inquiryUrl = `${SUPABASE_URL}/rest/v1/contact_inquiries?status=eq.pending&select=id`;
+    const inquiryRes = await fetch(inquiryUrl, { headers });
+    const pendingInquiries = inquiryRes.ok ? await inquiryRes.json() : [];
+    const pendingInquiryCount = pendingInquiries.length;
+
+    console.log('📊 Admin Stats Updated:', { activeSubCount, nextDrawLabel, pendingPayouts, pendingInquiryCount });
 
     return {
         totalUsers,
@@ -805,7 +963,8 @@ export async function getAdminStats() {
         pendingPayouts,
         monthlyRevenue: monthlyRev,
         prizePoolRevenue: prizePoolRev,
-        charityPayoutCount
+        charityPayoutCount,
+        pendingInquiriesCount: pendingInquiryCount
     };
 }
 
@@ -874,52 +1033,19 @@ export async function getCharities() {
             }
         });
 
-        // 6. Merge stats back into charities
+        // 6. Merge stats back into charities and enrich
         return (charities || []).map(c => {
-            // Live stats from aggregation (STRICT - NO FALLBACKS)
             const liveRaised = raisedMap[c.id] || 0;
             const liveSupporters = supportersMap[c.id] || 0;
 
-            // Image Fallbacks based on category - Using high-quality optimized Unsplash URLs
-            const name = c.name?.toLowerCase() || '';
-            const category = c.category?.toLowerCase() || '';
-
-            // Standardizing Unsplash fallbacks with proper query params
-            let fallbackImageId = 'photo-1488521787991-ed7bbaae773c'; // Default humanitarian
-            let fallbackLogo = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
-
-            if (name.includes('blue') || category.includes('mental')) {
-                fallbackImageId = 'photo-1527137342181-19aab11a8ee1';
-            } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
-                fallbackImageId = 'photo-1579154235602-3c2c244b748b';
-            } else if (name.includes('starlight') || category.includes('child')) {
-                fallbackImageId = 'photo-1502086223501-7ea6ecd79368';
-            } else if (name.includes('wild') || category.includes('environ')) {
-                fallbackImageId = 'photo-1441974231531-c6227db76b6e';
-            } else if (name.includes('salvation') || category.includes('community')) {
-                fallbackImageId = 'photo-1469571486292-0ba58a3f068b';
-            }
-
-            let fallbackUrl = `https://images.unsplash.com/${fallbackImageId}?auto=format&fit=crop&q=80&w=800`;
-
-            // Use locally hosted custom generated images for core charities
-            if (name.includes('blue') || category.includes('mental')) {
-                fallbackUrl = '/images/charities/beyond_blue_main.png';
-            } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
-                fallbackUrl = '/images/charities/cancer_council_main.png';
-            }
-
+            const enriched = enrichCharityData(c);
             return {
-                ...c,
+                ...enriched,
                 total_raised: liveRaised,
                 supporters: liveSupporters,
                 supporter_count: liveSupporters,
                 totalRaised: liveRaised,
-                supporterCount: liveSupporters,
-                image_url: c.image_url || fallbackUrl,
-                logo_url: c.logo_url || fallbackLogo,
-                image: c.image_url || fallbackUrl,
-                logo: c.logo_url || fallbackLogo
+                supporterCount: liveSupporters
             };
         }).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || a.name.localeCompare(b.name));
 
@@ -2388,8 +2514,8 @@ export async function getCharityDonationsReport() {
         // 1. Fetch live charities and stats with profile joining for donations
         const [charities, profiles, donationsRes, drawEntries, payoutsRes] = await Promise.all([
             getCharities(),
-            getTableData('profiles', 'id,selected_charity_id,status,role'),
-            fetch(`${SUPABASE_URL}/rest/v1/donations?select=*,profiles(full_name,email),charity_payouts(status,payout_ref,paid_at),draws(month_year)&order=created_at.desc`, { headers }),
+            getTableData('profiles', 'id,full_name,email,selected_charity_id,status,role,donation_percentage'),
+            fetch(`${SUPABASE_URL}/rest/v1/donations?select=*,profiles(full_name,email),charity_payout_id,charity_payouts(status,payout_ref,paid_at),draws(month_year)&order=created_at.desc`, { headers }),
             getTableData('draw_entries', 'user_id,draw_id,charity_id,charity_amount,tier,matches'),
             getTableData('charity_payouts', 'charity_id,status,amount,payout_ref')
         ]);
@@ -2418,7 +2544,8 @@ export async function getCharityDonationsReport() {
                     amount: parseFloat(d.amount) || 0,
                     date: d.created_at,
                     status: d.charity_payouts?.status || 'unpaid',
-                    payout_ref: d.charity_payouts?.payout_ref || '--'
+                    payout_ref: d.charity_payouts?.payout_ref || '--',
+                    stripe_ref: d.stripe_payment_intent_id || d.stripe_charge_id || '--'
                 }));
 
             // New: Detailed Winner-Led Records for the "Everything" Report
@@ -2437,6 +2564,7 @@ export async function getCharityDonationsReport() {
                         date: d.created_at,
                         status: d.charity_payouts?.status || 'unpaid',
                         payout_ref: d.charity_payouts?.payout_ref || '--',
+                        stripe_ref: d.stripe_payment_intent_id || d.stripe_charge_id || '--',
                         contribution_source: `Prize Contribution by ${donorName} (${poolInfo}) - $${(parseFloat(d.amount) || 0).toFixed(2)}`,
                         draw_name: d.draws?.month_year || 'N/A'
                     };
@@ -2452,12 +2580,23 @@ export async function getCharityDonationsReport() {
                 .filter(p => p.charity_id === c.id && p.status === 'pending')
                 .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
 
+            const enriched = enrichCharityData(c);
+
+            const supporters = (activeProfiles || [])
+                .filter(p => p.selected_charity_id === c.id)
+                .map(p => ({
+                    name: p.full_name || 'Anonymous Supporter',
+                    email: p.email,
+                    percentage: p.donation_percentage || 10
+                }));
+
             return {
                 id: c.id,
                 name: c.name,
                 category: c.category,
-                logo: c.logo || c.logo_url,
+                logo_url: enriched.logo_url,
                 supporter_count: supporterCount,
+                supporters: supporters,
                 direct_donations: directGiftTotal,
                 direct_gifts_detail: directGiftRecords,
                 winner_donations: winnerDonationTotal,
@@ -2546,7 +2685,10 @@ export async function getWinnerAuditReport() {
         if (!response.ok) return [];
 
         const data = await response.json();
-        return Array.isArray(data) ? data : [];
+        return (Array.isArray(data) ? data : []).map(winner => ({
+            ...winner,
+            charities: enrichCharityData(winner.charities)
+        }));
     } catch (error) {
         console.error('Error getting winner audit report:', error);
         return [];
@@ -2814,15 +2956,15 @@ export async function getSettledPlayerPayouts(limit = 100) {
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
         // 1. Fetch settled individual winners
-        const winnersRes = await fetch(`${SUPABASE_URL}/rest/v1/draw_entries?select=*,draws(month_year),profiles(full_name)&is_paid=eq.true&order=paid_at.desc&limit=${limit}`, { headers });
+        const winnersRes = await fetch(`${SUPABASE_URL}/rest/v1/draw_entries?select=*,draws(month_year),profiles(full_name),charities(name,logo_url)&is_paid=eq.true&order=paid_at.desc&limit=${limit}`, { headers });
         const winners = winnersRes.ok ? await winnersRes.json() : [];
 
         // 2. Fetch settled charity winner-led funds with detailed donation links
-        const charityRes = await fetch(`${SUPABASE_URL}/rest/v1/charity_payouts?select=*,charities(name),donations(*,profiles(full_name),draws(month_year))&status=eq.paid&order=updated_at.desc&limit=${limit}`, { headers });
+        const charityRes = await fetch(`${SUPABASE_URL}/rest/v1/charity_payouts?select=*,charities(name,logo_url),donations(*,profiles(full_name),draws(month_year))&status=eq.paid&order=updated_at.desc&limit=${limit}`, { headers });
         const charityPayouts = charityRes.ok ? await charityRes.json() : [];
 
         // 2.1 Fetch match counts for these donations to show pool info
-        const winnerDonations = charityPayouts.flatMap(p => p.donations?.filter(d => d.source !== 'direct') || []);
+        const winnerDonations = charityPayouts.flatMap(p => p.donations?.filter(d => d.source !== 'direct' && d.user_id && d.draw_id) || []);
         let poolMap = {};
         if (winnerDonations.length > 0) {
             // Fix: Use correct PostgREST and filters for multi-column matching
@@ -2834,7 +2976,11 @@ export async function getSettledPlayerPayouts(limit = 100) {
 
         // 3. Combine and format for the UI
         const combined = [
-            ...winners.map(w => ({ ...w, type: 'player_settlement' })),
+            ...winners.map(w => ({
+                ...w,
+                type: 'player_settlement',
+                charities: enrichCharityData(w.charities)
+            })),
             ...charityPayouts
                 .filter(p => {
                     // Only include in this ledger if the distribution came from winner prize shares
@@ -2854,6 +3000,7 @@ export async function getSettledPlayerPayouts(limit = 100) {
                         id: p.id,
                         paid_at: p.paid_at || p.updated_at,
                         profiles: { full_name: p.charities?.name || 'Charity' },
+                        charities: enrichCharityData(p.charities),
                         tier: 'Charity Distribution',
                         draws: { month_year: detailLabel },
                         net_payout: p.amount,
@@ -2925,7 +3072,7 @@ export async function getCharityPayoutSummary() {
             summary[charity.id] = {
                 charity_id: charity.id,
                 name: charity.name,
-                logo_url: charity.logo || charity.logo_url,
+                logo_url: charity.logo_url,
                 stripe_account_id: charity.stripe_account_id,
                 winner_donations: 0,
                 direct_donations: 0,
@@ -2988,17 +3135,17 @@ export async function getCharityPayouts() {
         const authToken = await getAuthToken();
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
         // Fetch with full donation and profile context
-        const url = `${SUPABASE_URL}/rest/v1/charity_payouts?select=*,charities(name,stripe_account_id),donations(source,amount,created_at,user_id,draw_id,profiles(full_name),draws(month_year))&order=created_at.desc`;
+        const url = `${SUPABASE_URL}/rest/v1/charity_payouts?select=*,charities(name,logo_url,stripe_account_id),donations(source,amount,created_at,user_id,draw_id,profiles(full_name))&order=created_at.desc`;
 
         const response = await fetch(url, { headers });
         const data = await (response.ok ? await response.json() : []);
         const payouts = Array.isArray(data) ? data : [];
 
         // Fetch pool matching info for winner-led donations
-        const winnerDonations = payouts.flatMap(p => p.donations?.filter(d => d.source !== 'direct') || []);
+        const winnerDonations = payouts.flatMap(p => p.donations?.filter(d => d.source !== 'direct' && d.user_id && d.draw_id) || []);
         let poolMap = {};
         if (winnerDonations.length > 0) {
-            const entryQueries = winnerDonations.map(d => `(user_id.eq.${d.user_id},draw_id.eq.${d.draw_id})`).join(',');
+            const entryQueries = winnerDonations.map(d => `and(user_id.eq.${d.user_id},draw_id.eq.${d.draw_id})`).join(',');
             const entriesRes = await fetch(`${SUPABASE_URL}/rest/v1/draw_entries?select=user_id,draw_id,matches&or=(${entryQueries})`, { headers });
             const entries = entriesRes.ok ? await entriesRes.json() : [];
             entries.forEach(e => { poolMap[`${e.user_id}_${e.draw_id}`] = e.matches; });
@@ -3006,6 +3153,10 @@ export async function getCharityPayouts() {
 
         // Enrich the payouts with a detail label for the UI
         return payouts.map(p => {
+            if (p.charities) {
+                p.charities = enrichCharityData(p.charities);
+            }
+
             const winDonations = p.donations?.filter(d => d.source !== 'direct') || [];
             let detailLabel = 'Direct Distribution';
 
@@ -3304,9 +3455,18 @@ export async function getSubscriptionReport() {
         // 5. Get eligible users (Sync with Draw logic)
         const eligibleUsers = await getEligibleUsers();
 
-        // 6. Revenue Calculations ($4 Platform / $5 Prize Pool)
-        const platformRevenue = activeCount * 4;
-        const prizePoolRevenue = activeCount * 5;
+        // 6. Revenue Calculations (Dynamic based on logic: $5 to Prize Pool, remainder to Platform)
+        let totalPlatformRevenue = 0;
+        let totalPrizePoolRevenue = 0;
+
+        playerProfiles.forEach(p => {
+            const sub = playerSubsMap[p.id];
+            if (sub?.status === 'active') {
+                const amount = sub.plan === 'annual' ? 9 : 11;
+                totalPrizePoolRevenue += 5;
+                totalPlatformRevenue += (amount - 5);
+            }
+        });
 
         console.log('📊 Subscription report (Strict Sync):', { active: activeCount, total: totalPlayers, eligible: eligibleUsers.length });
 
@@ -3315,8 +3475,8 @@ export async function getSubscriptionReport() {
             inactive: inactiveCount,
             total: totalPlayers,
             eligible: eligibleUsers.length,
-            platformRevenue,
-            prizePoolRevenue,
+            platformRevenue: totalPlatformRevenue,
+            prizePoolRevenue: totalPrizePoolRevenue,
             subscriptions: (subscriptions || []).filter(s => playerIds.has(s.user_id))
         };
     } catch (error) {
@@ -3337,7 +3497,7 @@ export async function getMonthlyRevenue(months = 6) {
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() - months);
 
-        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&created_at=gte.${startDate.toISOString()}&select=created_at,amount`;
+        const url = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&created_at=gte.${startDate.toISOString()}&select=created_at,plan`;
         const response = await fetch(url, {
             headers: {
                 'apikey': SUPABASE_KEY,
@@ -3359,7 +3519,8 @@ export async function getMonthlyRevenue(months = 6) {
             if (!monthlyData[monthKey]) {
                 monthlyData[monthKey] = { month: monthLabel, value: 0, date: date };
             }
-            monthlyData[monthKey].value += (sub.amount || 5); // Default $5 per subscription
+            const amount = sub.plan === 'annual' ? 9 : 11; // Monthly is $11, Annual is $9/mo equivalent ($108 total)
+            monthlyData[monthKey].value += amount;
         }
 
         // Convert to array and sort by date
@@ -3387,7 +3548,7 @@ export async function getMonthlyUserGrowth(months = 6) {
         const startDate = new Date();
         startDate.setMonth(startDate.getMonth() - months);
 
-        const url = `${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&created_at=gte.${startDate.toISOString()}&select=created_at`;
+        const url = `${SUPABASE_URL}/rest/v1/profiles?role=not.eq.admin&created_at=gte.${startDate.toISOString()}&select=created_at`;
         const response = await fetch(url, {
             headers: {
                 'apikey': SUPABASE_KEY,
@@ -3434,14 +3595,20 @@ export async function getReportStats() {
         const authToken = await getAuthToken();
         const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${authToken}` };
 
-        // 1. Get current active subscribers
-        const activeSubscribers = await getActiveSubscribersCount(null, true);
+        // 1. Get active subscriptions count and plan details
+        const subsUrl = `${SUPABASE_URL}/rest/v1/subscriptions?status=eq.active&select=plan`;
+        const subsRes = await fetch(subsUrl, { headers });
+        const activeSubs = subsRes.ok ? await subsRes.json() : [];
+        const activeSubscribers = activeSubs.length;
 
-        // 2. Calculate Total Monthly Revenue ($4/sub to Platform)
-        const currentRevenue = activeSubscribers * 4;
+        // 2. Calculate Total Monthly Platform Revenue ($5 goes to prize pool)
+        const currentRevenue = activeSubs.reduce((sum, sub) => {
+            const amount = sub.plan === 'annual' ? 9 : 11;
+            return sum + (amount - 5);
+        }, 0);
 
         // 3. Get total players
-        const usersUrl = `${SUPABASE_URL}/rest/v1/profiles?role=neq.admin&select=id`;
+        const usersUrl = `${SUPABASE_URL}/rest/v1/profiles?role=not.eq.admin&select=id`;
         const usersResponse = await fetch(usersUrl, { headers });
         const users = usersResponse.ok ? await usersResponse.json() : [];
         const totalUsers = Array.isArray(users) ? users.length : 0;
@@ -3475,6 +3642,7 @@ export async function getReportStats() {
             activeSubscribers,
             totalUsers,
             totalDonated,
+            totalAwarded: (donations || []).filter(d => d.source !== 'direct' && d.charity_payouts?.status === 'paid').reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0),
             avgDonation: totalDonated > 0 ? totalDonated / (activeSubscribers || 1) : 0,
             totalDirectPaid,
             winnerLedPending

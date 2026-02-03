@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { getActiveCharities } from '../lib/supabaseRest';
+import { getActiveCharities, getUserStats } from '../lib/supabaseRest';
 import { useAuth } from '../context/AuthContext';
 
 /**
@@ -15,42 +15,21 @@ const MOCK_CHARITIES = [
     { id: '4', name: 'Red Cross Australia', slug: 'red-cross', category: 'Humanitarian', total_raised: 61200, supporter_count: 523, image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800' }
 ];
 
+import { useGlobalData } from '../context/DataContext';
+
 export function useCharities() {
-    const [charities, setCharities] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const { charities, charitiesLoading, refreshCharities } = useGlobalData();
 
-    const fetchCharities = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const data = await getActiveCharities();
-            setCharities(data || []);
-        } catch (err) {
-            console.error('Fetch charities error:', err);
-            setError(err.message);
-            // Fallback to MOCK only if everything fails and we're not configured
-            if (!isSupabaseConfigured()) {
-                setCharities(MOCK_CHARITIES);
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchCharities();
-    }, [fetchCharities]);
-
-    const getCharityById = (id) => charities.find((c) => c.id === id);
-    const featuredCharities = charities.filter((c) => c.is_featured);
+    const getCharityById = (id) => (charities || []).find((c) => c.id === id);
+    const featuredCharities = (charities || []).filter((c) => c.is_featured);
 
     return {
-        charities,
+        charities: charities || [],
         featuredCharities,
-        isLoading,
-        error,
+        isLoading: charitiesLoading,
+        error: null,
         getCharityById,
-        refresh: fetchCharities
+        refresh: refreshCharities
     };
 }
 
@@ -162,6 +141,45 @@ export function useUserEntries() {
         latestResult,
         isLoading,
         refresh: fetchEntries
+    };
+}
+
+/**
+ * useUserStats - Hook for fetching comprehensive user financial statistics
+ */
+export function useUserStats() {
+    const { user } = useAuth();
+    const [stats, setStats] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const fetchStats = useCallback(async () => {
+        if (!user || !isSupabaseConfigured()) {
+            setIsLoading(false);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const data = await getUserStats(user.id);
+            setStats(data);
+        } catch (err) {
+            console.error('Fetch user stats error:', err);
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user]);
+
+    useEffect(() => {
+        fetchStats();
+    }, [fetchStats]);
+
+    return {
+        stats,
+        isLoading,
+        error,
+        refresh: fetchStats
     };
 }
 

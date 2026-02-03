@@ -9,7 +9,7 @@ import { useScores } from '../hooks/useScores';
 import { useSubscription } from '../hooks/useSubscription';
 import { useCharities, useUserEntries } from '../hooks/useData';
 import { fadeUp, staggerContainer, staggerItem } from '../utils/animations';
-import { getTimeUntilDraw, getNextDrawDateFormatted, DRAW_SCHEDULE_SHORT } from '../utils/drawSchedule';
+import { getTimeUntilDraw, getNextDrawDateFormatted, DRAW_SCHEDULE_SHORT, getTimeUntilDate, getDrawDateFromMonthYear, getDrawMonthYear } from '../utils/drawSchedule';
 
 export default function Dashboard() {
     const { user, isAdmin } = useAuth();
@@ -23,8 +23,12 @@ export default function Dashboard() {
         return <Navigate to="/admin" replace />;
     }
 
-    // Calculate days until next draw using centralized schedule (9th at 8PM EST)
-    const { days: daysUntilDraw, hours: hoursUntilDraw } = getTimeUntilDraw();
+    // Calculate days until draw using actual cycle context
+    const currentCycleMonthYear = latestResult?.draws?.month_year || getDrawMonthYear();
+    const cycleTargetDate = getDrawDateFromMonthYear(currentCycleMonthYear);
+    const { days: daysUntilDraw, hours: hoursUntilDraw, isPast: isDrawOverdue } = getTimeUntilDate(cycleTargetDate);
+
+    // Fallback for formatted text
     const nextDrawFormatted = getNextDrawDateFormatted();
 
     const selectedCharity = user?.selectedCharityId ? getCharityById(user.selectedCharityId) : null;
@@ -166,12 +170,14 @@ export default function Dashboard() {
                                     Next Draw
                                 </h3>
                                 <div
-                                    className="text-4xl font-bold mb-1 text-emerald-400"
+                                    className={`text-4xl font-bold mb-1 ${isDrawOverdue ? 'text-amber-500' : 'text-emerald-400'}`}
                                     style={{ fontFamily: 'var(--font-display)' }}
                                 >
-                                    {daysUntilDraw === 0 ? `${hoursUntilDraw}h` : daysUntilDraw}
+                                    {isDrawOverdue ? 'DUE' : (daysUntilDraw === 0 ? `${hoursUntilDraw}h` : daysUntilDraw)}
                                 </div>
-                                <div className="text-zinc-500 mb-2">{daysUntilDraw === 0 ? 'hours remaining' : 'days remaining'}</div>
+                                <div className="text-zinc-500 mb-2">
+                                    {isDrawOverdue ? 'Draw in Progress' : (daysUntilDraw === 0 ? 'hours remaining' : 'days remaining')}
+                                </div>
                                 <div className="text-xs text-amber-400 font-medium">{DRAW_SCHEDULE_SHORT}</div>
                             </Card>
                         </motion.div>

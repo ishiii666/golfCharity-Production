@@ -1,35 +1,24 @@
-import { useState, useEffect } from 'react';
-import { getSiteContent } from '../lib/supabaseRest';
+import { useContext } from 'react';
+import { SiteContentProvider as Provider } from '../context/SiteContentContext';
+import SiteContentContext from '../context/SiteContentContext';
 
 /**
- * Hook to fetch and access site content from Supabase
+ * Re-export the provider for App.jsx
+ */
+export const SiteContentProvider = Provider;
+
+/**
+ * Hook to access site content from the global provider
  */
 export function useSiteContent() {
-    const [content, setContent] = useState({});
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        async function fetchContent() {
-            try {
-                const data = await getSiteContent();
-                const contentMap = {};
-                data.forEach(item => {
-                    const key = `${item.section_id}_${item.field_name}`;
-                    contentMap[key] = item.field_value;
-                });
-                setContent(contentMap);
-            } catch (error) {
-                console.error('Error in useSiteContent:', error);
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchContent();
-    }, []);
-
-    const getContent = (sectionId, fieldName, defaultValue = '') => {
-        return content[`${sectionId}_${fieldName}`] || defaultValue;
-    };
-
-    return { content, loading, getContent };
+    const context = useContext(SiteContentContext);
+    if (!context) {
+        // Fallback for components mounted before the provider is ready or if provider is missing
+        return {
+            content: {},
+            loading: false,
+            getContent: (s, f, d = '') => d
+        };
+    }
+    return context;
 }

@@ -22,7 +22,7 @@ import {
 } from '../../lib/supabaseRest';
 import { supabase } from '../../lib/supabase';
 import UserEditModal from '../../components/admin/UserEditModal';
-import { getTimeUntilDraw, getDrawMonthYear } from '../../utils/drawSchedule';
+import { getTimeUntilDraw, getDrawMonthYear, getTimeUntilDate, getDrawDateFromMonthYear } from '../../utils/drawSchedule';
 
 export default function DrawManagement() {
     // State
@@ -275,11 +275,24 @@ export default function DrawManagement() {
                                     </div>
                                     <div>
                                         <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Draw Date</p>
-                                        <p className="text-xl font-bold text-white uppercase">{getTimeUntilDraw().days} Days Left</p>
+                                        <p className="text-xl font-bold text-white uppercase">
+                                            {(() => {
+                                                const targetMonthYear = currentDraw?.month_year || getDrawMonthYear();
+                                                const drawTargetDate = getDrawDateFromMonthYear(targetMonthYear);
+                                                const { days, isPast } = getTimeUntilDate(drawTargetDate);
+
+                                                if (isPast && currentDraw?.status !== 'published') {
+                                                    return "DRAW DUE";
+                                                }
+                                                return `${days} Days Left`;
+                                            })()}
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Status</p>
-                                        <p className="text-xl font-bold text-amber-500 uppercase">Collection</p>
+                                        <p className={`text-xl font-bold uppercase ${currentDraw?.status === 'published' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                            {currentDraw?.status || 'Collection'}
+                                        </p>
                                     </div>
                                 </div>
                             </CardContent>

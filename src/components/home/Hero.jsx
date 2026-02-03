@@ -90,7 +90,7 @@ export default function Hero() {
                         className="text-lg sm:text-xl text-slate-400 mb-8 max-w-2xl mx-auto leading-relaxed"
                     >
                         Enter your last 5 official Stableford scores. Match 3, 4, or 5 numbers in our draw on the
-                        <span className="text-amber-400 font-medium"> 9th of every month at 8:00 PM EST</span>.
+                        <span className="text-amber-400 font-medium"> 1st of every month at 8:00 PM EST</span>.
                         <span className="text-white font-medium"> Win for yourself and raise money for charity.</span>
                     </motion.p>
 

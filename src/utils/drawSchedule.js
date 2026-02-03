@@ -1,6 +1,6 @@
 /**
  * Draw Schedule Configuration
- * Fixed draw schedule: 9th of every month at 8:00 PM EST
+ * Fixed draw schedule: 1st of every month at 8:00 PM EST
  * 
  * This module centralizes all draw timing logic to ensure consistency
  * across the entire application.
@@ -8,7 +8,7 @@
 
 // Draw schedule constants
 export const DRAW_CONFIG = {
-    DAY_OF_MONTH: 9,           // 9th of every month
+    DAY_OF_MONTH: 1,           // 1st of every month
     HOUR_EST: 20,              // 8:00 PM (20:00 in 24h format)
     MINUTE: 0,
     TIMEZONE: 'America/New_York', // EST/EDT timezone
@@ -39,7 +39,7 @@ export function getNextDrawDate() {
 
 /**
  * Get formatted next draw date string
- * @returns {string} e.g., "9th February 2026, 8:00 PM EST"
+ * @returns {string} e.g., "1st February 2026, 8:00 PM EST"
  */
 export function getNextDrawDateFormatted() {
     const nextDraw = getNextDrawDate();
@@ -49,7 +49,7 @@ export function getNextDrawDateFormatted() {
 /**
  * Format any draw date consistently
  * @param {Date} date - The draw date to format
- * @returns {string} e.g., "9th February 2026, 8:00 PM EST"
+ * @returns {string} e.g., "1st February 2026, 8:00 PM EST"
  */
 export function formatDrawDate(date) {
     const day = date.getDate();
@@ -139,6 +139,32 @@ export function getCountdownString() {
 }
 
 /**
+ * Get time until a specific date
+ * @param {Date} targetDate - The date to count down to
+ * @returns {Object} { days, hours, minutes, seconds, isPast }
+ */
+export function getTimeUntilDate(targetDate) {
+    const now = new Date();
+    const diff = targetDate.getTime() - now.getTime();
+
+    const isPast = diff <= 0;
+    const absDiff = Math.abs(diff);
+
+    const days = Math.floor(absDiff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((absDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((absDiff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((absDiff % (1000 * 60)) / 1000);
+
+    return {
+        days,
+        hours,
+        minutes,
+        seconds,
+        isPast
+    };
+}
+
+/**
  * Get the draw date for a specific month
  * @param {number} year - Year
  * @param {number} month - Month (0-11)
@@ -159,7 +185,23 @@ export function getDrawMonthYear(date = null) {
 }
 
 /**
+ * Parse a month year string back into a Date object for the draw
+ * @param {string} monthYear - e.g. "February 2026"
+ * @returns {Date} The draw date for that month
+ */
+export function getDrawDateFromMonthYear(monthYear) {
+    try {
+        if (!monthYear) return getNextDrawDate();
+        const [month, year] = monthYear.split(' ');
+        const date = new Date(`${month} 1, ${year}`);
+        return new Date(date.getFullYear(), date.getMonth(), DRAW_CONFIG.DAY_OF_MONTH, DRAW_CONFIG.HOUR_EST, DRAW_CONFIG.MINUTE, 0);
+    } catch (e) {
+        return getNextDrawDate();
+    }
+}
+
+/**
  * Static schedule description
  */
-export const DRAW_SCHEDULE_TEXT = "Monthly draw held on the 9th of every month at 8:00 PM EST";
-export const DRAW_SCHEDULE_SHORT = "9th of each month, 8PM EST";
+export const DRAW_SCHEDULE_TEXT = "Monthly draw held on the 1st of every month at 8:00 PM EST";
+export const DRAW_SCHEDULE_SHORT = "1st of each month, 8PM EST";

@@ -128,7 +128,8 @@ serve(async (req: Request) => {
                             is_paid: true,
                             paid_at: new Date().toISOString(),
                             payment_reference: session.payment_intent || session.id,
-                            verification_status: 'Paid',
+                            verification_status: 'verified',
+                            payout_status: 'paid',
                             verified_by: metadata.admin_id
                         })
                         .eq('id', metadata.entry_id)
@@ -139,10 +140,11 @@ serve(async (req: Request) => {
                         console.log('✅ Entry marked as paid via Stripe fulfillment')
 
                         // Log activity
-                        await supabase.from('admin_activity').insert({
-                            action_type: 'winner_paid_stripe',
+                        await supabase.from('activity_log').insert({
+                            action_type: 'admin_action',
                             description: `Winner ${metadata.winner_name} paid via Stripe fulfillment ($${session.amount_total / 100})`,
                             metadata: {
+                                type: 'winner_paid_stripe',
                                 entry_id: metadata.entry_id,
                                 session_id: session.id,
                                 amount: session.amount_total / 100
@@ -171,10 +173,11 @@ serve(async (req: Request) => {
                         console.log('✅ Charity payout record marked as paid via Stripe')
 
                         // Log activity
-                        await supabase.from('admin_activity').insert({
-                            action_type: 'charity_payout_stripe',
+                        await supabase.from('activity_log').insert({
+                            action_type: 'admin_action',
                             description: `Charity ${metadata.charity_name} paid via Stripe fulfillment ($${session.amount_total / 100})`,
                             metadata: {
+                                type: 'charity_payout_stripe',
                                 payout_id: metadata.payout_id,
                                 session_id: session.id,
                                 amount: session.amount_total / 100

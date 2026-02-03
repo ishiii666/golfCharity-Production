@@ -15,24 +15,11 @@ import { useSiteContent } from '../hooks/useSiteContent';
 
 export default function Home() {
     const { getContent, loading } = useSiteContent();
-    const [isReady, setIsReady] = useState(() => {
-        // Correct check for sessionStorage
-        return sessionStorage.getItem('entryAnimationPlayed') === 'true';
-    });
-
-    useEffect(() => {
-        if (!isReady) {
-            // Wait for EntryAnimation (3.05s total + 0.5s fade-out + 0.05s buffer)
-            const timer = setTimeout(() => {
-                setIsReady(true);
-            }, 3600);
-            return () => clearTimeout(timer);
-        }
-    }, [isReady]);
-
-    if (!isReady || loading) {
+    // Speed optimization: Home page should be ready immediately as EntryAnimation in App.jsx 
+    // is a fixed overlay. This avoids a 3.6s black screen delay.
+    if (loading) {
         return <div className="min-h-screen bg-[#020202] flex items-center justify-center">
-            {!loading && <div className="text-zinc-800 animate-pulse font-bold tracking-widest text-xs">INITIALIZING...</div>}
+            <div className="text-zinc-800 animate-pulse font-bold tracking-widest text-xs">LOADING...</div>
         </div>;
     }
 

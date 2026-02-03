@@ -9,7 +9,7 @@ export default function TheConcept() {
     const { getContent } = useSiteContent();
 
     const drawPoints = [
-        { text: getContent('concept', 'drawPoint1', 'All player scores are analyzed on the 9th of each month'), icon: <CheckCircle className="w-5 h-5 text-emerald-500" /> },
+        { text: getContent('concept', 'drawPoint1', 'All player scores are analyzed on the 1st of each month'), icon: <CheckCircle className="w-5 h-5 text-emerald-500" /> },
         { text: getContent('concept', 'drawPoint2', 'We find statistical outliers in the data'), icon: <Target className="w-5 h-5 text-emerald-500" /> },
         { text: getContent('concept', 'drawPoint3', '3 rarest + 2 most common = winning combo'), icon: <Coins className="w-5 h-5 text-emerald-500" /> },
         { text: getContent('concept', 'drawPoint4', 'Match your scores to win & give!'), icon: <Trophy className="w-5 h-5 text-emerald-500" /> }

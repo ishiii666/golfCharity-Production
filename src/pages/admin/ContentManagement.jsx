@@ -85,6 +85,30 @@ const contentCategories = [
         ]
     },
     {
+        id: 'contact',
+        label: 'Contact Page',
+        icon: '📞',
+        sections: [
+            {
+                id: 'contact_info',
+                title: 'Contact Details',
+                description: 'Public contact information and business hours',
+                fields: [
+                    { name: 'email', label: 'Support Email', type: 'text', value: '', section: 'contact' },
+                    { name: 'phone', label: 'Contact Phone', type: 'text', value: '', section: 'contact' },
+                    { name: 'address', label: 'Office Address', type: 'textarea', value: '', section: 'contact' },
+                    { name: 'hours_mon_fri', label: 'Mon-Fri Hours', type: 'text', value: '', section: 'contact' },
+                    { name: 'hours_sat', label: 'Saturday Hours', type: 'text', value: '', section: 'contact' },
+                    { name: 'hours_sun', label: 'Sunday Hours', type: 'text', value: '', section: 'contact' },
+                    { name: 'instagram_url', label: 'Instagram URL', type: 'text', value: '', section: 'contact' },
+                    { name: 'facebook_url', label: 'Facebook URL', type: 'text', value: '', section: 'contact' },
+                    { name: 'linkedin_url', label: 'LinkedIn URL', type: 'text', value: '', section: 'contact' },
+                    { name: 'twitter_url', label: 'Twitter/X URL', type: 'text', value: '', section: 'contact' }
+                ]
+            }
+        ]
+    },
+    {
         id: 'faqs',
         label: 'FAQs',
         icon: '❓',

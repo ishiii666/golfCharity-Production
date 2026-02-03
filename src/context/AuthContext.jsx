@@ -53,11 +53,11 @@ export function AuthProvider({ children }) {
             return;
         }
 
-        // Set a longer timeout to prevent false logout - Supabase can be slow
+        // Set a shorter timeout for session check to keep the app snappy
         const timeoutId = setTimeout(() => {
-            console.warn('⚠️ Auth session timeout - forcing load completion (session may still be loading)');
+            console.warn('⚠️ Auth session timeout - forcing load completion');
             setIsLoading(false);
-        }, 8000); // 8 seconds - give Supabase time to respond
+        }, 4000); // 4 seconds is plenty for session check
 
         // Get initial session - no racing, just wait for it
         const initSession = async () => {
@@ -73,16 +73,11 @@ export function AuthProvider({ children }) {
                     setUser(session.user);
                     setSession(session); // Cache the session
 
-                    // Fetch profile and subscription BEFORE ending initial load
-                    // This ensures isAdmin check is accurate on first render
-                    try {
-                        await Promise.all([
-                            fetchProfile(session.user.id, session.user.email, session.access_token),
-                            fetchSubscription(session.user.id, session.access_token)
-                        ]);
-                    } catch (err) {
-                        console.warn('Initial profile/subscription fetch error:', err.message);
-                    }
+                    // CRITICAL SPEED FIX: Don't await profile/subscription fetch
+                    // Components that need profile will show their own loading/empty states
+                    // This allows the App to finish its initial loading state immediately
+                    fetchProfile(session.user.id, session.user.email, session.access_token);
+                    fetchSubscription(session.user.id, session.access_token);
 
                     setIsLoading(false);
                 } else {
@@ -91,7 +86,6 @@ export function AuthProvider({ children }) {
                 }
             } catch (err) {
                 console.error('Session init error:', err);
-                // Don't display abort/timeout errors to users - these are not actionable
                 const isNonCriticalError = err.message?.includes('abort') ||
                     err.message?.includes('timeout') ||
                     err.name === 'AbortError';
@@ -168,26 +162,19 @@ export function AuthProvider({ children }) {
                 'Prefer': 'return=representation'
             };
 
-            // 1. Try fetching by ID
-            let url = `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=*`;
-            console.log('🔍 Fetch URL (ID):', url);
+            // Optimized: Fetch by ID or Email in a single request
+            const query = userEmail
+                ? `or=(id.eq.${userId},email.eq.${userEmail})`
+                : `id.eq.${userId}`;
 
-            let response = await fetch(url, { headers });
-            let data = await response.json();
+            const url = `${supabaseUrl}/rest/v1/profiles?${query}&select=*`;
+            console.log('🔍 Optimized profile fetch URL:', url);
 
-            console.log('🔍 Fetch response:', data);
-
-            // 2. If no data, try by email
-            if ((!data || data.length === 0) && userEmail) {
-                console.log('🔍 ID query returned no data, trying by email:', userEmail);
-                url = `${supabaseUrl}/rest/v1/profiles?email=eq.${userEmail}&select=*`;
-                response = await fetch(url, { headers });
-                data = await response.json();
-            }
+            const response = await fetch(url, { headers });
+            const data = await response.json();
 
             if (data && data.length > 0) {
-                console.log('✅ Profile fetched (fresh):', data[0]);
-                console.log('✅ Phone in DB:', data[0]?.phone);
+                console.log('✅ Profile fetched:', data[0]);
                 setProfile(data[0]);
             } else {
                 console.warn('⚠️ No profile found for user');
