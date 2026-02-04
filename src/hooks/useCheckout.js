@@ -31,30 +31,17 @@ export function useCheckout() {
         try {
             console.log('🔄 Creating checkout session for plan:', plan);
 
-            // Get current session for auth token
-            const { data: { session } } = await supabase.auth.getSession();
-
-            if (!session?.access_token) {
-                throw new Error('No valid session');
-            }
-
-            // Call the Supabase Edge Function
-            const response = await fetch(
-                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
+            // Call the Supabase Edge Function using the client helper
+            const { data, error: functionError } = await supabase.functions.invoke(
+                'create-checkout-session',
                 {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`
-                    },
-                    body: JSON.stringify({ priceId })
+                    body: { priceId }
                 }
             );
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to create checkout session');
+            if (functionError) {
+                console.error('Function error:', functionError);
+                throw new Error(functionError.message || 'Failed to create checkout session');
             }
 
             if (data.url) {
@@ -87,30 +74,18 @@ export function useCheckout() {
         setError(null);
 
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-
-            if (!session?.access_token) {
-                throw new Error('No valid session');
-            }
-
-            const response = await fetch(
-                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-portal-session`,
+            const { data, error: functionError } = await supabase.functions.invoke(
+                'create-portal-session',
                 {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`
-                    },
-                    body: JSON.stringify({
+                    body: {
                         returnUrl: window.location.origin + '/pricing'
-                    })
+                    }
                 }
             );
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to create portal session');
+            if (functionError) {
+                console.error('Function error:', functionError);
+                throw new Error(functionError.message || 'Failed to create portal session');
             }
 
             if (data.url) {

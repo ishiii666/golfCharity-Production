@@ -1,9 +1,11 @@
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
+import Stripe from "https://esm.sh/stripe@14.25.0?target=deno"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 serve(async (req: Request) => {
@@ -13,140 +15,138 @@ serve(async (req: Request) => {
     }
 
     try {
-        // Check if Stripe key is configured
+        // 1. Validate Environment Variables
         const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
-        if (!stripeKey) {
-            console.error('STRIPE_SECRET_KEY not configured')
-            throw new Error('Payment system not configured')
-        }
-
         const supabaseUrl = Deno.env.get('SUPABASE_URL')
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('Supabase env vars missing')
-            throw new Error('Database not configured')
+        if (!stripeKey) {
+            console.error('STRIPE_SECRET_KEY not configured')
+            throw new Error('Payment system is not yet configured on the server.')
         }
 
-        // Get user from auth header
+        if (!supabaseUrl || !supabaseServiceKey) {
+            console.error('Supabase env vars missing')
+            throw new Error('Server configuration error: Database connection details missing.')
+        }
+
+        // 2. Authenticate User
         const authHeader = req.headers.get('Authorization')
         if (!authHeader) {
             console.error('Missing authorization header')
-            throw new Error('Missing authorization header')
+            throw new Error('User session not found. Please log in.')
         }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
         const token = authHeader.replace('Bearer ', '')
 
-        console.log('Authenticating user...')
+        console.log('Verifying user session...')
         const { data: { user }, error: authError } = await supabase.auth.getUser(token)
 
-        if (authError) {
-            console.error('Auth error:', authError.message)
-            throw new Error('Authentication failed: ' + authError.message)
+        if (authError || !user) {
+            console.error('Auth error:', authError?.message || 'No user found')
+            return new Response(
+                JSON.stringify({ error: 'Session expired or invalid. Please log in again.' }),
+                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
         }
 
-        if (!user) {
-            console.error('No user found')
-            throw new Error('Not authenticated')
-        }
+        console.log('Processing request for user:', user.id)
 
-        console.log('User authenticated:', user.id)
-
+        // 3. Parse Request Body
         const body = await req.json()
         const { priceId } = body
 
-        console.log('Price ID received:', priceId)
-
         if (!priceId) {
-            throw new Error('Missing priceId')
+            throw new Error('Invalid request: Missing plan identification (priceId).')
         }
 
-        // Check if user already has a Stripe customer ID
+        console.log('Price ID identified:', priceId)
+
+        // 4. Initialize Stripe
+        const stripe = new Stripe(stripeKey, {
+            apiVersion: '2023-10-16',
+        })
+
+        // 5. Get or Create Stripe Customer
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('stripe_customer_id, email')
+            .select('stripe_customer_id, email, full_name')
             .eq('id', user.id)
             .single()
 
         if (profileError) {
-            console.error('Profile error:', profileError.message)
+            console.warn('Profile fetch warning:', profileError.message)
         }
 
         let customerId = profile?.stripe_customer_id
 
-        // Use fetch to call Stripe API directly (more compatible)
-        const stripeHeaders = {
-            'Authorization': `Bearer ${stripeKey}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-        }
-
-        // Create Stripe customer if doesn't exist
         if (!customerId) {
-            console.log('Creating Stripe customer...')
-
-            const customerResponse = await fetch('https://api.stripe.com/v1/customers', {
-                method: 'POST',
-                headers: stripeHeaders,
-                body: new URLSearchParams({
-                    email: user.email || profile?.email || '',
-                    'metadata[supabase_user_id]': user.id,
-                }),
+            console.log('Creating new Stripe customer...')
+            const customer = await stripe.customers.create({
+                email: user.email || profile?.email || '',
+                name: profile?.full_name || '',
+                metadata: {
+                    supabase_user_id: user.id,
+                },
             })
+            customerId = customer.id
 
-            const customerData = await customerResponse.json()
-
-            if (customerData.error) {
-                console.error('Stripe customer error:', customerData.error.message)
-                throw new Error('Failed to create customer: ' + customerData.error.message)
-            }
-
-            customerId = customerData.id
-            console.log('Stripe customer created:', customerId)
-
-            // Save customer ID to profile
-            await supabase
+            // Update profile with customer ID
+            const { error: updateError } = await supabase
                 .from('profiles')
                 .update({ stripe_customer_id: customerId })
                 .eq('id', user.id)
+
+            if (updateError) {
+                console.error('Failed to update profile with customer ID:', updateError.message)
+            }
         }
 
-        // Create checkout session using Stripe API directly
-        const origin = req.headers.get('origin') || 'http://localhost:5173'
-        console.log('Creating checkout session with origin:', origin)
+        // 6. Create Stripe Checkout Session
+        const origin = req.headers.get('origin') || 'https://www.golfcharity.com.au'
+        console.log('Initializing checkout from origin:', origin)
 
-        const sessionResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: stripeHeaders,
-            body: new URLSearchParams({
-                customer: customerId,
-                mode: 'subscription',
-                'payment_method_types[0]': 'card',
-                'line_items[0][price]': priceId,
-                'line_items[0][quantity]': '1',
-                success_url: `${origin}/pricing?success=true`,
-                cancel_url: `${origin}/pricing?canceled=true`,
-                'metadata[supabase_user_id]': user.id,
-            }),
+        const session = await stripe.checkout.sessions.create({
+            customer: customerId,
+            mode: 'subscription',
+            payment_method_types: ['card'],
+            line_items: [
+                {
+                    price: priceId,
+                    quantity: 1,
+                },
+            ],
+            success_url: `${origin}/pricing?success=true`,
+            cancel_url: `${origin}/pricing?canceled=true`,
+            customer_update: {
+                address: 'auto',
+            },
+            subscription_data: {
+                metadata: {
+                    supabase_user_id: user.id,
+                },
+            },
+            metadata: {
+                supabase_user_id: user.id,
+            },
         })
 
-        const sessionData = await sessionResponse.json()
-
-        if (sessionData.error) {
-            console.error('Stripe session error:', sessionData.error.message)
-            throw new Error('Failed to create checkout: ' + sessionData.error.message)
+        if (!session.url) {
+            throw new Error('Stripe failed to generate a checkout URL.')
         }
 
-        console.log('Checkout session created:', sessionData.id)
+        console.log('Checkout session created successfully:', session.id)
 
         return new Response(
-            JSON.stringify({ url: sessionData.url }),
+            JSON.stringify({ url: session.url }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
 
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-        console.error('Checkout session error:', errorMessage)
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during checkout.'
+        console.error('Checkout error detail:', errorMessage)
+
         return new Response(
             JSON.stringify({ error: errorMessage }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
