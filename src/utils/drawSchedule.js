@@ -195,7 +195,7 @@ export function getDrawDateFromMonthYear(monthYear) {
         const [month, year] = monthYear.split(' ');
         const date = new Date(`${month} 1, ${year}`);
         return new Date(date.getFullYear(), date.getMonth(), DRAW_CONFIG.DAY_OF_MONTH, DRAW_CONFIG.HOUR_EST, DRAW_CONFIG.MINUTE, 0);
-    } catch (e) {
+    } catch {
         return getNextDrawDate();
     }
 }

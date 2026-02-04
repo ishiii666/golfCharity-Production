@@ -233,7 +233,7 @@ export default function Charities() {
                                     <Card key={charity.id} className="group overflow-hidden hover:border-emerald-500/30 transition-all duration-300">
                                         <div className="relative aspect-video overflow-hidden">
                                             <img
-                                                src={charity.image && charity.image.includes('unsplash') ? charity.image.split('?')[0] + '?ixlib=rb-1.2.1&auto=format&fit=crop&q=80&w=600' : charity.image}
+                                                src={charity.image}
                                                 alt={charity.name}
                                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                                 referrerPolicy="no-referrer"

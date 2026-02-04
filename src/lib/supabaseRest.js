@@ -17,46 +17,79 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export function enrichCharityData(c) {
     if (!c) return null;
 
-    const name = c.name?.toLowerCase() || '';
-    const category = c.category?.toLowerCase() || '';
+    const name = (c.name || '').toLowerCase();
+    const category = (c.category || '').toLowerCase();
+    const slug = (c.slug || '').toLowerCase();
 
-    // Standardizing Unsplash fallbacks with proper query params
-    let fallbackImageId = 'photo-1488521787991-ed7bbaae773c'; // Default humanitarian
-    let fallbackLogo = 'https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200';
+    // Map custom high-quality local assets to specific types
+    const CUSTOM_ASSETS = {
+        medical: '/images/charities/cancer_council_hero.png',
+        emergency: '/images/charities/royal_flying_doctor_hero.png',
+        ocean: '/images/charities/surf_life_saving_hero.png',
+        mental: '/images/charities/lifeline_hero.png',
+        animal: '/images/charities/animal_welfare_hero.png',
+        education: '/images/charities/education_hero.png',
+        international: '/images/charities/international_aid_hero.png',
+        nature: '/images/charities/environment_hero.png',
+        disability: '/images/charities/disability_hero.png',
+        community: '/images/charities/community_hero.png'
+    };
 
-    if (name.includes('blue') || category.includes('mental')) {
-        fallbackImageId = 'photo-1527137342181-19aab11a8ee1';
-    } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
-        fallbackImageId = 'photo-1579154235602-3c2c244b748b';
-    } else if (name.includes('starlight') || category.includes('child')) {
-        fallbackImageId = 'photo-1502086223501-7ea6ecd79368';
-    } else if (name.includes('wild') || category.includes('environ')) {
-        fallbackImageId = 'photo-1441974231531-c6227db76b6e';
-    } else if (name.includes('salvation') || name.includes('army') || category.includes('community')) {
-        fallbackImageId = 'photo-1469571486292-0ba58a3f068b';
-    } else if (name.includes('red cross') || name.includes('humanitarian')) {
-        fallbackImageId = 'photo-1488521787991-ed7bbaae773c';
+    // Unsplash Fallback Sets for Variety
+    const UNSPLASH_SETS = {
+        medical: ['photo-1532938911079-1b06ac7ceec7', 'photo-1516549655169-df83a0774514', 'photo-1505751172876-fa1923c5c528'],
+        mental: ['photo-1527137342181-19aab11a8ee1', 'photo-1490670096971-8005fec55d50', 'photo-1506126613408-eca07ce68773'],
+        children: ['photo-1488521787991-ed7bbaae773c', 'photo-1502086223501-7ea6ecd79368', 'photo-1471286174890-9c112ffca5b4'],
+        animal: ['photo-1534361960057-19889db9621e', 'photo-1516734212186-a967f81ad0d7', 'photo-1543852786-1cf6624b9987'],
+        nature: ['photo-1441974231531-c6227db76b6e', 'photo-1470071459604-3b5ec3a7fe05', 'photo-1472396961693-142e6e269027'],
+        community: ['photo-1469571486292-0ba58a3f068b', 'photo-1542831371-29b0f74f9713', 'photo-1518391846015-55a9cb003b62']
+    };
+
+    // Selection Logic
+    let assetKey = 'community';
+    if (name.includes('blue') || name.includes('lifeline') || category.includes('mental')) assetKey = 'mental';
+    else if (name.includes('cancer') || name.includes('heart') || category.includes('health')) assetKey = 'medical';
+    else if (name.includes('doctor') || name.includes('emergency')) assetKey = 'emergency';
+    else if (name.includes('surf') || name.includes('life saving')) assetKey = 'ocean';
+    else if (name.includes('animal') || name.includes('rspca') || name.includes('wildlife')) assetKey = 'animal';
+    else if (name.includes('bush') || name.includes('nature') || category.includes('environ') || category.includes('climate')) assetKey = 'nature';
+    else if (name.includes('wish') || name.includes('starlight') || name.includes('kids') || category.includes('child')) assetKey = 'children';
+    else if (name.includes('education') || name.includes('smith family') || category.includes('education')) assetKey = 'education';
+    else if (name.includes('unicef') || name.includes('oxfam') || name.includes('world vision') || category.includes('international')) assetKey = 'international';
+    else if (name.includes('disability') || name.includes('guide dog') || name.includes('vision australia')) assetKey = 'disability';
+
+    // Build URL
+    let imageUrl = c.image_url || c.image;
+    if (!imageUrl) {
+        // Use custom local asset if it matches
+        if (CUSTOM_ASSETS[assetKey]) {
+            imageUrl = CUSTOM_ASSETS[assetKey];
+        } else {
+            // Fallback to Unsplash set
+            const set = UNSPLASH_SETS[assetKey] || UNSPLASH_SETS.community;
+            const hash = slug.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const assetId = set[hash % set.length];
+            imageUrl = `https://images.unsplash.com/${assetId}?auto=format&fit=crop&q=80&w=1200`;
+        }
     }
 
-    let fallbackUrl = `https://images.unsplash.com/${fallbackImageId}?auto=format&fit=crop&q=80&w=800`;
-    fallbackLogo = `https://images.unsplash.com/${fallbackImageId}?auto=format&fit=crop&q=80&w=200`;
-
-    // Priority 1: High-quality local assets for core charities
-    if (name.includes('blue') || category.includes('mental')) {
-        fallbackUrl = '/images/charities/beyond_blue_main.png';
-        fallbackLogo = '/images/charities/beyond_blue_main.png';
-    } else if (name.includes('cancer') || category.includes('medical') || category.includes('health')) {
-        fallbackUrl = '/images/charities/cancer_council_main.png';
-        fallbackLogo = '/images/charities/cancer_council_main.png';
+    // Logo resolution
+    let logoUrl = c.logo_url || c.logo;
+    if (!logoUrl) {
+        if (name.includes('blue')) logoUrl = '/images/charities/beyond_blue_main.png';
+        else if (name.includes('cancer council')) logoUrl = '/images/charities/cancer_council_main.png';
+        else {
+            // Default to a generic but nice looking Unsplash logo if none found
+            logoUrl = `https://images.unsplash.com/photo-1599305090748-39322251147d?auto=format&fit=crop&q=80&w=200`;
+        }
     }
 
-    // Return object with standardized fields
     return {
         ...c,
-        image_url: c.image_url || c.image || fallbackUrl,
-        logo_url: c.logo_url || c.logo || fallbackLogo,
-        image: c.image_url || c.image || fallbackUrl,
-        logo: c.logo_url || c.logo || fallbackLogo
+        image_url: imageUrl,
+        logo_url: logoUrl,
+        image: imageUrl,
+        logo: logoUrl
     };
 }
 
@@ -178,7 +211,7 @@ export async function updateRow(table, id, updates) {
             try {
                 const error = await response.json();
                 errorMessage = error.message || error.error || errorMessage;
-            } catch (e) {
+            } catch {
                 const text = await response.text();
                 errorMessage = text || errorMessage;
             }
@@ -438,7 +471,6 @@ export async function saveSiteContent(sectionId, fieldName, fieldValue, fieldTyp
  */
 export async function saveSiteContentBulk(items) {
     try {
-        const authToken = await getAuthToken();
         const results = [];
 
         for (const item of items) {
@@ -751,7 +783,7 @@ export async function deleteUser(userId) {
             try {
                 const errorData = await response.json();
                 errorMessage = errorData.error || errorMessage;
-            } catch (e) {
+            } catch {
                 // If not JSON, get text
                 const text = await response.text();
                 errorMessage = text || response.statusText || errorMessage;
@@ -792,10 +824,10 @@ export async function insertData(table, rowData) {
                 try {
                     const error = JSON.parse(text);
                     errorMessage = error.message || error.error || errorMessage;
-                } catch (e) {
+                } catch {
                     errorMessage = text || errorMessage;
                 }
-            } catch (e) {
+            } catch {
                 errorMessage = response.statusText || errorMessage;
             }
             throw new Error(errorMessage);
@@ -808,7 +840,7 @@ export async function insertData(table, rowData) {
         try {
             const data = JSON.parse(text);
             return Array.isArray(data) ? data[0] : data;
-        } catch (e) {
+        } catch {
             return { success: true };
         }
     } catch (error) {
@@ -2900,8 +2932,6 @@ export async function getPayableWinnersForDraw(drawId) {
  */
 export async function markBatchWinnersAsPaid(entryIds, reference, adminId) {
     try {
-        const authToken = await getAuthToken();
-
         // Phase 3: Bulk Execution
         // We need to settle each one to ensure balance updates happen
         console.log(`🏦 Settling batch of ${entryIds.length} winners...`);
@@ -3730,7 +3760,7 @@ export async function getUserImpactStats(userId) {
         // 2. Get rounds played (count of scores)
         let roundsPlayed = 0;
         try {
-            const scoresRes = await fetch(
+            await fetch(
                 `${SUPABASE_URL}/rest/v1/scores?user_id=eq.${userId}&select=id`,
                 { headers, method: 'HEAD' }
             );
@@ -3888,36 +3918,36 @@ export async function getFeaturedCharities(limit = 4) {
  * Supports 'impact' (default) or 'winners' mode
  */
 export async function getLeaderboardData(limit = 5, type = 'impact') {
+    const ACCENTS = [
+        { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
+        { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
+        { accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
+        { accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
+        { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
+    ];
+
+    // --- MOCK DATA DEFINITIONS ---
+    const MOCK_IMPACT = [
+        { name: "James Mitchell", initials: "JM", scores: [34, 31, 38, 29, 35], raised: 2450, charity: "Red Cross", donation_percentage: 10, avg: 33 },
+        { name: "Sarah Chen", initials: "SC", scores: [32, 28, 41, 30, 36], raised: 1890, charity: "Beyond Blue", donation_percentage: 10, avg: 33 },
+        { name: "Michael O'Brien", initials: "MO", scores: [35, 33, 30, 37, 32], raised: 1650, charity: "Smith Family", donation_percentage: 10, avg: 33 },
+        { name: "Emma Williams", initials: "EW", scores: [31, 36, 29, 34, 33], raised: 1420, charity: "OzHarvest", donation_percentage: 10, avg: 32 },
+        { name: "Avery Thompson", initials: "AT", scores: [28, 32, 25, 30, 29], raised: 850, charity: "Cancer Council", donation_percentage: 10, avg: 29 }
+    ];
+
+    const MOCK_WINNERS = [
+        { name: "Lucas Grant", initials: "LG", scores: [42, 38, 44, 36, 40], raised: 5250, charity: "Black Dog Institute", donation_percentage: 10, avg: 40, winnerTier: "5 MATCH JACKPOT WINNER", winningNumbers: [42, 38, 44, 36, 40] },
+        { name: "Sophia Rossi", initials: "SR", scores: [39, 41, 37, 35, 38], raised: 1250, charity: "Rural Aid", donation_percentage: 10, avg: 38, winnerTier: "4 MATCH POOL WINNER", winningNumbers: [39, 41, 37, 35, 20] },
+        { name: "Oliver Bennett", initials: "OB", scores: [36, 34, 32, 38, 35], raised: 750, charity: "Lifeline", donation_percentage: 10, avg: 35, winnerTier: "3 MATCH POOL WINNER", winningNumbers: [36, 34, 32, 10, 15] },
+        { name: "Isabella Wright", initials: "IW", scores: [40, 42, 38, 36, 41], raised: 5250, charity: "Headspace", donation_percentage: 20, avg: 39, winnerTier: "5 MATCH JACKPOT WINNER", winningNumbers: [40, 42, 38, 36, 41] },
+        { name: "Ethan Hunt", initials: "EH", scores: [38, 36, 34, 40, 32], raised: 1250, charity: "Starlight Foundation", donation_percentage: 10, avg: 36, winnerTier: "4 MATCH POOL WINNER", winningNumbers: [38, 36, 34, 40, 10] }
+    ];
+
     try {
         const publicHeaders = {
             'apikey': SUPABASE_KEY,
             'Content-Type': 'application/json'
         };
-
-        const ACCENTS = [
-            { accent: "from-emerald-400 to-teal-600", glow: "rgba(16, 185, 129, 0.3)" },
-            { accent: "from-teal-400 to-emerald-600", glow: "rgba(20, 184, 166, 0.3)" },
-            { accent: "from-lime-400 to-emerald-600", glow: "rgba(163, 230, 53, 0.3)" },
-            { accent: "from-emerald-500 to-emerald-800", glow: "rgba(16, 185, 129, 0.2)" },
-            { accent: "from-zinc-500 to-zinc-800", glow: "rgba(113, 113, 122, 0.2)" }
-        ];
-
-        // --- MOCK DATA DEFINITIONS ---
-        const MOCK_IMPACT = [
-            { name: "James Mitchell", initials: "JM", scores: [34, 31, 38, 29, 35], raised: 2450, charity: "Red Cross", donation_percentage: 10, avg: 33 },
-            { name: "Sarah Chen", initials: "SC", scores: [32, 28, 41, 30, 36], raised: 1890, charity: "Beyond Blue", donation_percentage: 10, avg: 33 },
-            { name: "Michael O'Brien", initials: "MO", scores: [35, 33, 30, 37, 32], raised: 1650, charity: "Smith Family", donation_percentage: 10, avg: 33 },
-            { name: "Emma Williams", initials: "EW", scores: [31, 36, 29, 34, 33], raised: 1420, charity: "OzHarvest", donation_percentage: 10, avg: 32 },
-            { name: "Avery Thompson", initials: "AT", scores: [28, 32, 25, 30, 29], raised: 850, charity: "Cancer Council", donation_percentage: 10, avg: 29 }
-        ];
-
-        const MOCK_WINNERS = [
-            { name: "Lucas Grant", initials: "LG", scores: [42, 38, 44, 36, 40], raised: 5250, charity: "Black Dog Institute", donation_percentage: 10, avg: 40, winnerTier: "5 MATCH JACKPOT WINNER", winningNumbers: [42, 38, 44, 36, 40] },
-            { name: "Sophia Rossi", initials: "SR", scores: [39, 41, 37, 35, 38], raised: 1250, charity: "Rural Aid", donation_percentage: 10, avg: 38, winnerTier: "4 MATCH POOL WINNER", winningNumbers: [39, 41, 37, 35, 20] },
-            { name: "Oliver Bennett", initials: "OB", scores: [36, 34, 32, 38, 35], raised: 750, charity: "Lifeline", donation_percentage: 10, avg: 35, winnerTier: "3 MATCH POOL WINNER", winningNumbers: [36, 34, 32, 10, 15] },
-            { name: "Isabella Wright", initials: "IW", scores: [40, 42, 38, 36, 41], raised: 5250, charity: "Headspace", donation_percentage: 20, avg: 39, winnerTier: "5 MATCH JACKPOT WINNER", winningNumbers: [40, 42, 38, 36, 41] },
-            { name: "Ethan Hunt", initials: "EH", scores: [38, 36, 34, 40, 32], raised: 1250, charity: "Starlight Foundation", donation_percentage: 10, avg: 36, winnerTier: "4 MATCH POOL WINNER", winningNumbers: [38, 36, 34, 40, 10] }
-        ];
 
         let finalLeaderboard = [];
 
@@ -3995,7 +4025,7 @@ export async function getLeaderboardData(limit = 5, type = 'impact') {
                 });
 
                 const sortedImpactUserIds = Object.entries(userTotals)
-                    .filter(([_, amount]) => amount > 0)
+                    .filter(([, amount]) => amount > 0)
                     .sort((a, b) => b[1] - a[1])
                     .map(([id]) => id);
 
