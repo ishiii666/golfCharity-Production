@@ -1,3 +1,4 @@
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const corsHeaders = {
@@ -101,7 +102,8 @@ Deno.serve(async (req) => {
 
     } catch (error) {
         console.error('Function Error:', error)
-        return new Response(JSON.stringify({ error: error.message }), {
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+        return new Response(JSON.stringify({ error: errorMessage }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
         })

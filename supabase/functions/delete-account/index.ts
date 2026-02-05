@@ -1,3 +1,4 @@
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
@@ -129,7 +130,8 @@ Deno.serve(async (req) => {
 
     } catch (error) {
         console.error('=== DELETE ACCOUNT ERROR ===', error);
-        return new Response(JSON.stringify({ error: error.message || 'Unknown error occurred' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        return new Response(JSON.stringify({ error: errorMessage }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 });
 
