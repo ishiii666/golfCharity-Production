@@ -184,21 +184,21 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
 
                             {/* Right - Scrollable Content */}
                             <div className="modal-scroll-content md:w-3/5 overflow-y-auto" style={{ maxHeight: '85vh' }}>
-                                <div className="p-6 space-y-6">
+                                <div className="p-5 space-y-4">
 
                                     {/* Stats */}
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div className="p-3 rounded-xl bg-white/5 text-center">
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="p-2 rounded-xl bg-white/5 text-center">
                                             <HeartIcon size={20} className="mx-auto mb-1 text-[#c9a227]" strokeWidth={1.5} />
                                             <div className="text-lg font-bold text-[#f9f5e3]">${extendedCharity.totalRaised?.toLocaleString() || '0'}</div>
                                             <div className="text-xs text-neutral-400">Raised</div>
                                         </div>
-                                        <div className="p-3 rounded-xl bg-white/5 text-center">
+                                        <div className="p-2 rounded-xl bg-white/5 text-center">
                                             <UsersIcon size={20} className="mx-auto mb-1 text-[#4ade80]" strokeWidth={1.5} />
                                             <div className="text-lg font-bold text-[#f9f5e3]">{extendedCharity.supporters || 0}</div>
                                             <div className="text-xs text-neutral-400">Supporters</div>
                                         </div>
-                                        <div className="p-3 rounded-xl bg-white/5 text-center">
+                                        <div className="p-2 rounded-xl bg-white/5 text-center">
                                             <LocationIcon size={20} className="mx-auto mb-1 text-[#38bdf8]" strokeWidth={1.5} />
                                             <div className="text-lg font-bold text-[#f9f5e3]">{extendedCharity.location || 'National'}</div>
                                             <div className="text-xs text-neutral-400">Location</div>
@@ -207,7 +207,7 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
 
                                     {/* About */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-[#f9f5e3] mb-2">About</h3>
+                                        <h3 className="text-base font-bold text-[#f9f5e3] mb-1">About</h3>
                                         <p className="text-sm text-neutral-300 leading-relaxed">
                                             {extendedCharity.description}
                                         </p>
@@ -215,8 +215,8 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
 
                                     {/* Golf Charity Day - New Section */}
                                     {(charity.charity_day_date || charity.charity_day_location) && (
-                                        <div className="p-4 rounded-xl bg-gradient-to-br from-[#c9a227]/10 to-transparent border border-[#c9a227]/20">
-                                            <h3 className="text-sm font-bold text-[#c9a227] uppercase tracking-wider mb-3 flex items-center gap-2">
+                                        <div className="p-3 rounded-xl bg-gradient-to-br from-[#c9a227]/10 to-transparent border border-[#c9a227]/20">
+                                            <h3 className="text-xs font-bold text-[#c9a227] uppercase tracking-wider mb-2 flex items-center gap-2">
                                                 <StarIcon size={14} fill="currentColor" /> Upcoming Golf Charity Day
                                             </h3>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -241,7 +241,7 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
                                                     </div>
                                                 )}
                                                 {charity.charity_day_location && (
-                                                    <div className="flex items-start gap-3">
+                                                    <div className="flex items-start gap-2">
                                                         <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
                                                             <LocationIcon size={16} className="text-[#38bdf8]" strokeWidth={2} />
                                                         </div>
@@ -256,8 +256,8 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
                                     )}
 
                                     {/* Visit Website */}
-                                    <div className="p-4 rounded-xl bg-white/5 ring-1 ring-inset ring-white/10">
-                                        <p className="text-sm text-neutral-400 mb-3 font-medium">Want to support this charity?</p>
+                                    <div className="p-3 rounded-xl bg-white/5 ring-1 ring-inset ring-white/10">
+                                        <p className="text-xs text-neutral-400 mb-2 font-medium">Want to support this charity?</p>
                                         <div className="flex flex-wrap gap-3">
                                             <a
                                                 href={extendedCharity.website}
@@ -283,9 +283,9 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
                                     </div>
 
                                     {/* Supporters */}
-                                    <div className="pt-2">
-                                        <h3 className="text-lg font-bold text-[#f9f5e3] mb-3 flex items-center gap-2">
-                                            <UsersIcon size={18} className="text-[#4ade80]" strokeWidth={2} /> Recent Supporters
+                                    <div className="pt-0">
+                                        <h3 className="text-base font-bold text-[#f9f5e3] mb-2 flex items-center gap-2">
+                                            <UsersIcon size={16} className="text-[#4ade80]" strokeWidth={2} /> Recent Supporters
                                         </h3>
                                         <div className="flex flex-wrap gap-2 min-h-[32px]">
                                             {loadingSupporters ? (
@@ -315,9 +315,9 @@ export default function CharityDetailsModal({ isOpen, onClose, charity, onSelect
                                     </div>
 
                                     {/* Gallery */}
-                                    <div className="pb-12 pt-2">
-                                        <h3 className="text-lg font-bold text-[#f9f5e3] mb-4">Gallery</h3>
-                                        <div className="grid grid-cols-3 gap-4">
+                                    <div className="pb-6 pt-0">
+                                        <h3 className="text-base font-bold text-[#f9f5e3] mb-2">Gallery</h3>
+                                        <div className="grid grid-cols-3 gap-2">
                                             {extendedCharity.gallery.map((img, i) => (
                                                 <div key={i} className="aspect-square rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-lg">
                                                     <img
