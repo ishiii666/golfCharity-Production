@@ -48,8 +48,8 @@ export default function AddCharity() {
     const handleImageSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                addToast('error', 'Image must be less than 5MB');
+            if (file.size > 15 * 1024 * 1024) {
+                addToast('error', 'Image must be less than 15MB');
                 return;
             }
             setImageFile(file);
@@ -320,7 +320,7 @@ export default function AddCharity() {
                                                     </svg>
                                                 </div>
                                                 <p className="text-zinc-300 font-medium">Click to upload charity image</p>
-                                                <p className="text-zinc-500 text-sm mt-1">PNG, JPG or WEBP up to 5MB</p>
+                                                <p className="text-zinc-500 text-sm mt-1">PNG, JPG or WEBP up to 15MB</p>
                                             </div>
                                         )}
                                         <input

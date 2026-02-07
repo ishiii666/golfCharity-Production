@@ -88,14 +88,8 @@ export default function ImpactMoment() {
                     <h2
                         className="text-4xl sm:text-5xl lg:text-7xl font-black mb-4 text-white leading-[0.9] tracking-tighter uppercase"
                         style={{ fontFamily: 'var(--font-display)' }}
-                    >
-                        <span dangerouslySetInnerHTML={{
-                            __html: title.split(' ').map((word, i) => {
-                                const isImpact = word.toLowerCase().includes('impact');
-                                return `<span class="${isImpact ? "text-gradient-emerald italic pr-2" : ""}">${word} </span>${i === 2 ? '<br />' : ''}`;
-                            }).join('')
-                        }} />
-                    </h2>
+                        dangerouslySetInnerHTML={{ __html: title }}
+                    />
                     <motion.div
                         initial={{ width: 0 }}
                         animate={isInView ? { width: "60px" } : { width: 0 }}
@@ -138,7 +132,7 @@ export default function ImpactMoment() {
                         exit={{ opacity: 0, scale: 1.2, filter: "blur(20px)" }}
                         transition={{ duration: 1, ease: "easeOut", delay: 0.5 }}
                     >
-                        <div className="bg-zinc-950/90 backdrop-blur-2xl px-6 py-10 md:p-16 rounded-[2rem] md:rounded-[3rem] border border-emerald-500/20 text-center max-w-[calc(100vw-2rem)] md:max-w-3xl shadow-[0_0_50px_rgba(16,185,129,0.2)]">
+                        <div className="bg-zinc-950/90 backdrop-blur-2xl px-6 py-10 md:p-16 rounded-[2rem] md:rounded-[3rem] border border-emerald-500/20 text-center w-full max-w-[95%] md:max-w-4xl shadow-[0_0_50px_rgba(16,185,129,0.2)]">
                             <motion.span
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -147,7 +141,7 @@ export default function ImpactMoment() {
                             >
                                 {getContent('reveal', 'impactLabel', 'Breakthrough Achieved')}
                             </motion.span>
-                            <h2 className="text-3xl sm:text-4xl md:text-7xl font-black text-white mb-6 tracking-tighter uppercase italic leading-[0.9] break-words">
+                            <h2 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black text-white mb-6 tracking-tighter uppercase italic leading-[0.9] break-words">
                                 <span dangerouslySetInnerHTML={{
                                     __html: getContent('reveal', 'impactTitle', 'WINNER & <br /><span class="text-emerald-500">BENEFACTOR</span>')
                                 }} />

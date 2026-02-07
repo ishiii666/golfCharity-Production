@@ -35,7 +35,7 @@ export function enrichCharityData(c) {
         community: '/images/charities/community_hero.png'
     };
 
-    // Unsplash Fallback Sets for Variety
+    // Unsplash Fallback Sets for Variety (used when no custom asset matches)
     const UNSPLASH_SETS = {
         medical: ['photo-1532938911079-1b06ac7ceec7', 'photo-1516549655169-df83a0774514', 'photo-1505751172876-fa1923c5c528'],
         mental: ['photo-1527137342181-19aab11a8ee1', 'photo-1490670096971-8005fec55d50', 'photo-1506126613408-eca07ce68773'],

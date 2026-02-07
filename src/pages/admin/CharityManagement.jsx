@@ -96,8 +96,8 @@ export default function CharityManagement() {
     const handleImageSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                addToast('error', 'Image must be less than 5MB');
+            if (file.size > 15 * 1024 * 1024) {
+                addToast('error', 'Image must be less than 15MB');
                 return;
             }
             setImageFile(file);
@@ -584,7 +584,7 @@ export default function CharityManagement() {
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                         </svg>
                                                         <p className="text-zinc-400 text-sm">Click to upload image</p>
-                                                        <p className="text-zinc-500 text-xs mt-1">PNG, JPG up to 5MB</p>
+                                                        <p className="text-zinc-500 text-xs mt-1">PNG, JPG up to 15MB</p>
                                                     </div>
                                                 )}
                                                 <input

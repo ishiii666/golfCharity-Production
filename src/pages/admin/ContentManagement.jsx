@@ -16,37 +16,11 @@ const contentCategories = [
         icon: '🏠',
         sections: [
             {
-                id: 'hero',
-                title: 'Hero Section',
-                description: 'Main landing page content',
-                fields: [
-                    { name: 'title', label: 'Main Title', type: 'text', value: '' },
-                    { name: 'subtitle', label: 'Subtitle/Description', type: 'textarea', value: '' },
-                    { name: 'ctaText', label: 'Primary CTA Button', type: 'text', value: '' }
-                ]
-            },
-            {
-                id: 'concept',
-                title: 'Draw Mechanics (The Concept)',
-                description: 'Section explaining how your scores become lucky numbers',
-                fields: [
-                    { name: 'title', label: 'Section Title', type: 'text', value: '' },
-                    { name: 'subtitle', label: 'Section Subtitle', type: 'textarea', value: '' },
-                    { name: 'drawHeadline', label: 'Box Title', type: 'text', value: '' },
-                    { name: 'drawPoint1', label: 'Point 1', type: 'text', value: '' },
-                    { name: 'drawPoint2', label: 'Point 2', type: 'text', value: '' },
-                    { name: 'drawPoint3', label: 'Point 3', type: 'text', value: '' },
-                    { name: 'drawPoint4', label: 'Point 4', type: 'text', value: '' },
-                    { name: 'exampleNumbers', label: 'Example Numbers (comma separated)', type: 'text', value: '' },
-                    { name: 'exampleLabel', label: 'Example Label', type: 'text', value: '' }
-                ]
-            },
-            {
                 id: 'reveal',
                 title: 'Impact Reveal (Cards)',
                 description: 'The automated card reveal and winner announcement',
                 fields: [
-                    { name: 'title', label: 'Section Title', type: 'text', value: '' },
+                    { name: 'title', label: 'Section Title (Use <span class="text-gradient-emerald italic">...</span> for green highlight)', type: 'text', value: '' },
                     { name: 'subtitle', label: 'Section Subtitle', type: 'text', value: '' },
                     { name: 'badgeText', label: 'Section Badge (The Ultimate Payoff)', type: 'text', value: '' },
                     { name: 'luckyNumbers', label: 'Winning Numbers (comma separated)', type: 'text', value: '' },
@@ -56,6 +30,22 @@ const contentCategories = [
                     { name: 'impactDays', label: 'Impact Value (e.g. 14)', type: 'text', value: '' },
                     { name: 'impactInfix', label: 'Impact Infix (e.g. of)', type: 'text', value: '' },
                     { name: 'impactDesc', label: 'Impact Description (e.g. medical support...)', type: 'textarea', value: '' }
+                ]
+            },
+            {
+                id: 'concept',
+                title: 'Draw Mechanics',
+                description: 'Section explaining how your scores become lucky numbers',
+                fields: [
+                    { name: 'title', label: 'Section Title (Use <span class="text-emerald-500">...</span> for green highlight)', type: 'text', value: '' },
+                    { name: 'subtitle', label: 'Section Subtitle', type: 'textarea', value: '' },
+                    { name: 'drawHeadline', label: 'Box Title', type: 'text', value: '' },
+                    { name: 'drawPoint1', label: 'Point 1', type: 'text', value: '' },
+                    { name: 'drawPoint2', label: 'Point 2', type: 'text', value: '' },
+                    { name: 'drawPoint3', label: 'Point 3', type: 'text', value: '' },
+                    { name: 'drawPoint4', label: 'Point 4', type: 'text', value: '' },
+                    { name: 'exampleNumbers', label: 'Example Numbers (comma separated)', type: 'text', value: '' },
+                    { name: 'exampleLabel', label: 'Example Label', type: 'text', value: '' }
                 ]
             }
         ]
@@ -156,7 +146,7 @@ const contentCategories = [
 export default function ContentManagement() {
     const [categories, setCategories] = useState(contentCategories);
     const [activeCategory, setActiveCategory] = useState('homepage');
-    const [activeSection, setActiveSection] = useState('hero');
+    const [activeSection, setActiveSection] = useState('reveal');
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const { addToast } = useToast();
