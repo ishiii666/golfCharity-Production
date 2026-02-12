@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Navigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -11,7 +11,8 @@ import { useScores } from '../hooks/useScores';
 import { fadeUp, staggerContainer, staggerItem } from '../utils/animations';
 
 export default function Scores() {
-    const { user, isAdmin } = useAuth();
+    const navigate = useNavigate();
+    const { user, isAdmin, isSubscribed } = useAuth();
     const {
         scores,
         scoreValues,
@@ -108,6 +109,39 @@ export default function Scores() {
                             Enter your last 5 official Stableford scores. These become your draw numbers.
                         </p>
                     </motion.div>
+
+                    {/* Subscription Warning */}
+                    {!isSubscribed && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="mb-8"
+                        >
+                            <Card className="border-amber-500/20 bg-amber-500/5">
+                                <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                                    <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                                        <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-bold text-amber-500 mb-1">Inactive Subscription</h3>
+                                        <p className="text-zinc-400 text-sm">
+                                            Your account is currently inactive. You can still save scores, but they won't be entered into the draw until you subscribe.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="accent"
+                                        size="sm"
+                                        onClick={() => navigate('/dashboard')}
+                                        className="shrink-0"
+                                    >
+                                        Activate Now
+                                    </Button>
+                                </div>
+                            </Card>
+                        </motion.div>
+                    )}
 
                     {/* Score Entry Progress */}
                     <motion.div

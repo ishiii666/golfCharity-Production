@@ -12,7 +12,7 @@ import { getCharities } from '../lib/supabaseRest';
 export default function Auth() {
     const navigate = useNavigate();
     const location = useLocation();
-    const { login, signup, isAuthenticated, isLoading: authLoading, error: authError } = useAuth();
+    const { login, signup, loginWithGoogle, isAuthenticated, isLoading: authLoading, error: authError } = useAuth();
 
     const isSignup = location.pathname === '/signup';
     const [email, setEmail] = useState('');
@@ -39,7 +39,6 @@ export default function Auth() {
                 setIsLoadingCharities(true);
                 try {
                     const data = await getCharities();
-                    // Filter for active charities if applicable, or just use all
                     setCharities(Array.isArray(data) ? data : []);
                 } catch (err) {
                     console.error('Failed to fetch charities:', err);
@@ -51,12 +50,26 @@ export default function Auth() {
         }
     }, [isSignup]);
 
+    const handleGoogleLogin = async () => {
+        setError('');
+        setIsSubmitting(true);
+        try {
+            const result = await loginWithGoogle();
+            if (!result.success) {
+                setError(result.error || 'Google login failed');
+                setIsSubmitting(false);
+            }
+        } catch (err) {
+            setError(err.message || 'An unexpected error occurred');
+            setIsSubmitting(false);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setSuccess('');
 
-        // Validation
         if (!email || !password || (isSignup && (!fullName || !selectedCharityId))) {
             setError(isSignup ? 'Please fill in all fields to create your account' : 'Please fill in all required fields');
             return;
@@ -82,7 +95,6 @@ export default function Auth() {
 
             if (result.success) {
                 if (isSignup) {
-                    // Check if email confirmation is required
                     if (result.data?.user && !result.data?.session) {
                         setSuccess('Check your email to confirm your account!');
                     } else {
@@ -242,6 +254,30 @@ export default function Auth() {
                                 {isSignup ? 'Create Account' : 'Sign In'}
                             </Button>
                         </form>
+
+                        {/* Social Login Divider */}
+                        <div className="relative py-8">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-white/5"></div>
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                                <span className="bg-[#121214] px-3 text-zinc-500 font-bold tracking-widest">Or continue with</span>
+                            </div>
+                        </div>
+
+                        {/* Social Login Button */}
+                        <Button
+                            variant="secondary"
+                            fullWidth
+                            onClick={handleGoogleLogin}
+                            disabled={isSubmitting}
+                            className="bg-white/5 border border-white/10 hover:border-white/20"
+                        >
+                            <div className="flex items-center justify-center gap-2">
+                                <img src="/google-icon.svg" alt="Google" className="w-5 h-5" />
+                                <span>{isSignup ? 'Sign up with Google' : 'Sign in with Google'}</span>
+                            </div>
+                        </Button>
 
                         {/* Toggle */}
                         <div className="text-center mt-6">

@@ -100,18 +100,22 @@ async function getAuthToken() {
     try {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) {
-            console.error('🔑 Token Check: Error getting session:', error.message);
+            // Only log actual errors, not just "no session"
+            if (error.message !== 'Auth session missing!') {
+                console.error('🔑 Token Check: Error getting session:', error.message);
+            }
         }
         if (session?.access_token) {
-            console.log('🔑 Token Check: Authenticated session found for:', session.user.email);
             return session.access_token;
-        } else {
-            console.warn('🔑 Token Check: No active session found in storage.');
         }
     } catch (error) {
-        console.error('🔑 Token Check: Fatal session fetch error:', error);
+        // Suppress expected errors during initial load
+        const isAuthError = error.message?.includes('Auth') || error.name?.includes('Auth');
+        if (!isAuthError) {
+            console.error('🔑 Token Check: Fatal session fetch error:', error);
+        }
     }
-    console.warn('🔑 Token Check: Falling back to ANON key. Action might be blocked.');
+    // Silent fallback to ANON key for public data
     return SUPABASE_KEY;
 }
 
@@ -1685,10 +1689,10 @@ export async function getCurrentDraw() {
 /**
  * Get current jackpot amount
  */
-export async function getJackpot() {
+export async function getJackpot(raw = false) {
     try {
         const authToken = await getAuthToken();
-        const url = `${SUPABASE_URL}/rest/v1/jackpot_tracker?select=amount&limit=1`;
+        const url = `${SUPABASE_URL}/rest/v1/jackpot_tracker?select=amount,marketing_amount&limit=1`;
         const response = await fetch(url, {
             headers: {
                 'apikey': SUPABASE_KEY,
@@ -1701,11 +1705,20 @@ export async function getJackpot() {
         }
 
         const data = await response.json();
-        const amount = data[0]?.amount || 0;
-        return typeof amount === 'string' ? parseFloat(amount) : amount;
+        const tracker = data[0];
+
+        const marketing = tracker?.marketing_amount ? parseFloat(tracker.marketing_amount) : 0;
+        const actual = tracker?.amount ? parseFloat(tracker.amount) : 0;
+
+        if (raw) {
+            return { actual, marketing };
+        }
+
+        // Public display: prioritize marketing_amount if > 0
+        return marketing > 0 ? marketing : actual;
     } catch (error) {
         console.error('Error fetching jackpot:', error);
-        return 0;
+        return raw ? { actual: 0, marketing: 0 } : 0;
     }
 }
 
@@ -2210,6 +2223,42 @@ export async function updateJackpot(amount, drawId = null) {
         return { success: true };
     } catch (error) {
         console.error('Error updating jackpot:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Update marketing jackpot amount
+ */
+export async function updateJackpotMarketing(marketingAmount) {
+    try {
+        const authToken = await getAuthToken();
+        const url = `${SUPABASE_URL}/rest/v1/jackpot_tracker?id=not.is.null`;
+
+        const body = {
+            marketing_amount: marketingAmount,
+            last_updated: new Date().toISOString()
+        };
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Failed to update marketing jackpot: ${errText}`);
+        }
+
+        console.log('📣 Marketing Jackpot updated to:', marketingAmount);
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating marketing jackpot:', error);
         return { success: false, error: error.message };
     }
 }

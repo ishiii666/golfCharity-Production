@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { cancelSubscription } from '../lib/stripe';
 
@@ -43,6 +43,7 @@ export function AuthProvider({ children }) {
     const [session, setSession] = useState(null); // Cache session for API calls
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const isLoggingOut = useRef(false);
 
     // Check for existing session on mount
     useEffect(() => {
@@ -57,14 +58,21 @@ export function AuthProvider({ children }) {
         const timeoutId = setTimeout(() => {
             console.warn('⚠️ Auth session timeout - forcing load completion');
             setIsLoading(false);
-        }, 4000); // 4 seconds is plenty for session check
+        }, 6000); // Increased to 6 seconds for reliability
 
         // Get initial session - no racing, just wait for it
         const initSession = async () => {
             try {
                 const { data: { session }, error } = await supabase.auth.getSession();
 
-                if (error) throw error;
+                if (error) {
+                    // Detect invalid/expired refresh tokens and clear storage
+                    if (error.message?.includes('Refresh Token')) {
+                        console.warn('🔄 Invalid session detected - clearing storage');
+                        await supabase.auth.signOut();
+                    }
+                    throw error;
+                }
 
                 clearTimeout(timeoutId);
 
@@ -74,8 +82,6 @@ export function AuthProvider({ children }) {
                     setSession(session); // Cache the session
 
                     // CRITICAL SPEED FIX: Don't await profile/subscription fetch
-                    // Components that need profile will show their own loading/empty states
-                    // This allows the App to finish its initial loading state immediately
                     fetchProfile(session.user.id, session.user.email, session.access_token);
                     fetchSubscription(session.user.id, session.access_token);
 
@@ -85,13 +91,19 @@ export function AuthProvider({ children }) {
                     setIsLoading(false);
                 }
             } catch (err) {
-                console.error('Session init error:', err);
-                const isNonCriticalError = err.message?.includes('abort') ||
+                // Only log unexpected errors
+                const isSilentError =
+                    err.message?.includes('Auth session missing!') ||
+                    err.message?.includes('Refresh Token') ||
+                    err.message?.includes('abort') ||
                     err.message?.includes('timeout') ||
                     err.name === 'AbortError';
-                if (!isNonCriticalError) {
+
+                if (!isSilentError) {
+                    console.error('Session init error:', err);
                     setError(err.message);
                 }
+
                 clearTimeout(timeoutId);
                 setIsLoading(false);
             }
@@ -102,26 +114,29 @@ export function AuthProvider({ children }) {
         // Listen for auth changes
         const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
-                console.log('Auth event:', event);
+                console.log(`🔐 Auth Event: ${event}`, session ? 'Session Present' : 'No Session');
+
+                // If we are currently logging out, ignore any events that might re-trigger login
+                if (isLoggingOut.current && session) {
+                    console.log('🚪 Ignoring auth event during logout');
+                    return;
+                }
 
                 if (session?.user) {
                     setUser(session.user);
-                    setSession(session); // Cache the session
-                    try {
-                        // Wait for profile data on login/change so UI doesn't flash unauthorized
-                        await Promise.all([
-                            fetchProfile(session.user.id, session.user.email, session.access_token),
-                            fetchSubscription(session.user.id, session.access_token)
-                        ]);
-                    } catch (e) {
-                        console.warn('Profile/subscription fetch on auth change failed:', e);
-                    }
-                } else {
+                    setSession(session);
+
+                    // Only fetch if not already loading or if session changed
+                    fetchProfile(session.user.id, session.user.email, session.access_token);
+                    fetchSubscription(session.user.id, session.access_token);
+                    setIsLoading(false);
+                } else if (event === 'SIGNED_OUT' || !session) {
                     setUser(null);
                     setProfile(null);
                     setSubscription(null);
+                    setSession(null);
+                    setIsLoading(false);
                 }
-                setIsLoading(false);
             }
         );
 
@@ -142,6 +157,9 @@ export function AuthProvider({ children }) {
 
     // Fetch user profile - accepts accessToken as param to avoid getSession() hang
     const fetchProfile = async (userId, userEmail = null, accessToken = null) => {
+        // Early exit if user logged out
+        if (!userId) return;
+
         try {
             console.log('🔍 Fetching profile for user ID:', userId);
 
@@ -186,6 +204,7 @@ export function AuthProvider({ children }) {
 
     // Fetch user subscription status from database WITH SELF-HEALING
     const fetchSubscription = async (userId, accessToken = null) => {
+        if (!userId) return;
         try {
             console.log('[SUBSCRIPTION] Step 1: Fetching from database for user:', userId);
 
@@ -230,36 +249,35 @@ export function AuthProvider({ children }) {
                     console.log('[SUBSCRIPTION] Calling verify-subscription to sync from Stripe...');
 
                     try {
-                        const verifyRes = await fetch(
+                        const response = await fetch(
                             `${supabaseUrl}/functions/v1/verify-subscription`,
                             {
                                 method: 'POST',
                                 headers: {
+                                    'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+                                    'Authorization': `Bearer ${token}`,
                                     'Content-Type': 'application/json'
                                 },
-                                body: JSON.stringify({ user_id: userId })
+                                body: JSON.stringify({ user_id: userId, force: true })
                             }
                         );
 
-                        console.log('[SUBSCRIPTION] Verify response status:', verifyRes.status);
-
-                        // Check if response is OK before parsing
-                        if (!verifyRes.ok) {
-                            const errorText = await verifyRes.text();
-                            console.error('[SUBSCRIPTION] Verify failed:', verifyRes.status, errorText.substring(0, 200));
-                            throw new Error(`HTTP ${verifyRes.status}`);
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error('[SUBSCRIPTION] Verify error:', errorText);
+                            throw new Error(errorText);
                         }
 
-                        const verifyData = await verifyRes.json();
+                        const verifyData = await response.json();
                         console.log('[SUBSCRIPTION] Verify result:', verifyData);
 
-                        if (verifyData.subscription) {
+                        if (verifyData?.subscription) {
                             console.log('[SUBSCRIPTION] ✅ Synced from Stripe:', verifyData.subscription.status, verifyData.subscription.plan);
                             setSubscription(verifyData.subscription);
                             return;
                         }
                     } catch (verifyErr) {
-                        console.error('[SUBSCRIPTION] Verify error:', verifyErr.message || verifyErr);
+                        console.error('[SUBSCRIPTION] Verify exception:', verifyErr.message || verifyErr);
                     }
                 }
 
@@ -308,6 +326,41 @@ export function AuthProvider({ children }) {
             return { success: false, error: err.message };
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // Sign in with Google
+    const loginWithGoogle = async () => {
+        if (!isSupabaseConfigured()) {
+            // Mock Google login
+            setUser({ ...MOCK_USER });
+            setProfile({ ...MOCK_USER });
+            return { success: true };
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: import.meta.env.PROD
+                        ? 'https://www.golfcharity.com.au/dashboard'
+                        : `${window.location.origin}/dashboard`,
+                    queryParams: {
+                        access_type: 'offline',
+                        prompt: 'select_account',
+                    },
+                }
+            });
+
+            if (error) throw error;
+            return { success: true, data };
+        } catch (err) {
+            setError(err.message);
+            setIsLoading(false);
+            return { success: false, error: err.message };
         }
     };
 
@@ -369,35 +422,47 @@ export function AuthProvider({ children }) {
     // Sign out
     const logout = async () => {
         console.log('🚪 Logging out...');
-        // Always clear local state first
+        isLoggingOut.current = true;
+
+        // Clear local state immediately for snappy UI
         setUser(null);
         setProfile(null);
         setSession(null);
         setSubscription(null);
 
         if (!isSupabaseConfigured()) {
+            isLoggingOut.current = false;
             return;
         }
 
         try {
-            // Force clear storage even if server call fails
-            const sessionId = session?.user?.id;
-            await supabase.auth.signOut();
-            console.log('🚪 Logout: SignOut called for', sessionId);
+            // Force local cleanup first to be safe
+            localStorage.removeItem('supabase.auth.token');
+            // Try to find any other supabase keys
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.includes('supabase.auth.token') || key.includes('-auth-token'))) {
+                    localStorage.removeItem(key);
+                }
+            }
+
+            // Attempt global sign out
+            const { error } = await supabase.auth.signOut();
+
+            if (error) {
+                console.warn('🚪 Logout: Global signOut failed, doing local cleanup', error.message);
+                // Scope: local is generally more reliable if token is already dead
+                await supabase.auth.signOut({ scope: 'local' }).catch(() => { });
+            }
+
+            console.log('🚪 Logout: Done');
         } catch (err) {
             console.error('Logout error:', err);
-            // State is already cleared, so user is logged out locally
-            // We can also manually clear localStorage as a last resort
-            try {
-                const keys = Object.keys(localStorage);
-                keys.forEach(key => {
-                    if (key.includes('supabase.auth.token')) {
-                        localStorage.removeItem(key);
-                    }
-                });
-            } catch (e) {
-                console.error('Manual storage clear failed:', e);
-            }
+        } finally {
+            // Keep the ref true for a moment to allow any trailing events to be ignored
+            setTimeout(() => {
+                isLoggingOut.current = false;
+            }, 1000);
         }
     };
 
@@ -495,13 +560,13 @@ export function AuthProvider({ children }) {
         user?.user_metadata?.role === 'admin' ||
         profile?.role === 'admin';
 
-    // Debug logging
+    /* Debug logging
     console.log('🔐 Admin check:', {
         'app_metadata.role': user?.app_metadata?.role,
         'user_metadata.role': user?.user_metadata?.role,
         'profile.role': profile?.role,
         'isAdmin': isAdmin
-    });
+    }); */
 
     // Change password function
     const changePassword = async (currentPassword, newPassword) => {
@@ -746,6 +811,7 @@ export function AuthProvider({ children }) {
         error,
         login,
         signup,
+        loginWithGoogle,
         logout,
         updateProfile,
         changePassword,

@@ -27,7 +27,8 @@ import {
     createNewDraw,
     getDrawWinnersExport,
     exportToCSV,
-    updateDrawSettings
+    updateDrawSettings,
+    updateJackpotMarketing
 } from '../../lib/supabaseRest';
 import { useAuth } from '../../context/AuthContext';
 
@@ -116,6 +117,7 @@ export default function DrawControl() {
     const [activeSubscribers, setActiveSubscribers] = useState(0);
     const [totalScores, setTotalScores] = useState(0);
     const [jackpotCarryover, setJackpotCarryover] = useState(0);
+    const [marketingJackpot, setMarketingJackpot] = useState(0);
     const [currentDraw, setCurrentDrawState] = useState(null);
     const [eligibleUsers, setEligibleUsers] = useState([]);
 
@@ -129,6 +131,7 @@ export default function DrawControl() {
     const [isPublished, setIsPublished] = useState(false);
     const [draws, setDraws] = useState([]);
     const [exportingId, setExportingId] = useState(null);
+    const [updatingMarketing, setUpdatingMarketing] = useState(false);
     const { addToast } = useToast();
 
     // Settings state
@@ -161,8 +164,9 @@ export default function DrawControl() {
                 schema: 'public',
                 table: 'jackpot_tracker'
             }, (payload) => {
-                console.log('⚡ Draw Control: Real-time Jackpot Update:', payload.new.amount);
+                console.log('⚡ Draw Control: Real-time Jackpot Update:', payload.new);
                 setJackpotCarryover(parseFloat(payload.new.amount) || 0);
+                setMarketingJackpot(parseFloat(payload.new.marketing_amount) || 0);
             })
             .subscribe();
 
@@ -188,7 +192,7 @@ export default function DrawControl() {
 
             const [users, jackpot, currentSettings, allDraws, subCount] = await Promise.all([
                 getEligibleUsers(targetDrawId),
-                getJackpot(),
+                getJackpot(true),
                 getDrawSettings(),
                 getDraws(),
                 getActiveSubscribersCount(targetDrawId, true)
@@ -201,7 +205,8 @@ export default function DrawControl() {
 
             setActiveSubscribers(subCount || 0);
             setTotalScores(safeUsers.reduce((sum, u) => sum + (u.scores?.length || 0), 0));
-            setJackpotCarryover(jackpot || 0);
+            setJackpotCarryover(jackpot?.actual || 0);
+            setMarketingJackpot(jackpot?.marketing || 0);
 
             setCurrentDrawState(draw || null);
             setDraws(Array.isArray(allDraws) ? allDraws : []);
@@ -283,6 +288,26 @@ export default function DrawControl() {
             if (analysisResults) runAnalysis();
         } catch (error) {
             addToast('error', 'Failed to save settings');
+        }
+    };
+
+    const handleUpdateMarketingJackpot = async () => {
+        setUpdatingMarketing(true);
+        try {
+            // Coerce to number on save (empty string becomes 0)
+            const amountToSave = marketingJackpot === '' ? 0 : parseFloat(marketingJackpot);
+            const res = await updateJackpotMarketing(amountToSave);
+            if (res.success) {
+                addToast('success', 'Marketing jackpot updated! Public will now see this amount.');
+                // Update local state to the numeric value for consistency
+                setMarketingJackpot(amountToSave);
+            } else {
+                addToast('error', res.error || 'Failed to update marketing jackpot');
+            }
+        } catch (error) {
+            addToast('error', 'Critical error updating jackpot');
+        } finally {
+            setUpdatingMarketing(false);
         }
     };
 
@@ -478,9 +503,21 @@ export default function DrawControl() {
                             <div className="text-slate-400 text-sm mb-1">Current Prize Pool</div>
                             <div className="text-2xl font-bold text-teal-400">{formatCurrency(activeSubscribers * settings.base_amount_per_sub)}</div>
                         </Card>
-                        <Card variant="glass" padding="p-4">
-                            <div className="text-slate-400 text-sm mb-1">Jackpot Carryover</div>
-                            <div className="text-2xl font-bold text-amber-400">{formatCurrency(jackpotCarryover)}</div>
+                        <Card variant="solid" padding="p-4" className="border-amber-500/30 bg-amber-500/5">
+                            <div className="flex justify-between items-start mb-1">
+                                <div className="text-amber-400 text-sm">Actual Carryover</div>
+                                <div className="text-[9px] font-black uppercase tracking-widest text-amber-500/60 bg-amber-500/10 px-1.5 py-0.5 rounded">Real Stats</div>
+                            </div>
+                            <div className="text-2xl font-bold text-white">{formatCurrency(jackpotCarryover)}</div>
+                        </Card>
+                        <Card variant="solid" padding="p-4" className="border-emerald-500/30 bg-emerald-500/5">
+                            <div className="flex justify-between items-start mb-1">
+                                <div className="text-emerald-400 text-sm">Marketing Display</div>
+                                <div className="text-[9px] font-black uppercase tracking-widest text-emerald-500/60 bg-emerald-500/10 px-1.5 py-0.5 rounded">Public Facing</div>
+                            </div>
+                            <div className="text-2xl font-bold text-white">
+                                {marketingJackpot > 0 ? formatCurrency(marketingJackpot) : formatCurrency(jackpotCarryover)}
+                            </div>
                         </Card>
                     </motion.div>
 
@@ -537,6 +574,38 @@ export default function DrawControl() {
                                             <span>Draw Settings</span>
                                         </div>
                                     </Button>
+                                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-700/50">
+                                        <h4 className="text-sm font-bold text-emerald-400 mb-3 uppercase tracking-tight flex items-center gap-2">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                                            </svg>
+                                            Marketing Override
+                                        </h4>
+                                        <p className="text-[10px] text-zinc-500 mb-4 leading-relaxed font-bold uppercase tracking-tight">Set a larger amount to display on the home page for marketing. Set to 0 to use actual carryover.</p>
+                                        <div className="space-y-3">
+                                            <Input
+                                                label="Marketing Goal ($)"
+                                                type="number"
+                                                value={marketingJackpot}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setMarketingJackpot(val === '' ? '' : parseFloat(val));
+                                                }}
+                                                className="bg-black/40 border-white/10"
+                                            />
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                fullWidth
+                                                onClick={handleUpdateMarketingJackpot}
+                                                disabled={updatingMarketing}
+                                                className="h-10 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold"
+                                            >
+                                                {updatingMarketing ? 'Updating...' : 'Set Marketing Pool'}
+                                            </Button>
+                                        </div>
+                                    </div>
+
                                     <div className="p-4 rounded-xl bg-slate-900 border border-slate-700/50">
                                         <h4 className="text-sm font-bold text-amber-400 mb-2 uppercase tracking-tight">Prize Logic</h4>
                                         <ul className="text-[11px] leading-relaxed text-slate-400 space-y-2">
@@ -850,8 +919,8 @@ export default function DrawControl() {
                                                             <td className="px-6 py-4">
                                                                 <div className="flex items-center gap-3">
                                                                     <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter border ${winner.tier === 1 ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                                                                            winner.tier === 2 ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                                                                                'bg-teal-500/10 text-teal-400 border-teal-500/20'
+                                                                        winner.tier === 2 ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                                                                            'bg-teal-500/10 text-teal-400 border-teal-500/20'
                                                                         }`}>
                                                                         {winner.tier === 1 ? '5M Jackpot' : winner.tier === 2 ? '4M Pool' : '3M Pool'}
                                                                     </span>
@@ -875,8 +944,8 @@ export default function DrawControl() {
                                                             </td>
                                                             <td className="px-6 py-4">
                                                                 <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-[0.1em] border transition-all ${winner.verification_status === 'verified' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]' :
-                                                                        winner.verification_status === 'rejected' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                                                                            'bg-zinc-800 text-zinc-600 border-zinc-700'
+                                                                    winner.verification_status === 'rejected' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                                        'bg-zinc-800 text-zinc-600 border-zinc-700'
                                                                     }`}>
                                                                     {winner.verification_status || 'Pending'}
                                                                 </span>

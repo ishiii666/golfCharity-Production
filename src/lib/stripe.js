@@ -8,8 +8,18 @@
 import { loadStripe } from '@stripe/stripe-js';
 import { supabase, isSupabaseConfigured } from './supabase';
 
-// Initialize Stripe with publishable key
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+// Lazy-loaded Stripe instance
+let stripePromise = null;
+
+/**
+ * Internal helper to get Stripe instance only when needed
+ */
+function getStripeInstance() {
+    if (!stripePromise && import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
+        stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+    }
+    return stripePromise;
+}
 
 /**
  * Price IDs from Stripe Dashboard
@@ -262,7 +272,7 @@ export async function cancelSubscription() {
  * Get the Stripe instance (for advanced use cases)
  */
 export function getStripe() {
-    return stripePromise;
+    return getStripeInstance();
 }
 
 export default {
