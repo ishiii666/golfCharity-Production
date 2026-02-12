@@ -346,8 +346,8 @@ export function AuthProvider({ children }) {
                 provider: 'google',
                 options: {
                     redirectTo: import.meta.env.PROD
-                        ? 'https://www.golfcharity.com.au/dashboard'
-                        : `${window.location.origin}/dashboard`,
+                        ? 'https://www.golfcharity.com.au/complete-setup'
+                        : `${window.location.origin}/complete-setup`,
                     queryParams: {
                         access_type: 'offline',
                         prompt: 'select_account',

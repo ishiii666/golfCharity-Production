@@ -45,10 +45,11 @@ import CompleteSetup from './pages/CompleteSetup';
 
 // Protected Route Component with loading timeout
 function ProtectedRoute({ children, requireAuth = true }) {
-  const { isAuthenticated, isSuspended, isLoading } = useAuth();
+  const { isAuthenticated, isSuspended, isLoading, setupCompleted } = useAuth();
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const location = useLocation();
 
-  // Timeout loading after 4 seconds - reduced from 5 for faster feel
+  // Timeout loading after 4 seconds
   useEffect(() => {
     if (isLoading) {
       const timer = setTimeout(() => {
@@ -68,6 +69,11 @@ function ProtectedRoute({ children, requireAuth = true }) {
 
   if (isAuthenticated && isSuspended) return <Navigate to="/login" replace />;
   if (requireAuth && !isAuthenticated && !loadingTimedOut) return <Navigate to="/login" replace />;
+
+  // Mandatory setup redirect
+  if (isAuthenticated && !setupCompleted && location.pathname !== '/complete-setup') {
+    return <Navigate to="/complete-setup" replace />;
+  }
 
   return children;
 }

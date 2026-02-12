@@ -5,7 +5,9 @@ import PageTransition from '../components/layout/PageTransition';
 import Button from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getCharities } from '../lib/supabaseRest';
 import { PRICE_IDS, isStripeConfigured } from '../lib/stripe';
+import Input, { Select } from '../components/ui/Input';
 
 /**
  * CompleteSetup - Mandatory page after signup
@@ -22,6 +24,31 @@ export default function CompleteSetup() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
+
+    const [charities, setCharities] = useState([]);
+    const [selectedCharityId, setSelectedCharityId] = useState('');
+    const [isLoadingCharities, setIsLoadingCharities] = useState(false);
+
+    // Fetch charities
+    useEffect(() => {
+        const fetchCharities = async () => {
+            setIsLoadingCharities(true);
+            try {
+                const data = await getCharities();
+                setCharities(Array.isArray(data) ? data : []);
+
+                // Pre-select if user already has one
+                if (profile?.selected_charity_id) {
+                    setSelectedCharityId(profile.selected_charity_id);
+                }
+            } catch (err) {
+                console.error('Failed to fetch charities:', err);
+            } finally {
+                setIsLoadingCharities(false);
+            }
+        };
+        fetchCharities();
+    }, [profile]);
 
     // Check for success/cancel from Stripe redirect
     useEffect(() => {
@@ -78,10 +105,24 @@ export default function CompleteSetup() {
             return;
         }
 
+        if (!selectedCharityId) {
+            setError('Please select a charity to support before continuing.');
+            return;
+        }
+
         setIsLoading(true);
         setError('');
 
         try {
+            // 1. Update Profile with Charity (if changed or new)
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({ selected_charity_id: selectedCharityId })
+                .eq('id', user.id);
+
+            if (profileError) throw profileError;
+
+            // 2. Prepare checkout
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
                 throw new Error('Please log in to continue');
@@ -172,7 +213,7 @@ export default function CompleteSetup() {
                         </p>
                     </div>
 
-                    {/* Plan Selection */}
+                    {/* Main Card */}
                     <div
                         className="p-6 rounded-2xl mb-6"
                         style={{
@@ -180,15 +221,41 @@ export default function CompleteSetup() {
                             border: '1px solid rgba(255, 255, 255, 0.05)'
                         }}
                     >
-                        <h2 className="text-lg font-semibold text-white mb-4">Select Your Plan</h2>
+                        {/* Charity Selection */}
+                        <div className="mb-8 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                            <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-emerald-500 text-zinc-950 text-xs flex items-center justify-center font-bold">1</span>
+                                Choose Your Charity
+                            </h2>
+                            <p className="text-sm text-zinc-400 mb-4 font-normal">
+                                This charity will receive a portion of your winnings whenever you score well.
+                            </p>
+
+                            <Select
+                                value={selectedCharityId}
+                                onChange={(e) => setSelectedCharityId(e.target.value)}
+                                disabled={isLoadingCharities || isLoading}
+                                options={[
+                                    { value: '', label: 'Select a charity to support' },
+                                    ...charities.map(c => ({ value: c.id, label: c.name }))
+                                ]}
+                            />
+                        </div>
+
+                        <div className="mb-4">
+                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-emerald-500 text-zinc-950 text-xs flex items-center justify-center font-bold">2</span>
+                                Select Your Plan
+                            </h2>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-4 mb-6">
                             {/* Monthly Plan */}
                             <button
                                 onClick={() => setSelectedPlan('monthly')}
                                 className={`p-4 rounded-xl text-left transition-all ${selectedPlan === 'monthly'
-                                        ? 'ring-2 ring-emerald-500 bg-emerald-500/10'
-                                        : 'bg-zinc-800/50 hover:bg-zinc-800'
+                                    ? 'ring-2 ring-emerald-500 bg-emerald-500/10'
+                                    : 'bg-zinc-800/50 hover:bg-zinc-800'
                                     }`}
                             >
                                 <div className="text-2xl font-bold text-white mb-1">$11</div>
@@ -200,8 +267,8 @@ export default function CompleteSetup() {
                             <button
                                 onClick={() => setSelectedPlan('annual')}
                                 className={`p-4 rounded-xl text-left transition-all relative ${selectedPlan === 'annual'
-                                        ? 'ring-2 ring-emerald-500 bg-emerald-500/10'
-                                        : 'bg-zinc-800/50 hover:bg-zinc-800'
+                                    ? 'ring-2 ring-emerald-500 bg-emerald-500/10'
+                                    : 'bg-zinc-800/50 hover:bg-zinc-800'
                                     }`}
                             >
                                 <div className="absolute -top-2 -right-2 px-2 py-0.5 bg-emerald-500 text-white text-xs font-medium rounded-full">
