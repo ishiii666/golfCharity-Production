@@ -28,6 +28,7 @@ export default function MyCharity() {
     const [donationPercentage, setDonationPercentage] = useState(10);
     const [isSaving, setIsSaving] = useState(false);
     const [viewingCharity, setViewingCharity] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
     const { addToast } = useToast();
     const [isInitialized, setIsInitialized] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -81,9 +82,9 @@ export default function MyCharity() {
             setSelectedCharity(charityId);
             setOriginalCharity(charityId);
 
-            // Set donation percentage from user profile, default to 10, minimum 10
-            const percentage = user.donationPercentage || 10;
-            const finalPercentage = Math.max(10, percentage);
+            // Set donation percentage from user profile, default to 100, minimum 5
+            const percentage = user.donationPercentage || 100;
+            const finalPercentage = Math.max(5, percentage);
             setDonationPercentage(finalPercentage);
             setOriginalPercentage(finalPercentage);
 
@@ -125,6 +126,16 @@ export default function MyCharity() {
         return charities.find(c => String(c.id) === String(selectedCharity));
     }, [selectedCharity, charities]);
 
+    // Search filter
+    const filteredCharities = useMemo(() => {
+        if (!searchTerm.trim()) return charities;
+        const lowSearch = searchTerm.toLowerCase();
+        return charities.filter(c =>
+            c.name.toLowerCase().includes(lowSearch) ||
+            c.category.toLowerCase().includes(lowSearch)
+        );
+    }, [charities, searchTerm]);
+
     const handleSave = async () => {
         setIsSaving(true);
         const result = await updateProfile({
@@ -156,6 +167,12 @@ export default function MyCharity() {
                             animate="animate"
                             className="mb-8"
                         >
+                            <Link to="/dashboard" className="inline-flex items-center text-sm font-medium text-emerald-400 hover:text-emerald-300 mb-4 transition-colors">
+                                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                                Back to Dashboard
+                            </Link>
                             <h1 className="text-3xl lg:text-4xl font-bold mb-2" style={{ color: 'var(--color-cream-100)' }}>
                                 My Charity
                             </h1>
@@ -299,7 +316,7 @@ export default function MyCharity() {
                                                 >
                                                     <input
                                                         type="range"
-                                                        min="10"
+                                                        min="5"
                                                         max="100"
                                                         value={donationPercentage}
                                                         onChange={(e) => setDonationPercentage(parseInt(e.target.value))}
@@ -325,62 +342,100 @@ export default function MyCharity() {
 
                             {/* Change Charity */}
                             <motion.div variants={staggerItem}>
-                                <Card variant="glass">
+                                <Card variant="glass" data-lenis-prevent="true">
                                     <CardHeader>
-                                        <h2 className="text-xl font-bold text-white">
-                                            Change Charity
-                                        </h2>
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+                                            <div className="flex items-center gap-2">
+                                                <h2 className="text-xl font-bold text-white">
+                                                    Change Charity
+                                                </h2>
+                                                <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-tight">Scrollable</span>
+                                                </div>
+                                            </div>
+                                            <div className="relative w-full md:w-64">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search charities..."
+                                                    value={searchTerm}
+                                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                                    className="w-full bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-4 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                                                />
+                                                <svg className="absolute right-3 top-2 w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                </svg>
+                                            </div>
+                                        </div>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="grid md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto p-1 -m-1">
-                                            {charities.map(charity => (
-                                                <div
-                                                    key={charity.id}
-                                                    className={`p-4 rounded-xl transition-colors relative group cursor-pointer ${selectedCharity === charity.id
-                                                        ? 'ring-2 ring-emerald-500'
-                                                        : 'hover:bg-white/5'
-                                                        }`}
-                                                    style={{
-                                                        background: selectedCharity === charity.id
-                                                            ? 'rgba(16, 185, 129, 0.1)'
-                                                            : 'rgba(16, 185, 129, 0.05)'
-                                                    }}
-                                                    onClick={() => setSelectedCharity(charity.id)}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <img
-                                                            src={charity.image}
-                                                            alt={charity.name}
-                                                            className="w-12 h-12 rounded-lg object-cover"
-                                                        />
-                                                        <div className="flex-1">
-                                                            <p className="font-medium" style={{ color: 'var(--color-cream-200)' }}>
-                                                                {charity.name}
-                                                            </p>
-                                                            <p className="text-xs" style={{ color: 'var(--color-neutral-500)' }}>
-                                                                {charity.category}
-                                                            </p>
-                                                        </div>
-                                                        {selectedCharity === charity.id ? (
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="text-xs text-[#c9a227]">Selected</span>
-                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#c9a227">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                </svg>
+                                        <div
+                                            className="grid md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar p-1 -m-1 overscroll-contain"
+                                            data-lenis-prevent="true"
+                                            style={{ touchAction: 'pan-y' }}
+                                        >
+                                            {filteredCharities.length > 0 ? (
+                                                filteredCharities.map(charity => (
+                                                    <div
+                                                        key={charity.id}
+                                                        className={`p-4 rounded-xl transition-colors relative group cursor-pointer ${selectedCharity === charity.id
+                                                            ? 'ring-2 ring-emerald-500'
+                                                            : 'hover:bg-white/5'
+                                                            }`}
+                                                        style={{
+                                                            background: selectedCharity === charity.id
+                                                                ? 'rgba(16, 185, 129, 0.1)'
+                                                                : 'rgba(16, 185, 129, 0.05)'
+                                                        }}
+                                                        onClick={() => setSelectedCharity(charity.id)}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <img
+                                                                src={charity.image}
+                                                                alt={charity.name}
+                                                                className="w-12 h-12 rounded-lg object-cover"
+                                                            />
+                                                            <div className="flex-1">
+                                                                <p className="font-medium" style={{ color: 'var(--color-cream-200)' }}>
+                                                                    {charity.name}
+                                                                </p>
+                                                                <p className="text-xs" style={{ color: 'var(--color-neutral-500)' }}>
+                                                                    {charity.category}
+                                                                </p>
                                                             </div>
-                                                        ) : (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                onClick={() => setViewingCharity(charity)}
-                                                            >
-                                                                Details <ArrowRightIcon size={14} className="ml-1" />
-                                                            </Button>
-                                                        )}
+                                                            {selectedCharity === charity.id ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-xs text-[#c9a227]">Selected</span>
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="#c9a227">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </div>
+                                                            ) : (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    onClick={() => setViewingCharity(charity)}
+                                                                >
+                                                                    Details <ArrowRightIcon size={14} className="ml-1" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
                                                     </div>
+                                                ))
+                                            ) : (
+                                                <div className="col-span-full py-12 text-center">
+                                                    <p className="text-zinc-500">No charities found matching "{searchTerm}"</p>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="mt-2"
+                                                        onClick={() => setSearchTerm('')}
+                                                    >
+                                                        Clear Search
+                                                    </Button>
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>

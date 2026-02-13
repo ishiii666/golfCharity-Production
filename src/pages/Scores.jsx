@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, Navigate, Link } from 'react-router-dom';
 import PageTransition from '../components/layout/PageTransition';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -9,6 +9,7 @@ import Modal from '../components/ui/Modal';
 import { useAuth } from '../context/AuthContext';
 import { useScores } from '../hooks/useScores';
 import { fadeUp, staggerContainer, staggerItem } from '../utils/animations';
+import { useCharities } from '../hooks/useData';
 
 export default function Scores() {
     const navigate = useNavigate();
@@ -22,6 +23,8 @@ export default function Scores() {
         addScore,
         deleteScore
     } = useScores();
+    const { getCharityById } = useCharities();
+    const selectedCharity = user?.selectedCharityId ? getCharityById(user.selectedCharityId) : null;
 
     // Admins cannot participate in games
     if (isAdmin) {
@@ -108,6 +111,20 @@ export default function Scores() {
                         <p style={{ color: 'var(--color-neutral-400)' }}>
                             Enter your last 5 official Stableford scores. These become your draw numbers.
                         </p>
+
+                        {/* Current Charity Indicator */}
+                        <div className="mt-4 flex items-center justify-center gap-2 text-sm">
+                            <span style={{ color: 'var(--color-neutral-500)' }}>Supporting:</span>
+                            <span className="font-bold text-emerald-400">
+                                {selectedCharity?.name || 'No Charity Selected'}
+                            </span>
+                            <Link
+                                to="/profile/charity"
+                                className="ml-2 px-2 py-1 rounded bg-white/5 border border-white/10 text-[10px] uppercase font-bold tracking-widest text-[#c9a227] hover:bg-white/10 transition-colors"
+                            >
+                                Change
+                            </Link>
+                        </div>
                     </motion.div>
 
                     {/* Subscription Warning */}

@@ -34,8 +34,7 @@ export default function Header() {
             : [
                 { to: '/dashboard', label: 'Dashboard' },
                 { to: '/scores', label: 'My Scores' },
-                // My Charity only visible for subscribed users
-                ...(isSubscribed ? [{ to: '/profile/charity', label: 'My Charity' }] : [])
+                { to: '/profile/charity', label: 'My Charity' }
             ]  // Regular users see player links
         : [];
 

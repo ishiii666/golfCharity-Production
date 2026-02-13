@@ -10,13 +10,21 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useCharities, useUserEntries } from '../hooks/useData';
 import { fadeUp, staggerContainer, staggerItem } from '../utils/animations';
 import { getTimeUntilDraw, getNextDrawDateFormatted, DRAW_SCHEDULE_SHORT, getTimeUntilDate, getDrawDateFromMonthYear, getDrawMonthYear } from '../utils/drawSchedule';
+import CharitySelectionAlert from '../components/dashboard/CharitySelectionAlert';
 
 export default function Dashboard() {
-    const { user, isAdmin } = useAuth();
+    const { user, isAdmin, refreshProfile } = useAuth();
     const { scores, scoreValues, hasEnoughScores, averageScore, isLoading: scoresLoading } = useScores();
     const { subscription, isActive, daysRemaining, eligibilityInfo, planLabel, isLoading: subLoading } = useSubscription();
     const { getCharityById, isLoading: charitiesLoading } = useCharities();
     const { latestResult, isLoading: entriesLoading } = useUserEntries();
+
+    console.log('📊 Dashboard Render:', {
+        userId: user?.id,
+        charityId: user?.selectedCharityId,
+        isAdmin,
+        isLoading: scoresLoading || subLoading || charitiesLoading || entriesLoading
+    });
 
     // Redirect admins to admin dashboard - admins cannot participate in games
     if (isAdmin) {
@@ -51,6 +59,9 @@ export default function Dashboard() {
         <PageTransition>
             <div className="py-8 lg:py-12">
                 <div className="container-app">
+                    {/* Charity Selection Alert */}
+                    <CharitySelectionAlert user={user} refreshProfile={refreshProfile} />
+
                     {/* Header */}
                     <motion.div
                         variants={fadeUp}
@@ -257,7 +268,7 @@ export default function Dashboard() {
                                         No charity selected
                                     </p>
                                 )}
-                                <Link to="/charities">
+                                <Link to="/profile/charity">
                                     <Button variant="outline" size="sm">
                                         {selectedCharity ? 'Change Charity' : 'Select Charity'}
                                     </Button>

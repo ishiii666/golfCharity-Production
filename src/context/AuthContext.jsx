@@ -345,9 +345,9 @@ export function AuthProvider({ children }) {
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: import.meta.env.PROD
-                        ? 'https://www.golfcharity.com.au/dashboard'
-                        : `${window.location.origin}/dashboard`,
+                    redirectTo: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                        ? `${window.location.origin}/dashboard`
+                        : 'https://www.golfcharity.com.au/dashboard',
                     queryParams: {
                         access_type: 'offline',
                         prompt: 'select_account',
