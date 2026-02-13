@@ -312,9 +312,7 @@ export function AuthProvider({ children }) {
                         full_name: fullName,
                         selected_charity_id: selectedCharityId
                     },
-                    emailRedirectTo: import.meta.env.PROD
-                        ? 'https://www.golfcharity.com.au/dashboard'
-                        : `${window.location.origin}/dashboard`
+                    emailRedirectTo: `${window.location.origin}/dashboard`
                 }
             });
 
@@ -345,9 +343,7 @@ export function AuthProvider({ children }) {
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-                        ? `${window.location.origin}/dashboard`
-                        : 'https://www.golfcharity.com.au/dashboard',
+                    redirectTo: `${window.location.origin}/dashboard`,
                     queryParams: {
                         access_type: 'offline',
                         prompt: 'select_account',
